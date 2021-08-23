@@ -1,7 +1,7 @@
 @echo off
 
 :: *************************************************************************************
-:: This file contains the full tools needed to run appplication.bat in your main repository
+:: This file contains the full tools needed to run application.bat in your main repository
 :: This file itself is just a logical wrapper/interface to some of the tools in it's home
 :: directory, as well as some of the deployment tools locates in scripts. Hopefully one
 :: day this repository will become a bit more coherent, but until then, this will do as

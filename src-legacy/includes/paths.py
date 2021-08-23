@@ -1,25 +1,32 @@
 import os
 from pathlib import Path
+import fnmatch
+import re
 
-import locate
+def iglob(p, pattern):
+    rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
+    return [f for f in Path(p).glob("*") if rule.match(f.name)]
 
 
 def find_application_base_directory(start_dir) -> Path:
     """
-    Travel up from the starting directory to find the application's base directory, which contains 'Application.yaml'.
+    Travel up from the starting directory to find the application's base directory, pattern contains 'Application.yaml'.
     """
     d = start_dir.resolve()
-    while not list(d.glob("Application.yaml")):
+    for i in range(1000):
+        if len(iglob(d, "application.yaml") + iglob(d, ".git")) == 2:
+            return d.resolve()
+
         parent = d.parent
         if parent == d:  # like "c:" == "c:"
-            raise FileNotFoundError("Expected Application.yaml in base directory!")
+            raise FileNotFoundError("Expected git repository with `Application.yaml` at base!")
         d = parent
-    return d.resolve()
+
+    raise FileNotFoundError("Expected git repository with `Application.yaml` at base!")
 
 
 # App directories
-deployment_and_release_scripts_dir: Path = locate.this_dir().joinpath('..', 'deployment-and-release-scripts').resolve()
-app_dir = find_application_base_directory(deployment_and_release_scripts_dir)
+app_dir = find_application_base_directory(Path(".").resolve())
 tools_dir = Path(app_dir, 'tools')
 temp_dir = Path(tools_dir, 'temp', 'package-downloads')
 py_dir = Path(app_dir, "bin", "python")

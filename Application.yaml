@@ -1,0 +1,21 @@
+# information for application name and launcher
+Application:
+  
+  name: app-tools
+  asciibanner: src-legacy/assets/asciibanner-VA.txt
+  icon: src-legacy/assets/autoactuary.ico
+  installdir: '%localappdata%\autoactuary\app-tools'
+
+  # After installation
+  pause: 1
+
+  # This is still a half-beaked mapping idea, put here the files
+  programdata:
+    - [ ./bin, ./bin ]
+    - [ ./cli, ./cli ]
+
+Dependencies:
+  deploy-scripts: d8ac2c6
+
+  python:
+    1

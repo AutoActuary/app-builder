@@ -12,6 +12,3 @@ These tools scripts help us to
 
 To get started open the base directory of your project in a terminal window, and run the following command:
 
-```
-powershell.exe -c "(new-object net.webclient).DownloadFile('https://raw.githubusercontent.com/AutoActuary/deploy-scripts/master/copy-pasties/application.bat','application.bat'); ./application.bat -u"
-```
