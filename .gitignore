@@ -31,4 +31,6 @@ MANIFEST
 
 *.iml
 
-/bin/
+/bin/python
+/bin/git
+/tools/
