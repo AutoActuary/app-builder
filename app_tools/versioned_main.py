@@ -5,6 +5,7 @@ from pathlib import Path
 import fnmatch
 import re
 from textwrap import dedent
+import time
 
 import sys
 
@@ -98,7 +99,7 @@ def ensure_app_version():
             site_dir = this_dir.joinpath('site-packages')
             
             sys.path.insert(0, str(site_dir))
-            os.environ['PATH'] = f"{Path(sys.executable).parent};os.environ['PATH']"
+            os.environ['PATH'] = f"{Path(sys.executable).parent};{os.environ['PATH']}"
             os.environ['PYTHONPATH'] = str(site_dir) + ';' + os.environ.get('PYTHONPATH', '') 
             
             sys.exit(
@@ -109,9 +110,39 @@ def ensure_app_version():
     return rev
 
 
+def version_cleanup():
+    """
+    Use arbitrary choices to not let the version directory blow up in size
+    """
+    vdict = {}
+    for i in paths.versions.glob("*"):
+        run_log = i.joinpath("run.log")
+
+        if run_log.is_file():
+            vdict[os.path.getmtime(run_log)] = i
+
+    # sort from oldest to newest
+    maybes = sorted(list(vdict.keys()))[:-8]
+
+    # throw away older than a month
+    for key in maybes:
+        if time.time() - key > 60*60*24*30:
+            shutil.rmtree(vdict[key])
+
+
 def run_versioned_main():
     rev = ensure_app_version()
-    exec_py(paths.versions.joinpath(rev, "run.py"))
+    rev_path = paths.versions.joinpath(rev)
+
+    # touch
+    with open(rev_path.joinpath("run.log"), "w") as fw:
+        pass
+
+    # run
+    exec_py(rev_path.joinpath("run.py"))
+
+    # clean up
+    version_cleanup()
 
 
 if __name__ == "__main__":
