@@ -53,7 +53,7 @@ def ensure_git():
                 print(f"Downloading git from '{giturl}'")
                 urllib.request.urlretrieve(giturl, dlpath)
                 os.makedirs(git_bundled_dir, exist_ok=True)
-                subprocess.call([str(this_dir().joinpath('..', 'src-legacy', 'bin', '7z.exe')), "x",
+                subprocess.call([str(this_dir().joinpath('src-legacy', 'bin', '7z.exe')), "x",
                                  str(dlpath), f'-o{git_bundled_dir}', '-y'], stdout=subprocess.DEVNULL)
 
         e = None

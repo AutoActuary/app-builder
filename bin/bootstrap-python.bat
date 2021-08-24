@@ -98,3 +98,4 @@ if "%ARG_REQUIREMENTS%" NEQ "" (
   call "%ARG_DEST%\python.exe" -m pip install -r "%ARG_REQUIREMENTS%"
 )
 
+rmdir "%ARG_TEMP%" /S /Q

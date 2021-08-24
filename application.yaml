@@ -3,8 +3,8 @@ app-builder: ed58647
 Application:
 
   name: App Builder
-  asciibanner: src-legacy/assets/asciibanner-AA.txt
-  icon: src-legacy/assets/autoactuary.ico
+  asciibanner: app_builder/src-legacy/assets/asciibanner-AA.txt
+  icon: app_builder/src-legacy/assets/autoactuary.ico
   installdir: '%localappdata%\autoactuary\app-builder'
 
   pause: 1
@@ -18,6 +18,5 @@ Application:
     - [ ./bin/post-uninstall.cmd, ./bin/post-uninstall.cmd ]
 
     - [ ./cli, ./cli               ]
-    - [ ./src-legacy, ./src-legacy ]
     - [ ./app_builder, ./app_builder]
     
