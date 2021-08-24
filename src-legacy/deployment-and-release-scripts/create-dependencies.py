@@ -33,7 +33,7 @@ def create_all_dependencies():
 
     # legacy support for spelling mistake "Dependancies"
     spellfix = "Dependencies" if "Dependencies" in config else "Dependancies"
-    for key, value in config[spellfix].items():
+    for key, value in get(config, spellfix, {}).items():
 
         # install python (if used)
         # add pip stuff, add logging information
