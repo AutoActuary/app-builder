@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 import fnmatch
 import re
@@ -71,23 +72,28 @@ def ensure_app_version():
     if path_rev.joinpath("run.py").is_file():
         return rev
 
+    print(f"Checkout app-builder version '{rev}'")
+    print(f"Initiate app-builder '{rev}' dependencies")
     git_revision.git_download("https://github.com/AutoActuary/app-builder.git", paths.live_repo, rev)
 
-    path_rev_repo = path_rev.joinpath("repo")
-    path_rev_site = path_rev.joinpath("site-packages")
+    # Use temp directory so that we can't accidently end up half way
+    with tempfile.TemporaryDirectory() as tdir:
+        tmp_rev_repo = tdir.join("repo")
+        tmp_site = tdir.joinpath("site-packages")
+        for i in paths.live_repo.glob("*"):
+            if i.name == ".git":
+                continue
+            copy(i, tmp_rev_repo.joinpath(i.name))
 
-    shutil.rmtree(path_rev_repo, ignore_errors=True)
-    os.makedirs(path_rev_repo, exist_ok=True)
-    for i in paths.live_repo.glob("*"):
-        if i.name == ".git":
-            continue
-        copy(i, path_rev_repo.joinpath(i.name))
+        os.makedirs(tmp_site, exist_ok=True)
+        assert 0 == subprocess.call([sys.executable, "-m", "pip",
+                                     "install",
+                                     "-r", tmp_rev_repo.joinpath("requirements.txt"),
+                                     f"--target={tmp_site}"])
 
-    os.makedirs(path_rev_site, exist_ok=True)
-    assert 0 == subprocess.call([sys.executable, "-m", "pip",
-                                 "install",
-                                 "-r", path_rev_repo.joinpath("requirements.txt"),
-                                 f"--target={path_rev_site}"])
+        shutil.rmtree(path_rev, ignore_errors=True)
+        os.makedirs(path_rev.parent, exist_ok=True)
+        shutil.copytree(tdir, path_rev)
 
     # Inject launcher
     with open(path_rev.joinpath("run.py"), "w") as fw:
@@ -108,6 +114,9 @@ def ensure_app_version():
                 subprocess.call([sys.executable, str(this_dir.joinpath("repo", "app_builder", "main.py"))]+sys.argv[1:])
             )
             """))
+
+    print(f"App-builder version '{rev}' successful")
+    print()
 
     return rev
 
@@ -142,14 +151,8 @@ def run_versioned_main():
     installed = True
     if not rev_path.is_dir():
         installed = False
-        print(f"Checkout app-builder version `{rev}`")
-        print(f"Bottle app-builder version `{rev}` dependencies")
 
     ensure_app_version()
-
-    if not installed and rev_path.is_dir():
-        print(f"App-builder updated to version `{rev}`")
-        print()
 
     # run
     exec_py(rev_path.joinpath("run.py"))
