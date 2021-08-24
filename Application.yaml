@@ -11,7 +11,8 @@ Application:
 
   # This is still a half-beaked mapping idea, put here the files
   programdata:
-    - [ ./bin, ./bin ]
+    - [ ./bin/python, ./bin/python ]
+    - [ ./bin/git, ./bin/git ]
     - [ ./cli, ./cli ]
 
 Dependencies:

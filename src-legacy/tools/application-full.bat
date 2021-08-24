@@ -57,7 +57,7 @@ goto :donehelpmenu
 
 
 :: Get the base of the current repo
-call %func% GIT-PROJECT-DIR gitdir "%thisdir%"
+call %func% GIT-PROJECT-DIR gitdir "%cd%"
 if "%gitdir%" equ "" (
     echo "Error: your main directory must be a git repository!"
     goto :EOF
@@ -77,20 +77,6 @@ if "%ARG_-GET-PYTHON%"     equ "1" call :GET-PYTHON
 if not exist "%gitdir%\Application.yaml" (
     echo Error: please create an Application.yaml file!
     echo Use the template in deploy-scripts\copy-pasties\Application.yaml
-    goto :EOF
-)
-
-
-:: If Python is listed as a local dependancy, make sure its downloaded
-call %func% SNEAK-PEAK-YAML-DEPENDANCY needspython "%gitdir%\Application.yaml" python
-if "%needspython%" neq "" if not exist "%gitdir%\bin\python\python.exe" call :GET-PYTHON
-set "PATH=%gitdir%\bin\python;%PATH%"
-
-
-:: If Python is still not found, throw an error
-call python --version >nul 2>&1
-if "%errorlevel%" neq "0" (
-    echo "Error: Python not found, please install python to use this functionality!"
     goto :EOF
 )
 
