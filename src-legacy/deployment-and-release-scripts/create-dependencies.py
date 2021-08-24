@@ -111,7 +111,8 @@ def create_all_dependencies():
             misc.get_mintty(icon)
 
         elif key.lower() == "deploy-scripts":
-            git_revision.git_download(reponame, paths.app_dir.joinpath("tools", "deploy-scripts"), str(value))
+            git_revision.git_download('git@github.com:AutoActuary/deploy-scripts.git',
+                                      paths.app_dir.joinpath("tools", "deploy-scripts"), str(value))
 
         else:
             if 'github.com' in value[0]:
