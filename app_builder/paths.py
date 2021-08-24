@@ -4,10 +4,10 @@ from locate import this_dir
 import tempfile
 import hashlib
 
-installed_dir = Path(os.environ['LOCALAPPDATA']).joinpath("autoactuary", "app-tools").resolve()
+installed_dir = Path(os.environ['LOCALAPPDATA']).joinpath("autoactuary", "app-builder").resolve()
 base_dir = this_dir().parent
 key = hashlib.md5(str(base_dir).lower().encode('utf-8')).hexdigest()[:10]
-temp_dir = Path(tempfile.gettempdir()).joinpath(f"app-tools-{key}")
+temp_dir = Path(tempfile.gettempdir()).joinpath(f"app-builder-{key}")
 
 
 def set_from_base(dirname):

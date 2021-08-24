@@ -5,7 +5,7 @@ Application:
   name: App Builder
   asciibanner: src-legacy/assets/asciibanner-AA.txt
   icon: src-legacy/assets/autoactuary.ico
-  installdir: '%localappdata%\autoactuary\app-tools'
+  installdir: '%localappdata%\autoactuary\app-builder'
 
   pause: 1
 
@@ -19,7 +19,7 @@ Application:
 
     - [ ./cli, ./cli               ]
     - [ ./src-legacy, ./src-legacy ]
-    - [ ./app_tools, ./app_tools   ]
+    - [ ./app_builder, ./app_builder   ]
 
 Dependencies:
   deploy-scripts: d8ac2c6

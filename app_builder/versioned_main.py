@@ -51,7 +51,7 @@ def get_app_version():
 
             if ":" not in line or line.split(":")[0].strip().lower() != "app-builder":
                 raise RuntimeError(
-                    "App-tools expect all `application.yaml` files to start with `toolversion: <version>`"
+                    "app-builder expect all `application.yaml` files to start with `app-builder: <version>`"
                 )
             else:
                 version = line.split(':', 1)[1].strip()
@@ -71,7 +71,7 @@ def ensure_app_version():
     if path_rev.joinpath("run.py").is_file():
         return rev
 
-    git_revision.git_download("https://github.com/AutoActuary/app-tools.git", paths.live_repo, rev)
+    git_revision.git_download("https://github.com/AutoActuary/app-builder.git", paths.live_repo, rev)
 
     path_rev_repo = path_rev.joinpath("repo")
     path_rev_site = path_rev.joinpath("site-packages")
@@ -105,7 +105,7 @@ def ensure_app_version():
             os.environ['PYTHONPATH'] = str(site_dir) + ';' + os.environ.get('PYTHONPATH', '') 
             
             sys.exit(
-                subprocess.call([sys.executable, str(this_dir.joinpath("repo", "app_tools", "main.py"))]+sys.argv[1:])
+                subprocess.call([sys.executable, str(this_dir.joinpath("repo", "app_builder", "main.py"))]+sys.argv[1:])
             )
             """))
 
