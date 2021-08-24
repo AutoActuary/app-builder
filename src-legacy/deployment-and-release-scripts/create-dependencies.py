@@ -11,6 +11,11 @@ import collections.abc
 allow_relative_location_imports('../includes')
 import paths
 
+# Borrow from our future implementation
+allow_relative_location_imports('../..')
+import app_builder
+from app_builder import git_revision
+
 """
 Download/install python and R and other dependencies
 """
@@ -105,6 +110,10 @@ def create_all_dependencies():
                 icon = _Path(Path(paths.app_dir, value))
             misc.get_mintty(icon)
 
+        elif key.lower() == "deploy-scripts":
+            git_revision.git_download('git@github.com:AutoActuary/deploy-scripts.git',
+                                      paths.app_dir.joinpath("tools", "deploy-scripts"), str(value))
+
         else:
             if 'github.com' in value[0]:
                 repo = value[0]
@@ -112,41 +121,7 @@ def create_all_dependencies():
                 checkout = value[1]
                 repopath = paths.tools_dir.joinpath(reponame)
 
-                # Test if repo is locked in a non-repo state and blocking us from resetting it
-                print(f"Ensure {reponame} checkout out at {checkout}")
-
-                with _Path(paths.tools_dir):
-
-                    if not repopath.joinpath(".git").exists():
-                        try:
-                            misc.sh(f"git rm -r {reponame}", True)
-                        except subprocess.CalledProcessError:
-                            pass
-
-                        try:
-                            misc.sh(f"git rm --cached {reponame}", True)
-                        except subprocess.CalledProcessError:
-                            pass
-
-                        shutil.rmtree(repopath, ignore_errors=True)
-
-                    try:
-                        misc.sh(f'git clone {repo} {reponame}', True)
-                    except subprocess.CalledProcessError:
-                        pass
-
-                    # We are going to run dangerious git commands, make sure the directory actually exists
-                    if Path(reponame).exists() and Path(reponame + r"\.git").exists():
-                        with _Path(repopath):
-                            misc.sh("git reset --hard")
-                            misc.sh("git clean -qdfx")
-                            misc.sh("git fetch --all")
-                            sh_txt = misc.sh(f"git checkout --force {checkout}", True)
-
-                            # If we don't have the default git message, print the unexpected message to be verbose
-                            if "is now at" not in sh_txt:
-                                print(sh_txt)
-
+                git_revision.git_download(reponame, repopath, checkout)
 
     # implicitly run any script named "post-dependencies.bat" or "post-dependencies.cmd" in dedicated locations
     for scriptsdir in [".", "bin", "src", "scripts"]:

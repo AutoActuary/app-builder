@@ -10,6 +10,7 @@ import toml
 
 import yaml
 from locate import allow_relative_location_imports
+import locate
 from path import Path as _Path
 
 allow_relative_location_imports('../includes')
@@ -266,6 +267,10 @@ def get_python():
         download('https://bootstrap.pypa.io/get-pip.py', tempdir.joinpath('get-pip.py'))
     subprocess.call([pythonbin, tempdir.joinpath('get-pip.py')])
     """
+    if not paths.python_bin.is_file():
+        subprocess.call([str(locate.this_dir().joinpath("..", "tools", "bootstrap-python.bat")),
+                         "-dest", str(paths.py_dir),
+                         "-temp", str(paths.temp_dir)])
 
 
 def get_julia():
