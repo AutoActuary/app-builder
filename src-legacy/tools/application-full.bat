@@ -43,7 +43,6 @@ goto :donehelpmenu
     echo Usage: %~n0 [Options]
     echo Options:
     echo   -h, --help             Print these options
-    echo   -u, --update           Ensure an up-to-date repository in tools/deploy-scripts
     echo   -p, --get-python       Download and extract python to bin/python
     echo   -d, --get-dependencies Ensure all the dependencies are set up properly
     echo   -b, --branch-excel ^<file^> ^<branch^>
