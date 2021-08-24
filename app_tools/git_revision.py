@@ -8,33 +8,37 @@ from contextlib import suppress
 import shutil
 import os
 from locate import this_dir
-
+import paths
 from shell import sh_lines, working_directory, sh_quiet
 
 
 def ensure_git():
     """
     Do some wild gymnastics to ensure git is in the PATH. If not, then download
-    portable version from github.
+    portable version from github and put that into temporary path.
     """
     git = "git.exe"
     
     # Make sure bundled git is in path as a fallback (end of path)
-    git_bundled = this_dir().joinpath("git", "bin", "git.exe")
-    git_bundled_dir = str(git_bundled.parent)
-    if f";{git_bundled_dir};" not in f";{os.environ['PATH']};":
-        os.environ['PATH'] = f"{os.environ['PATH']};{git_bundled_dir}"
+    bindir = this_dir().parent.joinpath("bin")
+    if not bindir.joinpath("python", "python.exe").is_file():
+        bindir = paths.temp_dir.joinpath("bin")
+
+    git_bundled = bindir.joinpath("git", "bin", "git.exe")
+    git_bundled_dir = git_bundled.parent.parent
+    if f";{git_bundled_dir.joinpath('bin')};" not in f";{os.environ['PATH']};":
+        os.environ['PATH'] = f"{os.environ['PATH']};{git_bundled_dir.joinpath('bin')}"
 
     # Is git installed?
     try:
         sh_lines([git, "--version"], stderr=subprocess.DEVNULL)
 
     # Download portable git from github
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         github_latest = 'https://api.github.com/repos/git-for-windows/git/releases/latest'
         if not git_bundled.is_file():
             giturl = None
-            d = loads(urlopen().read().decode("utf-8"))
+            d = loads(urlopen(github_latest).read().decode("utf-8"))
             for s in d['assets']:
                 if 'browser_download_url' in s:
                     url = s['browser_download_url']
@@ -48,17 +52,18 @@ def ensure_git():
                 dlpath = Path(tmp).joinpath(Path(giturl).name)
                 print(f"Downloading git from '{giturl}'")
                 urllib.request.urlretrieve(giturl, dlpath)
+                os.makedirs(git_bundled_dir, exist_ok=True)
                 subprocess.call([str(this_dir().joinpath('..', 'src-legacy', 'bin', '7z.exe')), "x",
-                                 str(dlpath), f'-o{this_dir().joinpath("git")}', '-y'], stdout=subprocess.DEVNULL)
+                                 str(dlpath), f'-o{git_bundled_dir}', '-y'], stdout=subprocess.DEVNULL)
 
         e = None
         try:                
             sh_lines([git, "--version"], stderr=subprocess.DEVNULL)
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, FileNotFoundError):
             try:                
                 sh_lines([str(git_bundled), "--version"], stderr=subprocess.DEVNULL)
                 git = git_bundled
-            except subprocess.CalledProcessError as e:
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 raise RuntimeError(
                     "Could not use system Git and could not sucessfully download and set up an portable alternative."
                 )

@@ -25,7 +25,7 @@ def working_directory(path):
         os.chdir(prev_cwd)
 
 
-def sh_lines(command, **kwargs)
+def sh_lines(command, **kwargs):
     shell = isinstance(command, str)
     lst = subprocess.check_output(command,
                                   shell=isinstance(command, str),
@@ -38,6 +38,7 @@ def sh_quiet(command):
                            shell=isinstance(command, str),
                            stderr=subprocess.DEVNULL,
                            stdout=subprocess.DEVNULL)
+
 
 def copy(src, dst):
     if Path(src).is_file():

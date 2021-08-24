@@ -1,16 +1,18 @@
 import os
 import shutil
 import subprocess
-from contextlib import suppress
 from pathlib import Path
 import fnmatch
 import re
 from textwrap import dedent
 
-import git_revision
-import paths
 import sys
 
+from locate import allow_relative_location_imports
+allow_relative_location_imports(".")
+
+import git_revision
+import paths
 from exec_py import exec_py
 from shell import sh_lines, copy
 
@@ -47,12 +49,13 @@ def get_app_version():
                 continue
 
             if ":" not in line or line.split(":")[0].strip() != "version":
-                raise RuntimeError("App-tools expect all `application.yaml` files to start with version: <version>")
+                raise RuntimeError("App-tools expect all `application.yaml` files to start with `version: <version>`")
             else:
                 version = line.split(':', 1)[1].strip()
                 if (version[0]+version[-1]) in ('""', "''"):
                     version = version[1:-1]
                 assert version != ""
+                break
 
     return version
 
@@ -62,14 +65,14 @@ def ensure_app_version():
     path_rev = paths.versions.joinpath(rev)
 
     # Maybe no work needed
-    with suppress(subprocess.CalledProcessError):
-        sh_lines([sys.executable, str(path_rev.joinpath("run.py")), "--help"], stderr=subprocess.DEVNULL)
-        return None
+    if path_rev.joinpath("run.py").is_file():
+        return rev
 
     git_revision.git_download("https://github.com/AutoActuary/app-tools.git", paths.live_repo, rev)
 
     path_rev_repo = path_rev.joinpath("repo")
     path_rev_site = path_rev.joinpath("site-packages")
+
     shutil.rmtree(path_rev_repo, ignore_errors=True)
     os.makedirs(path_rev_repo, exist_ok=True)
     for i in paths.live_repo.glob("*"):
@@ -77,12 +80,13 @@ def ensure_app_version():
             continue
         copy(i, path_rev_repo.joinpath(i.name))
 
-    os.makedirs(path_rev_site)
+    os.makedirs(path_rev_site, exist_ok=True)
     assert 0 == subprocess.call([sys.executable, "-m", "pip",
                                  "install",
                                  "-r", path_rev_repo.joinpath("requirements.txt"),
                                  f"--target={path_rev_site}"])
 
+    # Inject launcher
     with open(path_rev.joinpath("run.py"), "w") as fw:
         fw.write(dedent(r"""
             from pathlib import Path
@@ -91,14 +95,16 @@ def ensure_app_version():
             import os
             
             this_dir = Path(__file__).resolve().parent
-            sys.path.insert(str(this_dir.joinpath('site-packages')), 0)
+            site_dir = this_dir.joinpath('site-packages')
+            
+            sys.path.insert(0, str(site_dir))
             os.environ['PATH'] = f"{Path(sys.executable).parent};os.environ['PATH']"
+            os.environ['PYTHONPATH'] = str(site_dir) + ';' + os.environ.get('PYTHONPATH', '') 
             
             sys.exit(
                 subprocess.call([sys.executable, str(this_dir.joinpath("repo", "app_tools", "main.py"))]+sys.argv[1:])
             )
-            """
-        ))
+            """))
 
     return rev
 
