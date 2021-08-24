@@ -133,17 +133,27 @@ def version_cleanup():
 
 
 def run_versioned_main():
-    rev = ensure_app_version()
+    rev = get_app_version()
     rev_path = paths.versions.joinpath(rev)
 
-    # touch
-    with open(rev_path.joinpath("run.log"), "w") as fw:
-        pass
+    installed = True
+    if not rev_path.is_dir():
+        installed = False
+        print(f"Checkout app-builder version `{rev}`")
+        print(f"Bottle app-builder version `{rev}` dependencies")
+
+    ensure_app_version()
+
+    if not installed and rev_path.is_dir():
+        print(f"App-builder updated to version `{rev}`")
+        print()
 
     # run
     exec_py(rev_path.joinpath("run.py"))
 
     # clean up
+    with open(rev_path.joinpath("run.log"), "w") as fw:
+        pass
     version_cleanup()
 
 
