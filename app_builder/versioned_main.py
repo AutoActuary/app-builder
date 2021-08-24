@@ -79,14 +79,17 @@ def ensure_app_version():
     # Use temp directory so that we can't accidently end up half way
     with tempfile.TemporaryDirectory() as tdir:
         tdir = Path(tdir)
+
         tmp_rev_repo = tdir.joinpath("repo")
         tmp_site = tdir.joinpath("site-packages")
+        os.makedirs(tmp_rev_repo, exist_ok=True)
+        os.makedirs(tmp_site, exist_ok=True)
+
         for i in paths.live_repo.glob("*"):
             if i.name == ".git":
                 continue
             copy(i, tmp_rev_repo.joinpath(i.name))
 
-        os.makedirs(tmp_site, exist_ok=True)
         assert 0 == subprocess.call([sys.executable, "-m", "pip",
                                      "install",
                                      "-r", tmp_rev_repo.joinpath("requirements.txt"),
