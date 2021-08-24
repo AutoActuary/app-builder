@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import fnmatch
 import re
+import locate
 
 def iglob(p, pattern):
     rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
