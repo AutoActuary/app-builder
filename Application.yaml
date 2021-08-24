@@ -1,4 +1,4 @@
-app-builder: 75e0634
+app-builder: 778cc48
 
 Application:
 
@@ -19,5 +19,5 @@ Application:
 
     - [ ./cli, ./cli               ]
     - [ ./src-legacy, ./src-legacy ]
-    - [ ./app_builder, ./app_builder   ]
+    - [ ./app_builder, ./app_builder]
     
