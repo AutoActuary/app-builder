@@ -20,7 +20,7 @@ function Remove-FromUserPath {
         [Environment]::SetEnvironmentVariable("PATH", $path, [EnvironmentVariableTarget]::User)
         return
     }
-    Write-Host "$dir is not in PATH"
+    #Write-Host "$dir is not in PATH"
 }
 
 if ("$env:installdir" -ne ""){

@@ -19,7 +19,7 @@ function Add-ToUserPath {
         [Environment]::SetEnvironmentVariable("PATH", "$dir;$path", [EnvironmentVariableTarget]::User)
         return
     }
-    Write-Host  "$dir is already in PATH"
+    #Write-Host  "$dir is already in PATH"
 }
 
 Add-ToUserPath "$env:_cmd/../../cli"
