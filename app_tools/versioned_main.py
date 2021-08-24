@@ -49,8 +49,10 @@ def get_app_version():
             if line == "":
                 continue
 
-            if ":" not in line or line.split(":")[0].strip() != "version":
-                raise RuntimeError("App-tools expect all `application.yaml` files to start with `version: <version>`")
+            if ":" not in line or line.split(":")[0].strip().lower() != "app-builder":
+                raise RuntimeError(
+                    "App-tools expect all `application.yaml` files to start with `toolversion: <version>`"
+                )
             else:
                 version = line.split(':', 1)[1].strip()
                 if (version[0]+version[-1]) in ('""', "''"):

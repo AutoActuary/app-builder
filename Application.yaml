@@ -1,7 +1,8 @@
-# information for application name and launcher
+app-builder: bbc02fe
+
 Application:
 
-  name: AppTools
+  name: App Builder
   asciibanner: src-legacy/assets/asciibanner-AA.txt
   icon: src-legacy/assets/autoactuary.ico
   installdir: '%localappdata%\autoactuary\app-tools'
