@@ -79,7 +79,7 @@ def ensure_app_version():
     # Use temp directory so that we can't accidently end up half way
     with tempfile.TemporaryDirectory() as tdir:
         tdir = Path(tdir)
-        tmp_rev_repo = tdir.join("repo")
+        tmp_rev_repo = tdir.joinpath("repo")
         tmp_site = tdir.joinpath("site-packages")
         for i in paths.live_repo.glob("*"):
             if i.name == ".git":
