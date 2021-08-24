@@ -13,7 +13,7 @@ import misc
 
 allow_relative_location_imports('../includes')
 import paths
-import exec_py
+from exec_py import exec_py
 
 strdate = date.today().strftime("%Y-%m-%d")
 
