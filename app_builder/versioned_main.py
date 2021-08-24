@@ -124,11 +124,14 @@ def version_cleanup():
             vdict[os.path.getmtime(run_log)] = i
 
     # sort from oldest to newest
-    maybes = sorted(list(vdict.keys()))[:-8]
+    maybes = sorted(list(vdict.keys()))[:-10]
 
-    # throw away older than a month
+    # throw away items over 50 count
+    throwaways = set(maybes).difference(maybes[-40:])
+
+    # throw away leftovers OR older than a month
     for key in maybes:
-        if time.time() - key > 60*60*24*30:
+        if key in throwaways or time.time() - key > 60*60*24*30:
             shutil.rmtree(vdict[key])
 
 
