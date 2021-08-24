@@ -12,7 +12,9 @@ Application:
     - [ ./bin/python, ./bin/python ]
     - [ ./bin/7z.dll, ./bin/7z.dll ]
     - [ ./bin/7z.exe, ./bin/7z.exe ]
-    - [ ./bin/git, ./bin/git       ]
+    - [ ./bin/git,    ./bin/git    ]
+    - [ ./bin/post-install.cmd,   ./bin/post-install.cmd   ]
+    - [ ./bin/post-uninstall.cmd, ./bin/post-uninstall.cmd ]
 
     - [ ./cli, ./cli               ]
     - [ ./src-legacy, ./src-legacy ]
