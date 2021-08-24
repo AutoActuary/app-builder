@@ -27,6 +27,8 @@ def find_application_base_directory(start_dir) -> Path:
 
 
 # App directories
+deployment_and_release_scripts_dir = locate.this_dir().joinpath('..', 'deployment-and-release-scripts').resolve()
+
 app_dir = find_application_base_directory(Path(".").resolve())
 tools_dir = Path(app_dir, 'tools')
 temp_dir = Path(tools_dir, 'temp', 'package-downloads')
