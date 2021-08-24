@@ -1,4 +1,4 @@
-app-builder: a85d684
+app-builder: 80a708d
 
 Application:
 
@@ -20,6 +20,4 @@ Application:
     - [ ./cli, ./cli               ]
     - [ ./src-legacy, ./src-legacy ]
     - [ ./app_builder, ./app_builder   ]
-
-Dependencies:
-  deploy-scripts: d8ac2c6
+    
