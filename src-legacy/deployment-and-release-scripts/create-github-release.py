@@ -12,8 +12,8 @@ from locate import allow_relative_location_imports
 import misc
 
 allow_relative_location_imports('../includes')
-import exec_py
 import paths
+import exec_py
 
 strdate = date.today().strftime("%Y-%m-%d")
 
@@ -71,8 +71,9 @@ with _Path(paths.app_dir):  # run git commands from chdir basedir
     # *************************************
     # Ensure that the environment is as expected
     # ************************************
-    if misc.sh('git branch --show-current') != 'master':
-        print("You need to be on master, checkout master and try again.")
+    main_branch = misc.sh("git symbolic-ref refs/remotes/origin/HEAD").split("/")[-1]
+    if misc.sh('git branch --show-current') != main_branch:
+        print(f"You need to be on {main_branch}, checkout {main_branch} and try again.")
         sys.exit()
 
     print("Downloading GitHub tag information...")
@@ -80,9 +81,9 @@ with _Path(paths.app_dir):  # run git commands from chdir basedir
     misc.sh('git fetch --tags')
 
     if 'Your branch is up to date with' not in misc.sh('git status -uno'):
-        print("You need to be in sync with Github and on the latest master commit:")
-        print('git pull origin master')
-        print('git push origin master')
+        print(f"You need to be in sync with Github and on the latest {main_branch} commit:")
+        print(f'git pull origin {main_branch}')
+        print(f'git push origin {main_branch}')
         sys.exit()
 
     # *************************************
@@ -132,11 +133,8 @@ for scriptsdir in [".", "bin", "src", "scripts"]:
 # ************************************
 print()
 print(f"Uploading to GitHub tag {tagname}, this may take a while...")
-github_release.gh_asset_upload(
-    name_repo,
-    tagname,
-    rf"{paths.tools_dir}\releases\*{tagname}*exe"
-)
+github_release.gh_asset_upload(name_repo, tagname, rf"{paths.tools_dir}\releases\*{tagname}*.exe")
+github_release.gh_asset_upload(name_repo, tagname, rf"{paths.tools_dir}\releases\*{tagname}*.zip")
 
 
 # **********************************************
