@@ -69,37 +69,39 @@ def ensure_app_version():
     path_rev = paths.versions.joinpath(rev)
 
     # Maybe no work needed
-    if path_rev.joinpath("run.py").is_file():
-        return rev
+    if not path_rev.joinpath("run.py").is_file():
 
-    print(f"Checkout app-builder version '{rev}'")
-    print(f"Initiate app-builder '{rev}' dependencies")
-    git_revision.git_download("https://github.com/AutoActuary/app-builder.git", paths.live_repo, rev)
+        print(f"Checkout app-builder version '{rev}'")
+        print(f"Initiate app-builder '{rev}' dependencies")
+        git_revision.git_download("https://github.com/AutoActuary/app-builder.git", paths.live_repo, rev)
 
-    # Use temp directory so that we can't accidently end up half way
-    with tempfile.TemporaryDirectory() as tdir:
-        tdir = Path(tdir)
+        # Use temp directory so that we can't accidently end up half way
+        with tempfile.TemporaryDirectory() as tdir:
+            tdir = Path(tdir)
 
-        tmp_rev_repo = tdir.joinpath("repo")
-        tmp_site = tdir.joinpath("site-packages")
-        os.makedirs(tmp_rev_repo, exist_ok=True)
-        os.makedirs(tmp_site, exist_ok=True)
+            tmp_rev_repo = tdir.joinpath("repo")
+            tmp_site = tdir.joinpath("site-packages")
+            os.makedirs(tmp_rev_repo, exist_ok=True)
+            os.makedirs(tmp_site, exist_ok=True)
 
-        for i in paths.live_repo.glob("*"):
-            if i.name == ".git":
-                continue
-            copy(i, tmp_rev_repo.joinpath(i.name))
+            for i in paths.live_repo.glob("*"):
+                if i.name == ".git":
+                    continue
+                copy(i, tmp_rev_repo.joinpath(i.name))
 
-        assert 0 == subprocess.call([sys.executable, "-m", "pip",
-                                     "install",
-                                     "-r", tmp_rev_repo.joinpath("requirements.txt"),
-                                     f"--target={tmp_site}"])
+            assert 0 == subprocess.call([sys.executable, "-m", "pip",
+                                         "install",
+                                         "-r", tmp_rev_repo.joinpath("requirements.txt"),
+                                         f"--target={tmp_site}"])
 
-        shutil.rmtree(path_rev, ignore_errors=True)
-        os.makedirs(path_rev.parent, exist_ok=True)
-        shutil.copytree(tdir, path_rev)
+            shutil.rmtree(path_rev, ignore_errors=True)
+            os.makedirs(path_rev.parent, exist_ok=True)
+            shutil.copytree(tdir, path_rev)
 
-    # Inject launcher
+        print(f"App-builder version '{rev}' successful")
+        print()
+
+    # Inject launcher (launcher may change with app-builder version driving this, so keep it volatile
     with open(path_rev.joinpath("run.py"), "w") as fw:
         fw.write(dedent(r"""
             from pathlib import Path
@@ -119,15 +121,12 @@ def ensure_app_version():
             )
             """))
 
-    print(f"App-builder version '{rev}' successful")
-    print()
-
     return rev
 
 
 def version_cleanup():
     """
-    Use arbitrary choices to not let the version directory blow up in size
+    Use arbitrary filter choices to not let the version directory blow up in size
     """
     vdict = {}
     for i in paths.versions.glob("*"):
@@ -136,16 +135,19 @@ def version_cleanup():
         if run_log.is_file():
             vdict[os.path.getmtime(run_log)] = i
 
-    # sort from oldest to newest
+    # Sort from oldest to newest & don't touch lastest 10
     maybes = sorted(list(vdict.keys()))[:-10]
 
-    # throw away items over 50 count
+    # Chuck maybes over 40 count (I.e. chuck maybes without it's latest 40)
     throwaways = set(maybes).difference(maybes[-40:])
 
-    # throw away leftovers OR older than a month
-    for key in maybes:
-        if key in throwaways or time.time() - key > 60*60*24*30:
-            shutil.rmtree(vdict[key])
+    # Chuck maybes older than a month
+    throwaways = throwaways.union(
+        [i for i in maybes if time.time() - i > 60*60*24*30]
+    )
+
+    for i in throwaways:
+        shutil.rmtree(vdict[i])
 
 
 def run_versioned_main():
@@ -161,7 +163,7 @@ def run_versioned_main():
     # run
     exec_py(rev_path.joinpath("run.py"))
 
-    # clean up
+    # Leave trail and clean up
     with open(rev_path.joinpath("run.log"), "w") as fw:
         pass
     version_cleanup()
