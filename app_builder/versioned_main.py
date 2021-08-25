@@ -151,21 +151,18 @@ def version_cleanup():
 
 
 def run_versioned_main():
-    rev = get_app_version()
+
+    rev = ensure_app_version()
     rev_path = paths.versions.joinpath(rev)
-
-    installed = True
-    if not rev_path.is_dir():
-        installed = False
-
-    ensure_app_version()
 
     # run
     exec_py(rev_path.joinpath("run.py"))
 
-    # Leave trail and clean up
+    # Leave trail
     with open(rev_path.joinpath("run.log"), "w") as fw:
         pass
+
+    # Clean up some old versions
     version_cleanup()
 
 
