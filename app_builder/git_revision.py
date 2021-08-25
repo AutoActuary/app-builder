@@ -62,7 +62,7 @@ def ensure_git():
         except (subprocess.CalledProcessError, FileNotFoundError):
             try:                
                 sh_lines([str(git_bundled), "--version"], stderr=subprocess.DEVNULL)
-                git = git_bundled
+                git = str(git_bundled)
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 raise RuntimeError(
                     "Could not use system Git and could not sucessfully download and set up an portable alternative."
