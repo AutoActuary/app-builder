@@ -1,11 +1,9 @@
-# app-builder
+# App-builder
 
-These tools scripts help us to
+### History
+This is a port of `deploy-scripts` with a focus on extracting only the functionality that is related to packaging an app. The first priority was to debundle our packaging and dependency tools from other drips and drabs. The main reason is that `deploy-scripts` shared an python instance with the app it is deploying, and as a result package-upgrades by the app constantly broke stuff on the `deploy-scipts` side. With this rework, `app-builder` can check-out any version of itself completely isolated from the rest of the system.
 
-- download dependencies like R, Python, Pandoc and their packages
-- specify which files to ship to clients
-- specify which shortcuts to add to their start menu
-- wrap all of this in a 7zip installer
-- add an uninstaller for our clients
-
-
+### Roadmap
+- Write documentation (or at least a how-to guide)
+- Take what we need from the legacy code base and start with a cleaner implementation
+- Also make this into a pip installable module
