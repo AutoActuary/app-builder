@@ -8,7 +8,4 @@ These tools scripts help us to
 - wrap all of this in a 7zip installer
 - add an uninstaller for our clients
 
-# Get started
-
-To get started open the base directory of your project in a terminal window, and run the following command:
 
