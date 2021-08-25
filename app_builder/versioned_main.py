@@ -116,6 +116,7 @@ def ensure_app_version():
             os.environ['PATH'] = f"{Path(sys.executable).parent};{os.environ['PATH']}"
             os.environ['PYTHONPATH'] = str(site_dir) + ';' + os.environ.get('PYTHONPATH', '') 
             
+            # Separate instance is important otherwise custom site-packages wouldn't be re-imported   
             sys.exit(
                 subprocess.call([sys.executable, str(this_dir.joinpath("repo", "app_builder", "main.py"))]+sys.argv[1:])
             )
