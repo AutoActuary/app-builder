@@ -35,10 +35,10 @@ def get_app_base_directory(start_dir) -> Path:
 
         parent = d.parent
         if parent == d:  # like "c:" == "c:"
-            raise FileNotFoundError("Expected git repository with `Application.yaml` at base!")
+            raise FileNotFoundError("Expected git repository with 'application.yaml' at base!")
         d = parent
 
-    raise FileNotFoundError("Expected git repository with `Application.yaml` at base!")
+    raise FileNotFoundError("Expected git repository with 'application.yaml' at base!")
 
 
 def get_app_version():
@@ -52,7 +52,7 @@ def get_app_version():
 
             if ":" not in line or line.split(":")[0].strip().lower() != "app-builder":
                 raise RuntimeError(
-                    "app-builder expect all `application.yaml` files to start with `app-builder: <version>`"
+                    "app-builder expects 'application.yaml' files to start with `app-builder: <version>`"
                 )
             else:
                 version = line.split(':', 1)[1].strip()
