@@ -115,7 +115,7 @@ def create_all_dependencies():
                                       paths.app_dir.joinpath("tools", "deploy-scripts"), str(value))
 
         else:
-            if 'github.com' in value[0]:
+            if 'github.com' in str(value[0]):
                 repo = value[0]
                 reponame = repo.split('/')[-1].split('.git')[0]
                 checkout = value[1]
