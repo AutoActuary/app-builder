@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from contextlib import suppress
 
 from locate import allow_relative_location_imports
 from path import Path as _Path
@@ -115,8 +116,11 @@ def create_all_dependencies():
                                       paths.app_dir.joinpath("tools", "deploy-scripts"), str(value))
 
         else:
-            if 'github.com' in str(value[0]):
-                repo = value[0]
+            repo = ''
+            with suppress(TypeError):
+                repo = str(value[0])
+
+            if 'github.com' in repo:
                 reponame = repo.split('/')[-1].split('.git')[0]
                 checkout = value[1]
                 repopath = paths.tools_dir.joinpath(reponame)
