@@ -125,7 +125,7 @@ def create_all_dependencies():
                 checkout = value[1]
                 repopath = paths.tools_dir.joinpath(reponame)
 
-                git_revision.git_download(reponame, repopath, checkout)
+                git_revision.git_download(repo, repopath, checkout)
 
     # implicitly run any script named "post-dependencies.bat" or "post-dependencies.cmd" in dedicated locations
     for scriptsdir in [".", "bin", "src", "scripts"]:
