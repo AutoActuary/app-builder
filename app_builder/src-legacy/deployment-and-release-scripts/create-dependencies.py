@@ -86,7 +86,7 @@ def create_all_dependencies():
             shutil.rmtree(paths.rpath.joinpath('bin/i386'), ignore_errors=True)
             shutil.rmtree(paths.rpath.joinpath('doc'), ignore_errors=True)
 
-            for libdir in paths.rpath.joinpath('library').listdir():
+            for libdir in paths.rpath.joinpath('library').glob("*"):
                 shutil.rmtree(libdir.joinpath('libs/i386'), ignore_errors=True)
                 shutil.rmtree(libdir.joinpath('doc'), ignore_errors=True)
 
