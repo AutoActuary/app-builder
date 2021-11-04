@@ -154,7 +154,7 @@ for scriptsdir in [".", "bin", "src", "scripts"]:
 programzip = paths.tools_dir.joinpath('releases', config['Application']['name'] + ".7z")
 mapping = config['Application']['programdata'] + [
     ["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
-    ["./tools/deploy-scripts/assets/uninstall.ico", "./bin/uninstall.ico"]]
+    [f"{paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"]]
 
 # Deprecated, moving to more explicit launchers
 if 'entrypoint' in config['Application']:
