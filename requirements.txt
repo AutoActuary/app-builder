@@ -1,5 +1,5 @@
 pyyaml~=5.3
 path~=15.0
 githubrelease~=1.5
-locate~=0.0
+locate~=1.0
 toml~=0.10
