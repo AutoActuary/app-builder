@@ -4,8 +4,7 @@ from pathlib import Path
 from locate import allow_relative_location_imports, this_dir
 
 # Borrow implementation from non-legacy future application
-sys.path.append(Path(__file__).resolve().parent.parent.parent.parent)
-print(Path(__file__).resolve().parent.parent.parent.parent)
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent.parent))
 from app_builder import exec_py
 
 # Reshuffle args in order to call future scripts
