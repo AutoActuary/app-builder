@@ -1,6 +1,7 @@
 from locate import this_dir
 import subprocess
 import sys
+from pathlib import Path
 from locate import allow_relative_location_imports
 allow_relative_location_imports("..")
 from app_builder import exec_py
