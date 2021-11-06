@@ -101,24 +101,42 @@ def ensure_app_version():
         print(f"App-builder version '{rev}' successful")
         print()
 
-    # Inject launcher (launcher may change with app-builder version driving this, so keep it volatile
+    # Inject launcher note that launcher may change with app-builder version driving this, so keep it volatile
     with open(path_rev.joinpath("run.py"), "w") as fw:
         fw.write(dedent(r"""
             from pathlib import Path
             import subprocess
             import sys
             import os
-            
+            from textwrap import dedent
+
             this_dir = Path(__file__).resolve().parent
             site_dir = this_dir.joinpath('site-packages')
+            script = this_dir.joinpath("repo", "app_builder", "main.py")
             
-            sys.path.insert(0, str(site_dir))
-            os.environ['PATH'] = f"{Path(sys.executable).parent};{os.environ['PATH']}"
-            os.environ['PYTHONPATH'] = str(site_dir) + ';' + os.environ.get('PYTHONPATH', '') 
+            def repr_str(x):
+                return repr(str(x))
             
-            # Separate instance is important otherwise custom site-packages wouldn't be re-imported   
             sys.exit(
-                subprocess.call([sys.executable, str(this_dir.joinpath("repo", "app_builder", "main.py"))]+sys.argv[1:])
+                subprocess.call(
+                    [
+                        sys.executable,
+                        "-c",
+                        dedent(f'''
+                            import sys;
+                            sys.argv = sys.argv[0:1]+{repr(sys.argv[1:])};
+                            sys.path.insert(0, {repr_str(site_dir)});
+                            script = f{repr_str(script)};
+                            globs = globals();
+                            globs["__file__"] = script;
+                            globs["__name__"] = "__main__";
+                            file = open(script, 'rb');
+                            script_txt = file.read();
+                            file.close();
+                            exec(compile(script_txt, script, 'exec'), globs);
+                        '''),
+                    ]
+                )
             )
             """))
 
