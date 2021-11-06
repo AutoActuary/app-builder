@@ -16,7 +16,7 @@ def compatable_app_builder_caller():
         return None
     version_link = version_link[0]
 
-    version = version_link.name.split("GitHub commit ", 1)[-1]
+    version = version_link.name.split("GitHub commit v", 1)[-1]
     version = version.split("-")[0]
     version = version.split(".")
     if not len(version) == 3:
@@ -50,4 +50,3 @@ if __name__ == "__main__":
         print("Error: this version requires app-builder installer v0.1.1 or higher")
         print("Download and install here: https://github.com/AutoActuary/app-builder/releases")
         sys.exit(-1)
-        
