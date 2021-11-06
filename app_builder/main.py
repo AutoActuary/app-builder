@@ -42,7 +42,7 @@ if __name__ == "__main__":
 
     vertup = caller_version_tuple()
 
-    if vertup is None or vertup >= (0.1.0):
+    if vertup is None or vertup >= (0, 1, 0):
         exec_py.exec_py(this_dir().joinpath("src-legacy", "tools", "application.py"), globals())
 
     else:
