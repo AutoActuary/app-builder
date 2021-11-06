@@ -32,13 +32,13 @@ if command in ("-h", "--help"):
     help()
 
 elif command in ("-d", "--get-dependencies"):
-    exec_py(this_dir().joinpath("..", "deployment-and-release-scripts", "create-dependencies.py"), globals())
+    exec_py.exec_py(this_dir().joinpath("..", "deployment-and-release-scripts", "create-dependencies.py"), globals())
 
 elif command in ("-l", "--local-release"):
-    exec_py(this_dir().joinpath("..", "deployment-and-release-scripts", "create-releases.py"), globals())
+    exec_py.exec_py(this_dir().joinpath("..", "deployment-and-release-scripts", "create-releases.py"), globals())
 
 elif command in ("-g", "--github-release"):
-    exec_py(this_dir().joinpath("..", "deployment-and-release-scripts", "create-github-release.py"), globals())
+    exec_py.exec_py(this_dir().joinpath("..", "deployment-and-release-scripts", "create-github-release.py"), globals())
 
 else:
     print("Error: wrong commandline arguments")
