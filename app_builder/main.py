@@ -8,18 +8,19 @@ from app_builder import exec_py
 
 def compatable_app_builder_caller():
     py_caller = Path(sys.executable).resolve()
-    app_dir = py_caller.parent.parent.parent.parent
+    app_dir = py_caller.parent.parent.parent
     if app_dir.name != "app-builder":
         return None
 
-    version_link = app_dir.glob("GitHub commit *.lnk")
+    version_link = list(app_dir.glob("GitHub commit *.lnk"))
     if len(version_link) != 1:
         return None
     version_link = version_link[0]
 
-    version = version_link.name.split("GitHub commit v", 1)[-1]
+    version = version_link.name.split("GitHub commit v", 1)[-1].split(".lnk", 1)[0]
     version = version.split("-")[0]
-    version = version.split(".")
+    version = tuple(version.split("."))
+
     if not len(version) == 3:
         return None
 
@@ -30,7 +31,7 @@ def compatable_app_builder_caller():
         except:
             return False
 
-    version = (int(i) for i in version if int_able(i))
+    version = tuple(int(i) for i in version if int_able(i))
     if not len(version) == 3:
         return None
 
