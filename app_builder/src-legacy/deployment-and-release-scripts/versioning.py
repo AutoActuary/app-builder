@@ -2,8 +2,8 @@ import subprocess
 from path import Path as _Path
 from locate import allow_relative_location_imports
 
-allow_relative_location_imports('../includes')
-import paths
+allow_relative_location_imports('.')
+import app_paths
 
 
 def sh(cmd):
@@ -11,7 +11,7 @@ def sh(cmd):
 
 
 def get_githuburl():
-    with _Path(paths.app_dir):
+    with _Path(app_paths.app_dir):
         commit = sh('git rev-parse HEAD')
         giturl = sh('git config --get remote.origin.url')
         giturl = giturl.split('@')[1].replace('.git', "").replace(':', "/")
@@ -23,7 +23,7 @@ def get_githuburl():
 
 
 def get_gitversion():
-    with _Path(paths.app_dir):
+    with _Path(app_paths.app_dir):
         try:
             return sh("git describe --tags")
         except subprocess.CalledProcessError:

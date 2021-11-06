@@ -7,13 +7,14 @@ from pathlib import Path
 
 import github_release
 import sys
+
+from app_builder import exec_py
+
 from locate import allow_relative_location_imports
 
+allow_relative_location_imports('.')
 import misc
-
-allow_relative_location_imports('../includes')
-import paths
-from exec_py import exec_py
+import app_paths
 
 strdate = date.today().strftime("%Y-%m-%d")
 
@@ -53,7 +54,7 @@ Github.com and follow from step (1):
 # it from git.
 no_msg = no_msg.encode("utf-8", "ignore").decode("utf-8")
 
-tokenpath = paths.tools_dir.joinpath('.github_token')
+tokenpath = app_paths.tools_dir.joinpath('.github_token')
 if not tokenpath.is_file():
     subprocess.Popen(['explorer', 'https://github.com/settings/tokens/new'])
     print(no_msg.strip())
@@ -66,7 +67,7 @@ os.environ['GITHUB_TOKEN'] = token
 # *********************************
 # After token is sorted out
 # *********************************
-with _Path(paths.app_dir):  # run git commands from chdir basedir
+with _Path(app_paths.app_dir):  # run git commands from chdir basedir
 
     # *************************************
     # Ensure that the environment is as expected
@@ -119,13 +120,13 @@ with _Path(paths.app_dir):  # run git commands from chdir basedir
     # Build the exe from scratch (to contain correct git info)
     # ************************************
     misc.sh(f'git fetch --tags')
-    exec_py(str(Path(paths.deployment_and_release_scripts_dir, "create-releases.py")), global_names=globals())
+    exec_py.exec_py(str(Path(app_paths.deployment_and_release_scripts_dir, "create-releases.py")), global_names=globals())
 
 # **********************************************
 # implicitely run any script named "pre-github-upload.bat/.cmd" in dedicated locations
 for scriptsdir in [".", "bin", "src", "scripts"]:
     for ext in ("bat", "cmd"):
-        for script in Path(paths.app_dir).joinpath(scriptsdir).glob(f"pre-github-upload.{ext}"):
+        for script in Path(app_paths.app_dir).joinpath(scriptsdir).glob(f"pre-github-upload.{ext}"):
             subprocess.call(script)
 
 # *************************************
@@ -133,13 +134,13 @@ for scriptsdir in [".", "bin", "src", "scripts"]:
 # ************************************
 print()
 print(f"Uploading to GitHub tag {tagname}, this may take a while...")
-github_release.gh_asset_upload(name_repo, tagname, rf"{paths.tools_dir}\releases\*{tagname}*.exe")
-github_release.gh_asset_upload(name_repo, tagname, rf"{paths.tools_dir}\releases\*{tagname}*.zip")
+github_release.gh_asset_upload(name_repo, tagname, rf"{app_paths.tools_dir}\releases\*{tagname}*.exe")
+github_release.gh_asset_upload(name_repo, tagname, rf"{app_paths.tools_dir}\releases\*{tagname}*.zip")
 
 
 # **********************************************
 # implicitely run any script named "post-github-upload.bat/.cmd" in dedicated locations
 for scriptsdir in [".", "bin", "src", "scripts"]:
     for ext in ("bat", "cmd"):
-        for script in Path(paths.app_dir).joinpath(scriptsdir).glob(f"post-github-upload.{ext}"):
+        for script in Path(app_paths.app_dir).joinpath(scriptsdir).glob(f"post-github-upload.{ext}"):
             subprocess.call(script)

@@ -49,7 +49,7 @@ def exec_py(filepath, global_names=None, local_names=None):
         global_names = {}
 
     global_names.update({
-        "__file__": filepath,
+        "__file__": str(filepath),
         "__name__": "__main__",
     })
 
