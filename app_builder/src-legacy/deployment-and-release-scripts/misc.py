@@ -14,7 +14,7 @@ import locate
 from path import Path as _Path
 
 allow_relative_location_imports('.')
-import paths
+import app_paths
 
 
 def nested_update(d, u):
@@ -46,7 +46,7 @@ def sh(cmd, std_err_to_stdout=False):
 def get_config():
     # We switched from bespon to yaml, but kept bespon for legacy reasons
     config = yaml.load(
-        paths.app_dir.joinpath("Application.yaml").open().read(),
+        app_paths.app_dir.joinpath("Application.yaml").open().read(),
         Loader=yaml.FullLoader
     )
 
@@ -135,7 +135,7 @@ def extract_file(archive, destdir, force=True):
         rmtree(destdir)
 
     subprocess.call([
-        paths.sevenz_bin,
+        app_paths.sevenz_bin,
         "x",
         "-y",
         f"-o{_Path(destdir).abspath()}",
@@ -161,13 +161,13 @@ def flatextract_file(archive, destdir, force=True):
 def download(dlurl, dest):
     print(f'Download {dlurl} to {dest}')
     os.makedirs(_Path(dest).dirname(), exist_ok=True)
-    if subprocess.call([paths.ps_bin, '-Command', 'gcm Invoke-WebRequest'],
+    if subprocess.call([app_paths.ps_bin, '-Command', 'gcm Invoke-WebRequest'],
                        stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL) == 0:
 
         # New Powershell method is available
         subprocess.call([
-            paths.ps_bin,
+            app_paths.ps_bin,
             "-Command",
             f"Invoke-WebRequest '{dlurl}' -OutFile '{dest}'"
         ])
@@ -175,7 +175,7 @@ def download(dlurl, dest):
     else:
         # Only old Powershell method is available
         subprocess.call([
-            paths.ps_bin,
+            app_paths.ps_bin,
             "-Command",
             f"(New-Object Net.WebClient).DownloadFile('{dlurl}', '{dest}')"
         ])
@@ -212,7 +212,7 @@ def get_program(download_page,
     # Get download url
     # ************************************************
     url = download_page
-    dump = paths.temp_dir.joinpath(slugify(url))
+    dump = app_paths.temp_dir.joinpath(slugify(url))
 
     # maybe we already have this information
     if dump.is_file():
@@ -231,9 +231,9 @@ def get_program(download_page,
     # Download program
     # ************************************************
     prevdl = True
-    if filename not in os.listdir(paths.temp_dir):
+    if filename not in os.listdir(app_paths.temp_dir):
         prevdl = False
-        download(dlurl, paths.temp_dir.joinpath(filename))
+        download(dlurl, app_paths.temp_dir.joinpath(filename))
     else:
         print(f'All good, file {filename} already downloaded')
 
@@ -242,16 +242,16 @@ def get_program(download_page,
     # ************************************************
     # os.makedirs(outdir, exist_ok=True)
     if not prevdl or not extract_tester():
-        extractor(paths.temp_dir.joinpath(filename).resolve(), _Path(outdir).abspath())
+        extractor(app_paths.temp_dir.joinpath(filename).resolve(), _Path(outdir).abspath())
 
 
 def get_pandoc():
     get_program(
         "https://github.com/jgm/pandoc/releases/",
         "https://github.com/",
-        paths.app_dir.joinpath('bin', 'pandoc'),
+        app_paths.app_dir.joinpath('bin', 'pandoc'),
         link_tester=lambda x: '/pandoc-' in x and x.endswith('86_64.zip'),
-        extract_tester=lambda: paths.app_dir.joinpath('bin', 'pandoc', "pandoc.exe").is_file(),
+        extract_tester=lambda: app_paths.app_dir.joinpath('bin', 'pandoc', "pandoc.exe").is_file(),
     )
 
 
@@ -267,26 +267,26 @@ def get_python():
         download('https://bootstrap.pypa.io/get-pip.py', tempdir.joinpath('get-pip.py'))
     subprocess.call([pythonbin, tempdir.joinpath('get-pip.py')])
     """
-    if not paths.python_bin.is_file():
+    if not app_paths.python_bin.is_file():
         subprocess.call([str(locate.this_dir().joinpath("..", "tools", "bootstrap-python.bat")),
-                         "-dest", str(paths.py_dir),
-                         "-temp", str(paths.temp_dir)])
+                         "-dest", str(app_paths.py_dir),
+                         "-temp", str(app_paths.temp_dir)])
 
 
 def get_julia():
     get_program(
         "https://julialang.org/downloads",
         "",
-        paths.app_dir.joinpath('bin', 'julia', 'julia'),
+        app_paths.app_dir.joinpath('bin', 'julia', 'julia'),
         link_tester=lambda x: 'bin/winnt/x64/' in x and x.endswith('-win64.zip'),
-        extract_tester=lambda: (paths.app_dir.joinpath('bin', 'julia', 'julia', 'bin', 'julia.exe').is_file() and
-                                paths.app_dir.joinpath('bin', 'julia', 'julia.bat').is_file())
+        extract_tester=lambda: (app_paths.app_dir.joinpath('bin', 'julia', 'julia', 'bin', 'julia.exe').is_file() and
+                                app_paths.app_dir.joinpath('bin', 'julia', 'julia.bat').is_file())
     )
 
     # Add our personalised launcher wrapper to the mix
-    shutil.copy2(paths.asset_dir.joinpath("launcher-julia.exe"), paths.julia_bin)
+    shutil.copy2(app_paths.asset_dir.joinpath("launcher-julia.exe"), app_paths.julia_bin)
 
-    julia_env = paths.app_dir.joinpath('bin', 'julia', "activate-julia-environment.cmd")
+    julia_env = app_paths.app_dir.joinpath('bin', 'julia', "activate-julia-environment.cmd")
 
     open(julia_env, "w").write(textwrap.dedent(r"""
         @echo off
@@ -333,7 +333,7 @@ def get_julia():
         )
         """))
 
-    startup = paths.app_dir.joinpath('bin', 'julia', 'localdepot', 'config', 'startup.jl')
+    startup = app_paths.app_dir.joinpath('bin', 'julia', 'localdepot', 'config', 'startup.jl')
     os.makedirs(startup.parent, exist_ok=True)
 
     startup.open("w").write(textwrap.dedent(r"""        
@@ -373,7 +373,7 @@ def get_julia():
 
 def juliainstall_dependencies(libdict: dict):
 
-    envs = paths.julia_dir.joinpath("localdepot", "environments")
+    envs = app_paths.julia_dir.joinpath("localdepot", "environments")
 
     for path in envs.glob('v*.*/Project.toml'):
         reqs = toml.load(path)
@@ -381,12 +381,12 @@ def juliainstall_dependencies(libdict: dict):
         with path.open("w") as f:
             toml.dump(reqs, f)
 
-    subprocess.call([paths.julia_bin, "-e", "using Pkg; Pkg.resolve(); Pkg.instantiate()"])
+    subprocess.call([app_paths.julia_bin, "-e", "using Pkg; Pkg.resolve(); Pkg.instantiate()"])
 
 
 def get_pythonembed():
-    if not paths.python_bin.is_file():
-        firstpass = paths.temp_dir.joinpath("https--www.python.org-downloads")
+    if not app_paths.python_bin.is_file():
+        firstpass = app_paths.temp_dir.joinpath("https--www.python.org-downloads")
         download("https://www.python.org/downloads/", firstpass)
         landing = "https://www.python.org" + (
             [i for i in open(firstpass, errors='ignore').read().split('"') if
@@ -395,25 +395,25 @@ def get_pythonembed():
         get_program(
             landing,
             "",
-            paths.py_dir,
+            app_paths.py_dir,
             link_tester=lambda x: (x.startswith('https://www.python.org/ftp/python/') and
                                    x.endswith('-embed-amd64.zip')),
             link_chooser=lambda x: x[0],
-            extract_tester=lambda: paths.python_bin.is_file(),
+            extract_tester=lambda: app_paths.python_bin.is_file(),
         )
 
     # Delete python30._pth
-    for i in paths.py_dir.walk():
+    for i in app_paths.py_dir.walk():
         if i.basename().startswith("python") and i.basename().endswith("._pth"):
             i.remove()
 
     # ************************************************
     # Force working pip from bootstrap.pypa.io
     # ************************************************
-    if 'get-pip.py' not in os.listdir(paths.temp_dir):
-        download('https://bootstrap.pypa.io/get-pip.py', paths.temp_dir.joinpath('get-pip.py'))
+    if 'get-pip.py' not in os.listdir(app_paths.temp_dir):
+        download('https://bootstrap.pypa.io/get-pip.py', app_paths.temp_dir.joinpath('get-pip.py'))
 
-    subprocess.call([paths.python_bin, "-E", paths.temp_dir.joinpath('get-pip.py')])
+    subprocess.call([app_paths.python_bin, "-E", app_paths.temp_dir.joinpath('get-pip.py')])
 
 
 def get_winpython():
@@ -422,34 +422,34 @@ def get_winpython():
     get_program(
         "https://github.com/winpython/winpython/releases",
         "https://github.com/",
-        paths.py_dir,
+        app_paths.py_dir,
         link_tester=lambda x: (x.startswith('/winpython/winpython/') and
                                x.endswith('dot.exe') and
                                '64-' in x),
         link_chooser=lambda x: x[0],
-        extract_tester=lambda: paths.python_bin.is_file(),
+        extract_tester=lambda: app_paths.python_bin.is_file(),
     )
 
     # ************************************************
     # Remove winpython stuff, leave only python
     # ************************************************
-    if not paths.python_bin.is_file():
-        for i in paths.py_dir.listdir():
+    if not app_paths.python_bin.is_file():
+        for i in app_paths.py_dir.listdir():
             if not i.basename().startswith('python-'):
                 rmpath(i)
-    unnest_dir(paths.py_dir)
+    unnest_dir(app_paths.py_dir)
 
     # ************************************************
     # Force working pip from bootstrap.pypa.io
     # ************************************************
-    if 'get-pip.py' not in os.listdir(paths.temp_dir):
-        download('https://bootstrap.pypa.io/get-pip.py', paths.temp_dir.joinpath('get-pip.py'))
+    if 'get-pip.py' not in os.listdir(app_paths.temp_dir):
+        download('https://bootstrap.pypa.io/get-pip.py', app_paths.temp_dir.joinpath('get-pip.py'))
 
-    subprocess.call([paths.python_bin, "-E", paths.temp_dir.joinpath('get-pip.py')])
+    subprocess.call([app_paths.python_bin, "-E", app_paths.temp_dir.joinpath('get-pip.py')])
 
 
 def pipinstall(libname):
-    subprocess.call([paths.python_bin, "-E", "-m", "pip", 'install', libname, '--no-warn-script-location'])
+    subprocess.call([app_paths.python_bin, "-E", "-m", "pip", 'install', libname, '--no-warn-script-location'])
 
 
 def pipinstall_requirements(liblist):
@@ -457,13 +457,13 @@ def pipinstall_requirements(liblist):
     open(reqfile, "w").write(
         "\n".join(liblist)
     )
-    subprocess.call([paths.python_bin, "-E", "-m", "pip", 'install', '-r', reqfile, '--no-warn-script-location'])
+    subprocess.call([app_paths.python_bin, "-E", "-m", "pip", 'install', '-r', reqfile, '--no-warn-script-location'])
     os.unlink(reqfile)
 
 
 def is_pip(pname):
     try:
-        pipanswer = subprocess.check_output([paths.py_dir.joinpath(r'scripts\pip'), 'show', pname]).decode('utf-8')
+        pipanswer = subprocess.check_output([app_paths.py_dir.joinpath(r'scripts\pip'), 'show', pname]).decode('utf-8')
     except:
         return False
 
@@ -477,9 +477,9 @@ def get_r():
     get_program(
         "https://cran.r-project.org/bin/windows/base/",
         "https://cran.r-project.org/bin/windows/base/",
-        outdir=paths.rpath,
+        outdir=app_paths.rpath,
         link_tester=lambda x: x.startswith('R') and x.endswith('-win.exe'),
-        extract_tester=lambda: paths.rbin.is_file(),
+        extract_tester=lambda: app_paths.rbin.is_file(),
         extractor=lambda x, y: subprocess.call([
             x,
             "/SUPPRESSMSGBOXES",
@@ -527,7 +527,7 @@ def get_mintty(icon: Union[_Path, None] = None):
         srcdir.joinpath("cygwin-console-helper.exe")
     ]
 
-    mintty_path = paths.app_dir.joinpath('bin', 'mintty', 'usr', 'bin')
+    mintty_path = app_paths.app_dir.joinpath('bin', 'mintty', 'usr', 'bin')
     os.makedirs(mintty_path, exist_ok=True)
 
     with mintty_path.parent.parent.joinpath("readme.txt").open("w") as fw:
@@ -540,7 +540,7 @@ def get_mintty(icon: Union[_Path, None] = None):
 
     if icon is not None:
         subprocess.call([
-            paths.rcedit_bin,
+            app_paths.rcedit_bin,
             str(mintty_path.joinpath("mintty.exe")),
             "--set-icon", str(_Path(icon).abspath()),
         ])
@@ -548,7 +548,7 @@ def get_mintty(icon: Union[_Path, None] = None):
 
 def rinstall(libname):
     subprocess.call([
-        paths.rbin,
+        app_paths.rbin,
         '-e',
         f"if(! '{libname}' %in% installed.packages()){{ install.packages('{libname}', repos='http://cran.us.r-project.org') }}"])
 
@@ -605,10 +605,10 @@ def mapped_zip(zippath,
         # https://stackoverflow.com/a/28474846
         mode = ["-mx0"] if copymode else ["-t7z", "-m0=lzma2:d1024m", "-mx=9", "-aoa", "-mfb=64", "-md=32m", "-ms=on"]
 
-        subprocess.call([paths.sevenz_bin, 'a', '-y'] + mode + [zip_out, f"@{flist_local}"])
+        subprocess.call([app_paths.sevenz_bin, 'a', '-y'] + mode + [zip_out, f"@{flist_local}"])
 
         with _Path(tmp_out):
-            subprocess.call([paths.sevenz_bin, 'a', '-y'] + mode + [zip_out, r".\*"])
+            subprocess.call([app_paths.sevenz_bin, 'a', '-y'] + mode + [zip_out, r".\*"])
 
     rmpath(tmp_out)
 
@@ -617,7 +617,7 @@ def make_launcher(template,
                   dest,
                   icon):
     shutil.copy(template, dest)
-    subprocess.call([paths.rcedit_bin,
+    subprocess.call([app_paths.rcedit_bin,
                      dest,
                      "--set-icon", icon
                      ])
