@@ -4,7 +4,7 @@ from textwrap import dedent
 from locate import allow_relative_location_imports, this_dir
 
 # Borrow implementation from non-legacy future application
-allow_relative_location_imports('../../..')
+sys.path.append(Path(__file__).resolve().parent.parent.parent.parent)
 from app_builder import exec_py
 
 # Reshuffle args in order to call future scripts
