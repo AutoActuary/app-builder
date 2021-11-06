@@ -8,10 +8,9 @@ import sys
 from locate import allow_relative_location_imports
 from path import Path as _Path
 
+allow_relative_location_imports('.')
 import misc
 import versioning
-
-allow_relative_location_imports('../includes')
 import paths
 
 config = misc.get_config()

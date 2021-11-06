@@ -4,18 +4,16 @@ import subprocess
 from pathlib import Path
 from contextlib import suppress
 
-from locate import allow_relative_location_imports
-from path import Path as _Path
-import misc
-import collections.abc
-
-allow_relative_location_imports('../includes')
-import paths
-
-# Borrow from our future implementation
-allow_relative_location_imports('../../..')
 import app_builder
 from app_builder import git_revision
+
+from locate import allow_relative_location_imports
+from path import Path as _Path
+
+allow_relative_location_imports('.')
+import misc
+import collections.abc
+import paths
 
 """
 Download/install python and R and other dependencies

@@ -13,7 +13,7 @@ from locate import allow_relative_location_imports
 import locate
 from path import Path as _Path
 
-allow_relative_location_imports('../includes')
+allow_relative_location_imports('.')
 import paths
 
 

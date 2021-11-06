@@ -7,13 +7,14 @@ from pathlib import Path
 
 import github_release
 import sys
+
+from app_builder import exec_py
+
 from locate import allow_relative_location_imports
 
+allow_relative_location_imports('.')
 import misc
-
-allow_relative_location_imports('../includes')
 import paths
-from exec_py import exec_py
 
 strdate = date.today().strftime("%Y-%m-%d")
 
@@ -119,7 +120,7 @@ with _Path(paths.app_dir):  # run git commands from chdir basedir
     # Build the exe from scratch (to contain correct git info)
     # ************************************
     misc.sh(f'git fetch --tags')
-    exec_py(str(Path(paths.deployment_and_release_scripts_dir, "create-releases.py")), global_names=globals())
+    exec_py.exec_py(str(Path(paths.deployment_and_release_scripts_dir, "create-releases.py")), global_names=globals())
 
 # **********************************************
 # implicitely run any script named "pre-github-upload.bat/.cmd" in dedicated locations
