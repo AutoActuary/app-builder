@@ -1,6 +1,6 @@
 import sys
 from textwrap import dedent
-
+from pathlib import Path
 from locate import allow_relative_location_imports, this_dir
 
 # Borrow implementation from non-legacy future application
