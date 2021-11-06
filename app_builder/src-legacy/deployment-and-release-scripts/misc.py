@@ -413,7 +413,7 @@ def get_pythonembed():
     if 'get-pip.py' not in os.listdir(paths.temp_dir):
         download('https://bootstrap.pypa.io/get-pip.py', paths.temp_dir.joinpath('get-pip.py'))
 
-    subprocess.call([paths.python_bin, paths.temp_dir.joinpath('get-pip.py')])
+    subprocess.call([paths.python_bin, "-E", paths.temp_dir.joinpath('get-pip.py')])
 
 
 def get_winpython():
@@ -445,11 +445,11 @@ def get_winpython():
     if 'get-pip.py' not in os.listdir(paths.temp_dir):
         download('https://bootstrap.pypa.io/get-pip.py', paths.temp_dir.joinpath('get-pip.py'))
 
-    subprocess.call([paths.python_bin, paths.temp_dir.joinpath('get-pip.py')])
+    subprocess.call([paths.python_bin, "-E", paths.temp_dir.joinpath('get-pip.py')])
 
 
 def pipinstall(libname):
-    subprocess.call([paths.pip_bin, 'install', libname])
+    subprocess.call([paths.python_bin, "-E", "-m", "pip", 'install', libname, '--no-warn-script-location'])
 
 
 def pipinstall_requirements(liblist):
@@ -457,7 +457,7 @@ def pipinstall_requirements(liblist):
     open(reqfile, "w").write(
         "\n".join(liblist)
     )
-    subprocess.call([paths.pip_bin, 'install', '-q', '-r', reqfile, '--no-warn-script-location'])
+    subprocess.call([paths.python_bin, "-E", "-m", "pip", 'install', '-q', '-r', reqfile, '--no-warn-script-location'])
     os.unlink(reqfile)
 
 
