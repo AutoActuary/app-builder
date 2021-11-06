@@ -457,7 +457,7 @@ def pipinstall_requirements(liblist):
     open(reqfile, "w").write(
         "\n".join(liblist)
     )
-    subprocess.call([paths.python_bin, "-E", "-m", "pip", 'install', '-q', '-r', reqfile, '--no-warn-script-location'])
+    subprocess.call([paths.python_bin, "-E", "-m", "pip", 'install', '-r', reqfile, '--no-warn-script-location'])
     os.unlink(reqfile)
 
 
