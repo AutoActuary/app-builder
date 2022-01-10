@@ -6,7 +6,13 @@ from locate import allow_relative_location_imports
 allow_relative_location_imports("..")
 from app_builder import exec_py
 
+
 def caller_version_tuple():
+    """
+    This a a hack to get the version of the caller cli if app-builder is not called directly, but rather from the cli
+    (which is wrapper for app-builder and is also responsible for maintaining different versions of this app).
+    """
+
     py_caller = Path(sys.executable).resolve()
     app_dir = py_caller.parent.parent.parent
     if app_dir.name != "app-builder":
