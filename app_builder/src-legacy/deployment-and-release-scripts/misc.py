@@ -44,7 +44,6 @@ def sh(cmd, std_err_to_stdout=False):
 
 
 def get_config():
-    # We switched from bespon to yaml, but kept bespon for legacy reasons
     config = yaml.load(
         app_paths.app_dir.joinpath("Application.yaml").open().read(),
         Loader=yaml.FullLoader

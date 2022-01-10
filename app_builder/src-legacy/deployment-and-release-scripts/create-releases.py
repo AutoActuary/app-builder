@@ -13,6 +13,8 @@ import misc
 import versioning
 import app_paths
 
+import util
+
 config = misc.get_config()
 
 # dash in name TODO: fix
@@ -151,40 +153,53 @@ for scriptsdir in [".", "bin", "src", "scripts"]:
 # Zip all the application files as one thing
 # **********************************************
 programzip = app_paths.tools_dir.joinpath('releases', config['Application']['name'] + ".7z")
-mapping = config['Application']['programdata'] + [
-    ["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
-    [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"]]
 
-# Deprecated, moving to more explicit launchers
-if 'entrypoint' in config['Application']:
-    mapping = mapping + [["./tools/entrypoint/" + entryexe.name, "./" + entryexe.name],
-                         ["./tools/entrypoint/" + entrybat.name, "./bin/" + entrybat.name]]
+data_fields = {'programdata', 'data'}.intersection(config['Application'])
+if len(data_fields) == 2:
+    raise RuntimeError("Application.yaml cannot have a 'data' field and a legacy 'programdata' together - choose one.")
 
-misc.mapped_zip(programzip,
-                mapping,
-                basedir=app_paths.app_dir)
+if len(data_fields) == 0:
+    raise RuntimeError("Application.yaml must have either a 'data' field or a legacy 'programdata' field.")
 
 # **********************************************
-# Create a 7z Installer from all of this
+# Legacy zip creation
 # **********************************************
-installzip = app_paths.tools_dir.joinpath('releases', config['Application']['name'] + "_.7z")
-mapping = [
-    ["./tools/entrypoint/" + installout.name, "./" + installout.name],
-    ["./bin/7z.exe", "./bin/7z.exe"],
-    ["./bin/7z.dll", "./bin/7z.dll"],
-    ["./tools/releases/" + programzip.name, "./" + programzip.name]
-]
-# Copy any script named "pre-install.bat/cmd" to installer
-for scriptsdir in [".", "bin", "src", "scripts"]:
-    for ext in ("bat", "cmd"):
-        for script in Path(app_paths.app_dir).joinpath(scriptsdir).resolve().glob(f"pre-install.{ext}"):
-            relpath = ("./"+str(script.relative_to(app_paths.app_dir))).replace("\\", "/").replace("//", "/")
-            mapping.append([relpath, relpath])
+if data_fields == {'programdata'}:
+    mapping = config['Application']['programdata'] + [
+        ["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
+        [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"]]
 
-misc.mapped_zip(installzip,
-                mapping,
-                basedir=app_paths.app_dir,
-                copymode=True)
+
+    misc.mapped_zip(programzip,
+                    mapping,
+                    basedir=app_paths.app_dir)
+
+    installzip = app_paths.tools_dir.joinpath('releases', config['Application']['name'] + "_.7z")
+
+    mapping = [
+        ["./tools/entrypoint/" + installout.name, "./" + installout.name],
+        ["./bin/7z.exe", "./bin/7z.exe"],
+        ["./bin/7z.dll", "./bin/7z.dll"],
+        ["./tools/releases/" + programzip.name, "./" + programzip.name]
+    ]
+    # Copy any script named "pre-install.bat/cmd" to installer
+    for scriptsdir in [".", "bin", "src", "scripts"]:
+        for ext in ("bat", "cmd"):
+            for script in Path(app_paths.app_dir).joinpath(scriptsdir).resolve().glob(f"pre-install.{ext}"):
+                relpath = ("./"+str(script.relative_to(app_paths.app_dir))).replace("\\", "/").replace("//", "/")
+                mapping.append([relpath, relpath])
+
+    misc.mapped_zip(installzip,
+                    mapping,
+                    basedir=app_paths.app_dir,
+                    copymode=True)
+
+# **********************************************
+# New zip creation
+# **********************************************
+if data_fields == {'data'}:
+    raise NotImplementedError("Application.yaml new 'data' field.")
+
 
 with _Path(installzip.parent.resolve()):
     open("config.txt", "wb").write(
