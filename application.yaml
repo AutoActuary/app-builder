@@ -1,4 +1,4 @@
-app-builder: a10615b
+app-builder: f67ce4d
 
 Application:
 
@@ -9,14 +9,14 @@ Application:
 
   pause: 1
 
-  programdata:
-    - [ ./bin/python, ./bin/python ]
-    - [ ./bin/7z.dll, ./bin/7z.dll ]
-    - [ ./bin/7z.exe, ./bin/7z.exe ]
-    - [ ./bin/git,    ./bin/git    ]
-    - [ ./bin/post-install.cmd,   ./bin/post-install.cmd   ]
-    - [ ./bin/post-uninstall.cmd, ./bin/post-uninstall.cmd ]
+  data:
+    include:
+      - bin/*
+      - cli
+      - app_builder
 
-    - [ ./cli, ./cli               ]
-    - [ ./app_builder, ./app_builder]
+    exclude:
+      - bin/*.bat
+      - bin/post-dependencies.cmd
+      - bin/pre-build.cmd
     

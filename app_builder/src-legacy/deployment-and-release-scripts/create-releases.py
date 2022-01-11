@@ -223,7 +223,7 @@ if data_fields == {'data'}:
     for i, j in [["./tools/entrypoint/" + installout.name, "./" + installout.name],
                  ["./tools/releases/" + programzip.name, "./" + programzip.name]]:
         globs_include.append(i)
-        paths_rename.append(i,j)
+        paths_rename.append([i, j])
 
     # Copy any script named "pre-install.bat/cmd" to installer
     for scriptsdir in [".", "bin", "src", "scripts"]:
