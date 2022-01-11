@@ -112,7 +112,7 @@ def create_7zip_from_include_exclude_and_rename_list(
     r"""
     >>> with tempfile.TemporaryDirectory() as d:
     ...     with working_directory(d):
-    ...         for i in ["1/i/a.txt", "1/i/b.txt", "1/ii.txt", "1/iii/c.txt", "2/i/d.txt", "2/ii/e.txt"]:
+    ...         for i in ["1/i/a.txt", "1/i/b.txt", "1/ii.txt", "1/iii/c.txt", "2/i/d.txt", "2/ii/eEe.txt"]:
     ...             force_file_path(i)
     ...         create_7zip_from_include_exclude_and_rename_list(
     ...             "temp.7z",
@@ -164,28 +164,26 @@ def create_7zip_from_include_exclude_and_rename_list(
                                            f" be renamed to relative locations using a 'rename' entry. Got {j}")
 
             for src, dst in rename_list:
-                src = comparable_filename(src)
-                dst = comparable_filename(dst)
-
-                dst_stage = Path(stage_dir).joinpath(os.path.relpath(dst))
+                dst_stage = Path(stage_dir).joinpath(dst)
 
                 if os.path.isfile(src):
                     os.makedirs(dst_stage.parent, exist_ok=True)
                     shutil.copy2(src, dst_stage)
-                    filedict.pop(src)
+                    filedict.pop(comparable_filename(src))
 
                 elif os.path.isdir(src):
-                    for i, j in list(filedict.items()):
-                        src_slash = src+"/"
-                        if i.startswith(src_slash):
+                    src_slash = comparable_filename(src) + "/"
 
-                            i_dst_branch = i[len(src_slash):]
-                            i_dst_path = dst_stage.joinpath(i_dst_branch)
+                    for key, srcfile in list(filedict.items()):
 
-                            os.makedirs(i_dst_path.parent, exist_ok=True)
-                            shutil.copy2(i, i_dst_path)
+                        if key.startswith(src_slash):
 
-                            filedict.pop(i)
+                            file_dst_branch = os.path.abspath(srcfile)[len(src_slash):]
+                            file_dst_path = dst_stage.joinpath(file_dst_branch)
+
+                            os.makedirs(file_dst_path.parent, exist_ok=True)
+                            shutil.copy2(key, file_dst_path)
+                            filedict.pop(key)
 
             create_7zip_from_filelist(outpath,
                                       basedir,
