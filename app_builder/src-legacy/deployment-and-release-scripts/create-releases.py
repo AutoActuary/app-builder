@@ -156,7 +156,7 @@ programzip = app_paths.tools_dir.joinpath('releases', config['Application']['nam
 
 data_fields = {'programdata', 'data'}.intersection(config['Application'])
 if len(data_fields) == 2:
-    raise RuntimeError("Application.yaml cannot have a 'data' field and a legacy 'programdata' together - choose one.")
+    raise RuntimeError("Application.yaml cannot have a 'data' field and a legacy 'programdata' field together - choose one.")
 
 if len(data_fields) == 0:
     raise RuntimeError("Application.yaml must have either a 'data' field or a legacy 'programdata' field.")
@@ -194,12 +194,54 @@ if data_fields == {'programdata'}:
                     basedir=app_paths.app_dir,
                     copymode=True)
 
-# **********************************************
-# New zip creation
-# **********************************************
 if data_fields == {'data'}:
-    raise NotImplementedError("Application.yaml new 'data' field.")
+    globs_include = config['Application']['data']['include'] if 'include' in config['Application']['data'] else []
+    globs_exclude = config['Application']['data']['exclude'] if 'exclude' in config['Application']['data'] else []
+    paths_rename = config['Application']['data']['rename'] if 'rename' in config['Application']['data'] else []
 
+    for i, j in [["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
+                 [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"]]:
+
+        globs_include.append(i)
+        paths_rename.append([i, j])
+
+    util.create_7zip_from_include_exclude_and_rename_list(
+        programzip,
+        app_paths.app_dir,
+        globs_include,
+        globs_exclude,
+        paths_rename,
+        False,
+        False,
+        app_paths.sevenz_bin
+    )
+
+    installzip = app_paths.tools_dir.joinpath('releases', config['Application']['name'] + "_.7z")
+
+    paths_rename = []
+    globs_include = ["./bin/7z.*"]
+    for i, j in [["./tools/entrypoint/" + installout.name, "./" + installout.name],
+                 ["./tools/releases/" + programzip.name, "./" + programzip.name]]:
+        globs_include.append(i)
+        paths_rename.append(i,j)
+
+    # Copy any script named "pre-install.bat/cmd" to installer
+    for scriptsdir in [".", "bin", "src", "scripts"]:
+        for ext in ("bat", "cmd"):
+            for script in Path(app_paths.app_dir).joinpath(scriptsdir).resolve().glob(f"pre-install.{ext}"):
+                relpath = str(script.relative_to(app_paths.app_dir))
+                globs_include.append(relpath)
+
+    util.create_7zip_from_include_exclude_and_rename_list(
+        installzip,
+        app_paths.app_dir,
+        globs_include,
+        [],
+        paths_rename,
+        False,
+        False,
+        app_paths.sevenz_bin
+    )
 
 with _Path(installzip.parent.resolve()):
     open("config.txt", "wb").write(
@@ -240,5 +282,6 @@ for scriptsdir in [".", "bin", "src", "scripts"]:
     for ext in ("bat", "cmd"):
         for script in Path(app_paths.app_dir).joinpath(scriptsdir).glob(f"post-build.{ext}"):
             subprocess.call(script)
+
         for script in Path(app_paths.app_dir).joinpath(scriptsdir).glob(f"post-release.{ext}"):
             subprocess.call(script)
