@@ -22,7 +22,8 @@ import app_paths
 strdate = date.today().strftime("%Y-%m-%d")
 
 try:
-    name_repo = misc.sh('git config --get remote.origin.url').split(":")[1].split('.git')[0]
+    # Works both with https and ssh GitHub urls
+    name_repo = "/".join(misc.sh('git config --get remote.origin.url').split(":").split('.git')[0].split("/")[-2:])
 except subprocess.CalledProcessError:
     raise RuntimeError("For a GitHub release a remote GitHub url must exist: `git config --get remote.origin.url`")
 
@@ -75,21 +76,7 @@ def create_token():
 
 create_token()
 
-
-
-response = github_release._request(
-            'GET',
-            github_release.GITHUB_API + f'/repos/{name_repo}/commits')
-response.raise_for_status()
-        #return response.json()
-
-
-#requests.exceptions.HTTPError: 404 Client Error: Not Found for url: https://api.github.com/repos///github.com/heetbeet/temp-program-example/git/refs
-#try:
-#github_release.gh_ref_list(name_repo) #.get_releases(name_repo)
-#except HTTPError as e:
-
-
+github_release.get_releases()
 
 
 # *********************************
