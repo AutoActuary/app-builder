@@ -23,7 +23,7 @@ strdate = date.today().strftime("%Y-%m-%d")
 
 try:
     # Works both with https and ssh GitHub urls
-    name_repo = "/".join(misc.sh('git config --get remote.origin.url').split(":").split('.git')[0].split("/")[-2:])
+    name_repo = "/".join(misc.sh('git config --get remote.origin.url').split('.git')[0].split(':')[-1].split("/")[-2:])
 except subprocess.CalledProcessError:
     raise RuntimeError("For a GitHub release a remote GitHub url must exist: `git config --get remote.origin.url`")
 
