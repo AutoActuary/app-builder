@@ -78,7 +78,6 @@ create_token()
 
 github_release.get_releases()
 
-
 # *********************************
 # After token is sorted out
 # *********************************
