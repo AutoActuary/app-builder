@@ -22,6 +22,10 @@ create_dependencies = __import__('create-dependencies')
 
 name = config['Application']['name']
 
+version = versioning.get_gitversion()
+if len(sys.argv) >= 2:
+    version = sys.argv[1]
+
 
 # **********************************************
 # Make 100% sure all .bat files have \r\n endings
@@ -109,7 +113,7 @@ for xstall in ["Uninstall", "Install"]:
 # **********************************************
 txt = installout.open().read().replace(
     "::__githuburl__",
-    f'call :CREATE-SHORTCUT "%SYSTEMROOT%\\explorer.exe" "%installdir%\\GitHub commit {versioning.get_gitversion()}.lnk" "{versioning.get_githuburl()}" ""'
+    f'call :CREATE-SHORTCUT "%SYSTEMROOT%\\explorer.exe" "%installdir%\\GitHub commit {version}.lnk" "{versioning.get_githuburl()}" ""'
 )
 with installout.open("w") as f: f.write(txt)
 
@@ -263,7 +267,7 @@ with _Path(installzip.parent.resolve()):
     ])
 
     exefname = _Path(programzip).basename().stripext().replace(" ", "-")
-    installexe = _Path(programzip).dirname().joinpath(exefname + "-" + versioning.get_gitversion() + ".exe")
+    installexe = _Path(programzip).dirname().joinpath(exefname + "-" + version + ".exe")
 
     with open(installexe, 'wb') as fw:
         shutil.copyfileobj(open('7zSD.sfx', 'rb'), fw)
