@@ -75,8 +75,10 @@ def create_token():
 
 create_token()
 
+
+#requests.exceptions.HTTPError: 404 Client Error: Not Found for url: https://api.github.com/repos///github.com/heetbeet/temp-program-example/git/refs
 #try:
-github_release.get_refs(name_repo) #.get_releases(name_repo)
+github_release.gh_ref_list(name_repo) #.get_releases(name_repo)
 #except HTTPError as e:
 
 
