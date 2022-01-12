@@ -79,7 +79,7 @@ create_token()
 
 response = github_release._request(
             'GET',
-            github_release.GITHUB_API + f'/repos/{name_repo}/releases')
+            github_release.GITHUB_API + f'/repos/{name_repo}/commits')
 response.raise_for_status()
         #return response.json()
 
