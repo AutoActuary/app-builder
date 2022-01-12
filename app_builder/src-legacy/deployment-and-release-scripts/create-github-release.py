@@ -9,6 +9,8 @@ from pathlib import Path
 import github_release
 import sys
 
+from requests import HTTPError
+
 from app_builder import exec_py
 
 from locate import allow_relative_location_imports
@@ -24,7 +26,6 @@ try:
 except subprocess.CalledProcessError:
     raise RuntimeError("For a GitHub release a remote GitHub url must exist: `git config --get remote.origin.url`")
 
-github_release.get_releases(name_repo)
 
 # ***********************************
 # Register Github token
@@ -57,20 +58,29 @@ Github.com and follow from step (1):
 
 """
 
-# What on earth??? For some reason I cannot simply print this string! There
-# is a hidden character hiding in there, and I can't seem to find it and remove
-# it from git.
 no_msg = no_msg.encode("utf-8", "ignore").decode("utf-8")
 
 tokenpath = app_paths.tools_dir.joinpath('.github_token')
-if not tokenpath.is_file():
-    subprocess.Popen(['explorer', 'https://github.com/settings/tokens/new'])
-    print(no_msg.strip())
-    token = input("Please enter your GitHub token here: ")
-    tokenpath.open('w').write(token)
 
-token = tokenpath.open().read().strip()
-os.environ['GITHUB_TOKEN'] = token
+
+def create_token():
+    if not tokenpath.is_file():
+        subprocess.Popen(['explorer', 'https://github.com/settings/tokens/new'])
+        print(no_msg.strip())
+        token = input("Please enter your GitHub token here: ")
+        tokenpath.open('w').write(token)
+
+    token = tokenpath.open().read().strip()
+    os.environ['GITHUB_TOKEN'] = token
+
+create_token()
+
+try:
+    github_release.get_refs(name_repo) #.get_releases(name_repo)
+except HTTPError as e:
+
+
+
 
 # *********************************
 # After token is sorted out
