@@ -1,6 +1,7 @@
 # Note that currently this script forwards the commandline arguments to create-releases.py
 import os
 import subprocess
+from contextlib import suppress
 from datetime import date
 from path import Path as _Path
 from pathlib import Path
@@ -17,6 +18,13 @@ import misc
 import app_paths
 
 strdate = date.today().strftime("%Y-%m-%d")
+
+try:
+    name_repo = misc.sh('git config --get remote.origin.url').split(":")[1].split('.git')[0]
+except suppress(subprocess.CalledProcessError):
+    raise RuntimeError("For a GitHub release a remote GitHub url must exist: `git config --get remote.origin.url`")
+
+github_release.get_releases(name_repo)
 
 # ***********************************
 # Register Github token
@@ -72,6 +80,7 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     # *************************************
     # Ensure that the environment is as expected
     # ************************************
+
     main_branch = misc.sh("git symbolic-ref refs/remotes/origin/HEAD").split("/")[-1]
     if misc.sh('git branch --show-current') != main_branch:
         print(f"You need to be on {main_branch}, checkout {main_branch} and try again.")
@@ -101,7 +110,6 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     tagname = "v" + input(msg)
 
     print(f"Compiling exe for {tagname}...")
-    name_repo = misc.sh('git config --get remote.origin.url').split(":")[1].split('.git')[0]
 
     # *************************************
     # Ensure the release on Github side

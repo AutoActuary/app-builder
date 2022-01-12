@@ -65,7 +65,7 @@ def ensure_git():
                 git = str(git_bundled)
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 raise RuntimeError(
-                    "Could not use system Git and could not sucessfully download and set up an portable alternative."
+                    "Could not use system Git and could not successfully download and set up an portable alternative."
                 )
         finally:
             if e is not None:
