@@ -21,7 +21,7 @@ strdate = date.today().strftime("%Y-%m-%d")
 
 try:
     name_repo = misc.sh('git config --get remote.origin.url').split(":")[1].split('.git')[0]
-except suppress(subprocess.CalledProcessError):
+except subprocess.CalledProcessError:
     raise RuntimeError("For a GitHub release a remote GitHub url must exist: `git config --get remote.origin.url`")
 
 github_release.get_releases(name_repo)
