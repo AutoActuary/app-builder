@@ -87,7 +87,15 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     # Ensure that the environment is as expected
     # ************************************
 
-    main_branch = misc.sh("git symbolic-ref refs/remotes/origin/HEAD").split("/")[-1]
+    try:
+        main_branch = misc.sh("git symbolic-ref refs/remotes/origin/HEAD").split("/")[-1]
+    except subprocess.CalledProcessError as e:
+        # HEAD branch not set yet
+        if 'exit status 128' in str(e):
+            main_branch = misc.sh('git branch --show-current')
+        else:
+            raise
+
     if misc.sh('git branch --show-current') != main_branch:
         print(f"You need to be on {main_branch}, checkout {main_branch} and try again.")
         sys.exit()
