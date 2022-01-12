@@ -88,7 +88,7 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     # ************************************
 
     try:
-        main_branch = misc.sh("git symbolic-ref refs/remotes/origin/HEAD").split("/")[-1]
+        main_branch = misc.sh("git symbolic-ref refs/remotes/origin/HEAD", True).split("/")[-1]
     except subprocess.CalledProcessError as e:
         # HEAD branch not set yet
         if 'exit status 128' in str(e):
