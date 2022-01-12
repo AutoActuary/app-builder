@@ -1,4 +1,6 @@
 import subprocess
+from contextlib import suppress
+
 from path import Path as _Path
 from locate import allow_relative_location_imports
 
@@ -12,13 +14,20 @@ def sh(cmd):
 
 def get_githuburl():
     with _Path(app_paths.app_dir):
-        commit = sh('git rev-parse HEAD')
+        commit = None
+        with suppress(subprocess.CalledProcessError):
+            commit = sh('git rev-parse HEAD')
+
         giturl = sh('git config --get remote.origin.url')
         giturl = giturl.split('@')[1].replace('.git', "").replace(':', "/")
         if giturl.startswith('github.com'):
             giturl = f"https://{giturl}"
 
-        giturl = f'{giturl}/commit/{commit}'
+        if commit is None:
+            giturl = f'{giturl}/commit'
+        else:
+            giturl = f'{giturl}/commit/{commit}'
+            
     return giturl
 
 
