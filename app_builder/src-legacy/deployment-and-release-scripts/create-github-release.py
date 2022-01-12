@@ -122,7 +122,11 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
 
     msg = (f"Type new version number for brand new release, else type current version number \n"
            f"{recent_tag} to upload assets: v")
-    tagname = "v" + input(msg)
+
+    while (user_input := input(msg)).strip() == "":
+        pass
+
+    tagname = "v" + user_input
 
     print(f"Compiling exe for {tagname}...")
 
