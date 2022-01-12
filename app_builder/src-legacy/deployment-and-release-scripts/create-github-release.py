@@ -76,7 +76,7 @@ def create_token():
 
 create_token()
 
-github_release.get_releases()
+github_release.get_releases(name_repo)
 
 # *********************************
 # After token is sorted out
