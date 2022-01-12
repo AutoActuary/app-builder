@@ -1,12 +1,15 @@
 # Note that currently this script forwards the commandline arguments to create-releases.py
 import os
 import subprocess
+from contextlib import suppress
 from datetime import date
 from path import Path as _Path
 from pathlib import Path
 
 import github_release
 import sys
+
+from requests import HTTPError
 
 from app_builder import exec_py
 
@@ -15,8 +18,16 @@ from locate import allow_relative_location_imports
 allow_relative_location_imports('.')
 import misc
 import app_paths
+create_releases = __import__("create-releases")
 
 strdate = date.today().strftime("%Y-%m-%d")
+
+try:
+    # Works both with https and ssh GitHub urls
+    name_repo = "/".join(misc.sh('git config --get remote.origin.url').split('.git')[0].split(':')[-1].split("/")[-2:])
+except subprocess.CalledProcessError:
+    raise RuntimeError("For a GitHub release a remote GitHub url must exist: `git config --get remote.origin.url`")
+
 
 # ***********************************
 # Register Github token
@@ -49,20 +60,24 @@ Github.com and follow from step (1):
 
 """
 
-# What on earth??? For some reason I cannot simply print this string! There
-# is a hidden character hiding in there, and I can't seem to find it and remove
-# it from git.
 no_msg = no_msg.encode("utf-8", "ignore").decode("utf-8")
 
 tokenpath = app_paths.tools_dir.joinpath('.github_token')
-if not tokenpath.is_file():
-    subprocess.Popen(['explorer', 'https://github.com/settings/tokens/new'])
-    print(no_msg.strip())
-    token = input("Please enter your GitHub token here: ")
-    tokenpath.open('w').write(token)
 
-token = tokenpath.open().read().strip()
-os.environ['GITHUB_TOKEN'] = token
+
+def create_token():
+    if not tokenpath.is_file():
+        subprocess.Popen(['explorer', 'https://github.com/settings/tokens/new'])
+        print(no_msg.strip())
+        token = input("Please enter your GitHub token here: ")
+        tokenpath.open('w').write(token)
+
+    token = tokenpath.open().read().strip()
+    os.environ['GITHUB_TOKEN'] = token
+
+create_token()
+
+github_release.get_releases(name_repo)
 
 # *********************************
 # After token is sorted out
@@ -72,7 +87,16 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     # *************************************
     # Ensure that the environment is as expected
     # ************************************
-    main_branch = misc.sh("git symbolic-ref refs/remotes/origin/HEAD").split("/")[-1]
+
+    try:
+        main_branch = misc.sh("git symbolic-ref refs/remotes/origin/HEAD", True).split("/")[-1]
+    except subprocess.CalledProcessError as e:
+        # HEAD branch not set yet
+        if 'exit status 128' in str(e):
+            main_branch = misc.sh('git branch --show-current')
+        else:
+            raise
+
     if misc.sh('git branch --show-current') != main_branch:
         print(f"You need to be on {main_branch}, checkout {main_branch} and try again.")
         sys.exit()
@@ -101,7 +125,6 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     tagname = "v" + input(msg)
 
     print(f"Compiling exe for {tagname}...")
-    name_repo = misc.sh('git config --get remote.origin.url').split(":")[1].split('.git')[0]
 
     # *************************************
     # Ensure the release on Github side
@@ -120,7 +143,7 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     # Build the exe from scratch (to contain correct git info)
     # ************************************
     misc.sh(f'git fetch --tags')
-    exec_py.exec_py(str(Path(app_paths.deployment_and_release_scripts_dir, "create-releases.py")), global_names=globals())
+    create_releases.create_releases(tagname)
 
 # **********************************************
 # implicitely run any script named "pre-github-upload.bat/.cmd" in dedicated locations
