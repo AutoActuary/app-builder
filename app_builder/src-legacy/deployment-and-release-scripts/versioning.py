@@ -18,7 +18,13 @@ def get_githuburl():
         with suppress(subprocess.CalledProcessError):
             commit = sh('git rev-parse HEAD')
 
-        giturl = sh('git config --get remote.origin.url')
+        giturl = None
+        with suppress(subprocess.CalledProcessError):
+            giturl = sh('git config --get remote.origin.url')
+
+        if giturl is None:
+            return None
+
         giturl = giturl.split('@')[1].replace('.git', "").replace(':', "/")
         if giturl.startswith('github.com'):
             giturl = f"https://{giturl}"
@@ -27,7 +33,7 @@ def get_githuburl():
             giturl = f'{giturl}/commit'
         else:
             giturl = f'{giturl}/commit/{commit}'
-            
+
     return giturl
 
 
