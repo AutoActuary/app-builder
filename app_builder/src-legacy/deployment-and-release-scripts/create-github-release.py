@@ -75,9 +75,9 @@ def create_token():
 
 create_token()
 
-try:
-    github_release.get_refs(name_repo) #.get_releases(name_repo)
-except HTTPError as e:
+#try:
+github_release.get_refs(name_repo) #.get_releases(name_repo)
+#except HTTPError as e:
 
 
 
