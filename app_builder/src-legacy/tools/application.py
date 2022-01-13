@@ -16,6 +16,9 @@ sys.argv = sys.argv[0:1] + sys.argv[2:]
 if command in ("-h", "--help"):
     util.help()
 
+elif command in ("-i", "--init"):
+    util.init()
+
 elif command in ("-d", "--get-dependencies"):
     exec_py.exec_py(this_dir().joinpath("..", "deployment-and-release-scripts", "create-dependencies.py"), globals())
 

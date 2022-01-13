@@ -230,11 +230,15 @@ def create_7zip_from_include_exclude_and_rename_list(
 
             for src, dst in rename_list:
                 dst_stage = Path(stage_dir).joinpath(dst)
+                renerr = RuntimeError(f"Cannot rename non-included or excluded paths. Got '{src}'")
 
                 if os.path.isfile(src):
                     os.makedirs(dst_stage.parent, exist_ok=True)
                     shutil.copy2(src, dst_stage)
-                    filedict.pop(comparable_filename(src))
+                    try:
+                        filedict.pop(comparable_filename(src))
+                    except KeyError:
+                        raise renerr
 
                 elif os.path.isdir(src):
                     src_slash = comparable_filename(src) + "/"
@@ -248,7 +252,10 @@ def create_7zip_from_include_exclude_and_rename_list(
 
                             os.makedirs(file_dst_path.parent, exist_ok=True)
                             shutil.copy2(key, file_dst_path)
-                            filedict.pop(key)
+                            try:
+                                filedict.pop(comparable_filename(src))
+                            except KeyError:
+                                raise renerr
 
             create_7zip_from_filelist(outpath,
                                       basedir,
