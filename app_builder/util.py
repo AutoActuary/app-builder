@@ -17,8 +17,74 @@ def help():
           -h, --help             Print these options
           -d, --get-dependencies Ensure all the dependencies are set up properly
           -l, --local-release    Create a local release
-          -g, --github-release   Create a release and upload it to GitHub 
+          -g, --github-release   Create a release and upload it to GitHub
+          -i, --init             Initiate current git repo as an app-builder project             
         """))
+
+
+def init():
+    gitbase = None
+    parts = Path(".").resolve().parts
+
+    for i in range(len(parts)+1, 0, -1):
+        d = Path("/".join(parts[0:i]))
+        if len(list(d.glob(".git"))):
+            gitbase = d
+
+    if gitbase is None:
+        raise RuntimeError("Run `app-builder --init` within a git repository.")
+
+    appyaml = gitbase.joinpath("application.yaml")
+
+    if appyaml.exists():
+        raise RuntimeError(f"Run git repository already has an 'application.yaml' file in '{d}'")
+
+    os.makedirs(gitbase.joinpath("tools"), exist_ok=True)
+    shutil.copytree(
+        Path(__file__).resolve().absolute().joinpath("assets", "templates"),
+        gitbase.joinpath("tools", "templates")
+    )
+
+    with appyaml.open("w") as f:
+        f.write(
+            dedent(r"""
+            app-builder: e06641b0e42f37726901b2611a7bd15371e10c4e
+            
+            application:
+            
+              # Basic information for your app 
+              name: TempApp
+              asciibanner: tools/templates/asciibanner-AA.txt
+              icon: tools/templates/autoactuary.ico
+              installdir: '%localappdata%\TempApp'
+            
+              # Pause at the end of the installation sequence  
+              pause: true
+            
+              # Add shortcuts from `installdir` to start-menu
+              startmenu:
+                - tools/templates/program.cmd
+              
+              # Choose which files to include and exclude 
+              data:
+                include:
+                  - '*'
+                exclude:
+                  - .git*
+                  - tools
+                  - application.yaml
+                # You can use also use `rename: [[a/src, b/dst], [src2, dst2]]` to remap your file
+                
+            # Bundle Python/R/Julia and packages into bin/*
+            dependencies:
+                python:
+                    # You can list the packages via pip versioning (i.e. `pyyaml~=5.3`)  
+                    - pyyaml
+                  
+            """).strip()
+        )
+
+
 
 
 @contextmanager

@@ -35,9 +35,8 @@ def create_all_dependencies():
     shutil.copy(app_paths.deployment_and_release_scripts_dir.joinpath("..", "bin", "7z.dll"),
                 app_paths.app_dir.joinpath("bin", "7z.dll"))
 
-    # legacy support for spelling mistake "Dependancies"
-    spellfix = "Dependencies" if "Dependencies" in config else "Dependancies"
-    for key, value in config.get(spellfix, {}).items():
+    # legacy support for spelling mistake "dependancies"
+    for key, value in config.get("dependencies", {}).items():
 
         # install python (if used)
         # add pip stuff, add logging information

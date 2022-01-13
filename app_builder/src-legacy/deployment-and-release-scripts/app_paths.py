@@ -20,10 +20,10 @@ def find_application_base_directory(start_dir) -> Path:
 
         parent = d.parent
         if parent == d:  # like "c:" == "c:"
-            raise FileNotFoundError("Expected git repository with `Application.yaml` at base!")
+            raise FileNotFoundError("Expected git repository with `application.yaml` at base!")
         d = parent
 
-    raise FileNotFoundError("Expected git repository with `Application.yaml` at base!")
+    raise FileNotFoundError("Expected git repository with `application.yaml` at base!")
 
 
 # App directories
