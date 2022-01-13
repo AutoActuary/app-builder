@@ -46,14 +46,14 @@ def init():
     with appyaml.open("w") as f:
         f.write(
             dedent(r"""
-            app-builder: 79c8ced
+            app-builder: c709220
             
             application:
             
               # Basic information for your app 
               name: TempApp
-              asciibanner: tools/templates/asciibanner-AA.txt
-              icon: tools/templates/autoactuary.ico
+              asciibanner: tools/templates/asciibanner.txt
+              icon: tools/templates/icon.ico
               installdir: '%localappdata%\TempApp'
             
               # Pause at the end of the installation sequence  
