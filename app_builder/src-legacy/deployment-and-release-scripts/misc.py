@@ -55,7 +55,7 @@ def get_config():
             config[i] = {}
 
     # lowercase first level of entry keys (for backwards compatibility transition to only lowercase
-    config = {(i.lowercase() if isinstance(i, str) else i) : j for i, j in config.items()}
+    config = {(i.lower() if isinstance(i, str) else i) : j for i, j in config.items()}
 
     return config
 
