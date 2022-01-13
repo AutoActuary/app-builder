@@ -17,8 +17,72 @@ def help():
           -h, --help             Print these options
           -d, --get-dependencies Ensure all the dependencies are set up properly
           -l, --local-release    Create a local release
-          -g, --github-release   Create a release and upload it to GitHub 
+          -g, --github-release   Create a release and upload it to GitHub
+          -i, --init             Initiate current git repo as an app-builder project             
         """))
+
+
+def init():
+    gitbase = None
+    parts = Path(".").resolve().parts
+
+    for i in range(len(parts)+1, 0, -1):
+        d = Path("/".join(parts[0:i]))
+        if len(list(d.glob(".git"))):
+            gitbase = d
+
+    if gitbase is None:
+        raise RuntimeError("Run `app-builder --init` within a git repository.")
+
+    appyaml = gitbase.joinpath("application.yaml")
+
+    if appyaml.exists():
+        raise RuntimeError(f"Run git repository already has an 'application.yaml' file in '{d}'")
+
+    os.makedirs(dst := gitbase.joinpath("tools", "templates"), exist_ok=True)
+    for i in Path(__file__).resolve().parent.joinpath("assets", "templates").glob("*"):
+        shutil.copy2(i, dst.joinpath(i.name))
+
+    with appyaml.open("w") as f:
+        f.write(
+            dedent(r"""
+            app-builder: c372872
+            
+            application:
+            
+              # Basic information for your app 
+              name: TempApp
+              asciibanner: tools/templates/asciibanner.txt
+              icon: tools/templates/icon.ico
+              installdir: '%localappdata%\TempApp'
+            
+              # Pause at the end of the installation sequence  
+              pause: true
+            
+              # Add shortcuts from `installdir` to start-menu
+              startmenu:
+                - tools/templates/program.cmd
+              
+              # Choose which files to include and exclude 
+              data:
+                include:
+                  - '*'
+                exclude:
+                  - .git*
+                  - tools
+                  - application.yaml
+                # You can use also use `rename: [[a/src, b/dst], [src2, dst2]]` to remap your file
+                
+            # Bundle Python/R/Julia and packages into bin/*
+            dependencies:
+                python:
+                    # You can list the packages via pip versioning (i.e. `pyyaml~=5.3`)  
+                    - pyyaml
+                  
+            """).strip()
+        )
+
+
 
 
 @contextmanager
@@ -83,6 +147,7 @@ def globlist(basedir, *include_exclude_include_exclude_etc: List[str]) -> List[s
         include = True
         for globlist in include_exclude_include_exclude_etc:
             for g in globlist:
+
                 for path in glob.glob(g):
                     for file in expand_path(path):
                         if include:
@@ -141,7 +206,7 @@ def create_7zip_from_include_exclude_and_rename_list(
             pass
 
     with working_directory(basedir):
-        with tempfile.TemporaryDirectory() as filelist_dir, tempfile.TemporaryDirectory() as stage_dir:
+        with tempfile.TemporaryDirectory() as stage_dir:
             filelist = globlist(".", include_list, exclude_list)
             filedict = {comparable_filename(i): i for i in filelist}
 

@@ -17,7 +17,7 @@ from app_builder import git_revision
 from app_builder import paths
 from app_builder.exec_py import exec_py
 from app_builder.shell import copy
-from app_builder.util import help
+from app_builder.util import help, init
 
 
 class ApplicationYamlError(Exception):
@@ -34,16 +34,18 @@ def get_app_base_directory(start_dir) -> Path:
     Travel up from the starting directory to find the application's base directory, pattern contains 'Application.yaml'.
     """
     d = start_dir.resolve()
+    err = ApplicationYamlError("Expected git repository with 'application.yaml' at base. To initiate app-builder within"
+                               " the current repo, use `app-builder --init`")
     for i in range(1000):
         if len(iglob(d, "application.yaml") + iglob(d, ".git")) == 2:
             return d.resolve()
 
         if d.parent == d:  # like "c:" == "c:"
-            raise ApplicationYamlError("Expected git repository with 'application.yaml' at base!")
+            raise err
 
         d = d.parent
 
-    raise ApplicationYamlError("Expected git repository with 'application.yaml' at base!")
+    raise err
 
 
 def get_app_version():
@@ -185,10 +187,14 @@ def run_versioned_main():
     except ApplicationYamlError:
         if len(sys.argv) < 2 or (len(sys.argv) >= 2 and sys.argv[1].lower() in ["-h", "--help"]):
             help()
-            sys.exit()
+
+        elif len(sys.argv) >= 2 and sys.argv[1].lower() in ['-i', '--init']:
+            init()
 
         else:
             raise
+
+        sys.exit()
 
     rev_path = paths.versions.joinpath(rev)
 

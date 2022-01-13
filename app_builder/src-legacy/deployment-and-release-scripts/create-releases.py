@@ -20,7 +20,7 @@ create_dependencies = __import__('create-dependencies')
 def create_releases(version=None):
     config = misc.get_config()
 
-    name = config['Application']['name']
+    name = config['application']['name']
 
     if version is None:
         version = versioning.get_gitversion()
@@ -52,11 +52,11 @@ def create_releases(version=None):
     # **********************************************
     entrypointpath = app_paths.tools_dir.joinpath("entrypoint")
     os.makedirs(entrypointpath, exist_ok=True)
-    if 'entrypoint' in config['Application']:
+    if 'entrypoint' in config['application']:
         entrytxt = app_paths.template_dir.joinpath("entrypoint.bat").open().read()
-        entrytxt = entrytxt.replace("__entrypoint__", config['Application']['entrypoint'])
+        entrytxt = entrytxt.replace("__entrypoint__", config['application']['entrypoint'])
 
-        if config['Application']['pause']:
+        if config['application']['pause']:
             entrytxt = entrytxt.replace("__pause__", "true")
 
         os.makedirs(entrypointpath, exist_ok=True)
@@ -66,16 +66,16 @@ def create_releases(version=None):
             entrytxt
         )
 
-        entryexe = entrypointpath.joinpath(config['Application']['name'] + ".exe")
-        misc.make_launcher(app_paths.app_dir.joinpath(config['Application']['launcher']),
+        entryexe = entrypointpath.joinpath(config['application']['name'] + ".exe")
+        misc.make_launcher(app_paths.app_dir.joinpath(config['application']['launcher']),
                            entryexe,
-                           app_paths.app_dir.joinpath(config['Application']['icon'])
+                           app_paths.app_dir.joinpath(config['application']['icon'])
                            )
 
     # **********************************************
     # Create installer / uninstaller bat
     # **********************************************
-    asciibanner = open(app_paths.app_dir.joinpath(config['Application']['asciibanner'])).read()
+    asciibanner = open(app_paths.app_dir.joinpath(config['application']['asciibanner'])).read()
     asciibanner_lines = []
     for line in [""] + asciibanner.split('\n'):
         if line.strip() == "":
@@ -87,10 +87,10 @@ def create_releases(version=None):
     for xstall in ["Uninstall", "Install"]:
         xnstalltxt = app_paths.template_dir.joinpath(f"{xstall}er.bat").open().read()
         xnstalltxt = xnstalltxt.replace("__name__", name)
-        xnstalltxt = xnstalltxt.replace("__installdir__", config['Application']['installdir'])
-        menu_name = config['Application']["menuname"] \
-            if "menuname" in config['Application'] \
-            else rf"AutoActuary\{config['Application']['name']}"
+        xnstalltxt = xnstalltxt.replace("__installdir__", config['application']['installdir'])
+        menu_name = config['application']["menuname"] \
+            if "menuname" in config['application'] \
+            else rf"AutoActuary\{config['application']['name']}"
         xnstalltxt = xnstalltxt.replace("__menuname__", menu_name)
 
         # replace whole section
@@ -118,9 +118,9 @@ def create_releases(version=None):
     # **********************************************
     # Add shortcuts to installer (this is quite a hack)
     # **********************************************
-    if "startmenu" in config['Application']:
+    if "startmenu" in config['application']:
         cmds = []
-        for file in config["Application"]["startmenu"]:
+        for file in config["application"]["startmenu"]:
             file = _Path(file).abspath().relpath()
             link = file.basename().splitext()[0] + '.lnk'
             cmds.append(f'call :CREATE-SHORTCUT "%installdir%\\{file}" "%menudir%\\{link}"')
@@ -154,20 +154,20 @@ def create_releases(version=None):
     # **********************************************
     # Zip all the application files as one thing
     # **********************************************
-    programzip = app_paths.tools_dir.joinpath('releases', config['Application']['name'] + ".7z")
+    programzip = app_paths.tools_dir.joinpath('releases', config['application']['name'] + ".7z")
 
-    data_fields = {'programdata', 'data'}.intersection(config['Application'])
+    data_fields = {'programdata', 'data'}.intersection(config['application'])
     if len(data_fields) == 2:
-        raise RuntimeError("Application.yaml cannot have a 'data' field and a legacy 'programdata' field together - choose one.")
+        raise RuntimeError("application.yaml cannot have a 'data' field and a legacy 'programdata' field together - choose one.")
 
     if len(data_fields) == 0:
-        raise RuntimeError("Application.yaml must have either a 'data' field or a legacy 'programdata' field.")
+        raise RuntimeError("application.yaml must have either a 'data' field or a legacy 'programdata' field.")
 
     # **********************************************
     # Legacy zip creation
     # **********************************************
     if data_fields == {'programdata'}:
-        mapping = config['Application']['programdata'] + [
+        mapping = config['application']['programdata'] + [
             ["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
             [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"]]
 
@@ -176,7 +176,7 @@ def create_releases(version=None):
                         mapping,
                         basedir=app_paths.app_dir)
 
-        installzip = app_paths.tools_dir.joinpath('releases', config['Application']['name'] + "_.7z")
+        installzip = app_paths.tools_dir.joinpath('releases', config['application']['name'] + "_.7z")
 
         mapping = [
             ["./tools/entrypoint/" + installout.name, "./" + installout.name],
@@ -197,10 +197,26 @@ def create_releases(version=None):
                         copymode=True)
 
     if data_fields == {'data'}:
-        globs_include = config['Application']['data']['include'] if 'include' in config['Application']['data'] else []
-        globs_exclude = config['Application']['data']['exclude'] if 'exclude' in config['Application']['data'] else []
-        paths_rename = config['Application']['data']['rename'] if 'rename' in config['Application']['data'] else []
+        # Add user-defined input
+        globs_include = config['application']['data']['include'] if 'include' in config['application']['data'] else []
+        globs_exclude = config['application']['data']['exclude'] if 'exclude' in config['application']['data'] else []
+        paths_rename = config['application']['data']['rename'] if 'rename' in config['application']['data'] else []
 
+        util.create_7zip_from_include_exclude_and_rename_list(
+            programzip,
+            app_paths.app_dir,
+            globs_include,
+            globs_exclude,
+            paths_rename,
+            False,
+            False,
+            app_paths.sevenz_bin
+        )
+
+        # Add system-default things like uninstaller
+        globs_include = []
+        globs_exclude = []
+        paths_rename = []
         for i, j in [["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
                      [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"]]:
 
@@ -214,14 +230,15 @@ def create_releases(version=None):
             globs_exclude,
             paths_rename,
             False,
-            False,
+            True,
             app_paths.sevenz_bin
         )
 
-        installzip = app_paths.tools_dir.joinpath('releases', config['Application']['name'] + "_.7z")
+        installzip = app_paths.tools_dir.joinpath('releases', config['application']['name'] + "_.7z")
 
-        paths_rename = []
         globs_include = ["./bin/7z.*"]
+        globs_exclude = []
+        paths_rename = []
         for i, j in [["./tools/entrypoint/" + installout.name, "./" + installout.name],
                      ["./tools/releases/" + programzip.name, "./" + programzip.name]]:
             globs_include.append(i)
@@ -238,7 +255,7 @@ def create_releases(version=None):
             installzip,
             app_paths.app_dir,
             globs_include,
-            [],
+            globs_exclude,
             paths_rename,
             False,
             False,
@@ -261,7 +278,7 @@ def create_releases(version=None):
             app_paths.rcedit_bin,
             '7zSD.sfx',
             "--set-icon",
-            app_paths.app_dir.joinpath(config['Application']['icon'])
+            app_paths.app_dir.joinpath(config['application']['icon'])
         ])
 
         exefname = _Path(programzip).basename().stripext().replace(" ", "-")
