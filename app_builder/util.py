@@ -46,7 +46,7 @@ def init():
     with appyaml.open("w") as f:
         f.write(
             dedent(r"""
-            app-builder: c03c426
+            app-builder: v0.2.0
             
             application:
             
