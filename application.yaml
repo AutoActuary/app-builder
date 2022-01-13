@@ -1,4 +1,4 @@
-app-builder: 871c2f0
+app-builder: a2309c8
 
 Application:
 
@@ -11,7 +11,7 @@ Application:
 
   data:
     include:
-      - bin/*
+      - bin
       - cli
       - app_builder
 
