@@ -39,7 +39,7 @@ def init():
     if appyaml.exists():
         raise RuntimeError(f"Run git repository already has an 'application.yaml' file in '{d}'")
 
-    os.makedirs(dst := gitbase.joinpath("tools", "templates"), exist_ok=True)
+    os.makedirs(dst := gitbase.joinpath("application-templates"), exist_ok=True)
     for i in Path(__file__).resolve().parent.joinpath("assets", "templates").glob("*"):
         shutil.copy2(i, dst.joinpath(i.name))
 
@@ -52,8 +52,8 @@ def init():
             
               # Basic information for your app 
               name: TempApp
-              asciibanner: tools/templates/asciibanner.txt
-              icon: tools/templates/icon.ico
+              asciibanner: application-templates/asciibanner.txt
+              icon: application-templates/icon.ico
               installdir: '%localappdata%\TempApp'
             
               # Pause at the end of the installation sequence  
@@ -61,18 +61,18 @@ def init():
             
               # Add shortcuts from `installdir` to start-menu
               startmenu:
-                - tools/templates/program.cmd
-              
-              # Choose which files to include and exclude 
+                - application-templates/program.cmd
+            
+              # Choose which files to include, exclude, and rename
               data:
                 include:
-                  - '*'
+                  - "*"
                 exclude:
                   - .git*
                   - tools
                   - application.yaml
-                # You can use also use `rename: [[a/src, b/dst], [src2, dst2]]` to remap your file
-                
+                # You can use also use `rename: [[a/src, b/dst], [src2, dst2]]` as a way to remap your file system
+            
             # Bundle Python/R/Julia and packages into bin/*
             dependencies:
                 python:
