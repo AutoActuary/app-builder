@@ -235,6 +235,7 @@ def create_7zip_from_include_exclude_and_rename_list(
                 if os.path.isfile(src):
                     os.makedirs(dst_stage.parent, exist_ok=True)
                     shutil.copy2(src, dst_stage)
+
                     try:
                         filedict.pop(comparable_filename(src))
                     except KeyError:
@@ -252,8 +253,9 @@ def create_7zip_from_include_exclude_and_rename_list(
 
                             os.makedirs(file_dst_path.parent, exist_ok=True)
                             shutil.copy2(key, file_dst_path)
+
                             try:
-                                filedict.pop(comparable_filename(src))
+                                filedict.pop(key)
                             except KeyError:
                                 raise renerr
 
