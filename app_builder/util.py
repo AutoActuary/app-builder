@@ -39,16 +39,14 @@ def init():
     if appyaml.exists():
         raise RuntimeError(f"Run git repository already has an 'application.yaml' file in '{d}'")
 
-    os.makedirs(gitbase.joinpath("tools"), exist_ok=True)
-    shutil.copytree(
-        Path(__file__).resolve().parent.joinpath("assets", "templates"),
-        gitbase.joinpath("tools", "templates")
-    )
+    os.makedirs(dst := gitbase.joinpath("tools", "templates"), exist_ok=True)
+    for i in Path(__file__).resolve().parent.joinpath("assets", "templates").glob("*"):
+        shutil.copy2(i, dst.joinpath(i.name))
 
     with appyaml.open("w") as f:
         f.write(
             dedent(r"""
-            app-builder: 5dcf0da
+            app-builder: 79c8ced
             
             application:
             
