@@ -205,7 +205,7 @@ def create_7zip_from_include_exclude_and_rename_list(
             pass
 
     with working_directory(basedir):
-        with tempfile.TemporaryDirectory() as filelist_dir, tempfile.TemporaryDirectory() as stage_dir:
+        with tempfile.TemporaryDirectory() as stage_dir:
             filelist = globlist(".", include_list, exclude_list)
             filedict = {comparable_filename(i): i for i in filelist}
 
@@ -233,7 +233,6 @@ def create_7zip_from_include_exclude_and_rename_list(
                 if os.path.isfile(src):
                     os.makedirs(dst_stage.parent, exist_ok=True)
                     shutil.copy2(src, dst_stage)
-                    print(filedict)
                     filedict.pop(comparable_filename(src))
 
                 elif os.path.isdir(src):

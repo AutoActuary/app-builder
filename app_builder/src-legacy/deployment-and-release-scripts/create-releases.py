@@ -207,6 +207,7 @@ def create_releases(version=None):
             globs_include.append(i)
             paths_rename.append([i, j])
 
+        print(globs_include)
         util.create_7zip_from_include_exclude_and_rename_list(
             programzip,
             app_paths.app_dir,
