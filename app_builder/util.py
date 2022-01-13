@@ -46,7 +46,7 @@ def init():
     with appyaml.open("w") as f:
         f.write(
             dedent(r"""
-            app-builder: c709220
+            app-builder: c372872
             
             application:
             
@@ -233,6 +233,7 @@ def create_7zip_from_include_exclude_and_rename_list(
                 if os.path.isfile(src):
                     os.makedirs(dst_stage.parent, exist_ok=True)
                     shutil.copy2(src, dst_stage)
+                    print(filedict)
                     filedict.pop(comparable_filename(src))
 
                 elif os.path.isdir(src):
