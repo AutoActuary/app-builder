@@ -46,7 +46,7 @@ def init():
     with appyaml.open("w") as f:
         f.write(
             dedent(r"""
-            app-builder: v0.2.0
+            app-builder: v0.2.1
             
             application:
             
@@ -75,9 +75,9 @@ def init():
             
             # Bundle Python/R/Julia and packages into bin/*
             dependencies:
-                python:
-                    # You can list the packages via pip versioning (i.e. `pyyaml~=5.3`)  
-                    - pyyaml
+              python:
+                # You can list the packages via pip versioning (i.e. `pyyaml~=5.3`)  
+                - pyyaml
                   
             """).strip()
         )
