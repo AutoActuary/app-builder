@@ -197,17 +197,11 @@ def create_releases(version=None):
                         copymode=True)
 
     if data_fields == {'data'}:
+        # Add user-defined input
         globs_include = config['application']['data']['include'] if 'include' in config['application']['data'] else []
         globs_exclude = config['application']['data']['exclude'] if 'exclude' in config['application']['data'] else []
         paths_rename = config['application']['data']['rename'] if 'rename' in config['application']['data'] else []
 
-        for i, j in [["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
-                     [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"]]:
-
-            globs_include.append(i)
-            paths_rename.append([i, j])
-
-        print(globs_include)
         util.create_7zip_from_include_exclude_and_rename_list(
             programzip,
             app_paths.app_dir,
@@ -219,10 +213,32 @@ def create_releases(version=None):
             app_paths.sevenz_bin
         )
 
+        # Add system-default things like uninstaller
+        globs_include = []
+        globs_exclude = []
+        paths_rename = []
+        for i, j in [["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
+                     [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"]]:
+
+            globs_include.append(i)
+            paths_rename.append([i, j])
+
+        util.create_7zip_from_include_exclude_and_rename_list(
+            programzip,
+            app_paths.app_dir,
+            globs_include,
+            globs_exclude,
+            paths_rename,
+            False,
+            True,
+            app_paths.sevenz_bin
+        )
+
         installzip = app_paths.tools_dir.joinpath('releases', config['application']['name'] + "_.7z")
 
-        paths_rename = []
         globs_include = ["./bin/7z.*"]
+        globs_exclude = []
+        paths_rename = []
         for i, j in [["./tools/entrypoint/" + installout.name, "./" + installout.name],
                      ["./tools/releases/" + programzip.name, "./" + programzip.name]]:
             globs_include.append(i)
@@ -239,7 +255,7 @@ def create_releases(version=None):
             installzip,
             app_paths.app_dir,
             globs_include,
-            [],
+            globs_exclude,
             paths_rename,
             False,
             False,

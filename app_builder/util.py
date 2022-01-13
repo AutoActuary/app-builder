@@ -147,6 +147,7 @@ def globlist(basedir, *include_exclude_include_exclude_etc: List[str]) -> List[s
         include = True
         for globlist in include_exclude_include_exclude_etc:
             for g in globlist:
+
                 for path in glob.glob(g):
                     for file in expand_path(path):
                         if include:
