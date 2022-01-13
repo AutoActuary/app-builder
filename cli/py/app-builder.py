@@ -17,7 +17,7 @@ from app_builder import git_revision
 from app_builder import paths
 from app_builder.exec_py import exec_py
 from app_builder.shell import copy
-from app_builder.util import help
+from app_builder.util import help, init
 
 
 class ApplicationYamlError(Exception):

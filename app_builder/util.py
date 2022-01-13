@@ -41,7 +41,7 @@ def init():
 
     os.makedirs(gitbase.joinpath("tools"), exist_ok=True)
     shutil.copytree(
-        Path(__file__).resolve().absolute().joinpath("assets", "templates"),
+        Path(__file__).resolve().parent.joinpath("assets", "templates"),
         gitbase.joinpath("tools", "templates")
     )
 
