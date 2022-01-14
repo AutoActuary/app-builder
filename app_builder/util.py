@@ -37,7 +37,7 @@ def init():
     appyaml = gitbase.joinpath("application.yaml")
 
     if appyaml.exists():
-        raise RuntimeError(f"Run git repository already has an 'application.yaml' file in '{d}'")
+        raise RuntimeError(f"Git repository already has an 'application.yaml' file in '{d}'")
 
     os.makedirs(dst := gitbase.joinpath("application-templates"), exist_ok=True)
     for i in Path(__file__).resolve().parent.joinpath("assets", "templates").glob("*"):
