@@ -281,8 +281,7 @@ def get_julia():
         "",
         app_paths.app_dir.joinpath('bin', 'julia', 'julia'),
         link_tester=lambda x: 'bin/winnt/x64/' in x and x.endswith('-win64.zip'),
-        extract_tester=lambda: (app_paths.app_dir.joinpath('bin', 'julia', 'julia', 'bin', 'julia.exe').is_file() and
-                                app_paths.app_dir.joinpath('bin', 'julia', 'julia.bat').is_file())
+        extract_tester=lambda: (app_paths.app_dir.joinpath('bin', 'julia', 'julia', 'bin', 'julia.exe').is_file())
     )
 
     # Add our personalised launcher wrapper to the mix
