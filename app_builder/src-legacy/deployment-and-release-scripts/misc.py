@@ -276,100 +276,103 @@ def get_python():
 
 
 def get_julia():
-    get_program(
-        "https://julialang.org/downloads",
-        "",
-        app_paths.app_dir.joinpath('bin', 'julia', 'julia'),
-        link_tester=lambda x: 'bin/winnt/x64/' in x and x.endswith('-win64.zip'),
-        extract_tester=lambda: (app_paths.app_dir.joinpath('bin', 'julia', 'julia', 'bin', 'julia.exe').is_file())
-    )
+    # Escape automatic installation
+    if not app_paths.app_dir.joinpath('bin', 'julia', 'app-builder-dont-overwrite-julia.txt').is_file():
 
-    # Add our personalised launcher wrapper to the mix
-    shutil.copy2(app_paths.asset_dir.joinpath("launcher-julia.exe"), app_paths.julia_bin)
-
-    julia_env = app_paths.app_dir.joinpath('bin', 'julia', "activate-julia-environment.cmd")
-
-    open(julia_env, "w").write(textwrap.dedent(r"""
-        @echo off
-        
-        :: Set portable specific julia paths
-        if "%julia-activated%" neq "1" (
-        
-            set "JULIA_DEPOT_PATH=%~dp0localdepot"
-            set "PYTHON=%~dp0..\python\python.exe"
-            set "PATH=%~dp0julia\bin;%~dp0..\python;%PATH%"
-        
-            set "julia-activated=1"
+        get_program(
+            "https://julialang.org/downloads",
+            "",
+            app_paths.app_dir.joinpath('bin', 'julia', 'julia'),
+            link_tester=lambda x: 'bin/winnt/x64/' in x and x.endswith('-win64.zip'),
+            extract_tester=lambda: (app_paths.app_dir.joinpath('bin', 'julia', 'julia', 'bin', 'julia.exe').is_file())
         )
-        
-        :: Get the previous run path of Julia
-        if exist "%JULIA_DEPOT_PATH%\lastpath.txt" (
-            set /p lastpath=<"%JULIA_DEPOT_PATH%\lastpath.txt"
-        )
-        
-        :: Test if PyCall wants a recompilation
-        if "%lastpath%" neq "%JULIA_DEPOT_PATH%" (
-        
-            REM Remove all Conda and PyCall related files
-            powershell -Command "Remove-Item -LiteralPath '%JULIA_DEPOT_PATH%\conda'         -Force -Recurse" > nul 2>&1
-            powershell -Command "Remove-Item -LiteralPath '%JULIA_DEPOT_PATH%\prefs'         -Force -Recurse" > nul 2>&1
-            powershell -Command "Remove-Item -LiteralPath '%JULIA_DEPOT_PATH%\compiled'      -Force -Recurse" > nul 2>&1
-            powershell -Command "Remove-Item -LiteralPath '%JULIA_DEPOT_PATH%\scratchspaces' -Force -Recurse" > nul 2>&1
-        
-            for /f "delims=" %%a in ('dir /b /ad "%JULIA_DEPOT_PATH%\packages\PyCall\*"') do (
-                powershell -Command "Remove-Item -LiteralPath '%JULIA_DEPOT_PATH%\packages\PyCall\%%a\deps\deps.jl' -Force" > nul 2>&1
+
+        # Add our personalised launcher wrapper to the mix
+        shutil.copy2(app_paths.asset_dir.joinpath("launcher-julia.exe"), app_paths.julia_bin)
+
+        julia_env = app_paths.app_dir.joinpath('bin', 'julia', "activate-julia-environment.cmd")
+
+        open(julia_env, "w").write(textwrap.dedent(r"""
+            @echo off
+            
+            :: Set portable specific julia paths
+            if "%julia-activated%" neq "1" (
+            
+                set "JULIA_DEPOT_PATH=%~dp0localdepot"
+                set "PYTHON=%~dp0..\python\python.exe"
+                set "PATH=%~dp0julia\bin;%~dp0..\python;%PATH%"
+            
+                set "julia-activated=1"
             )
-            for /f "delims=" %%a in ('dir /b /ad "%JULIA_DEPOT_PATH%\packages\Conda\*"') do (
-                powershell -Command "Remove-Item -LiteralPath '%JULIA_DEPOT_PATH%\packages\Conda\%%a\deps\deps.jl' -Force" > nul 2>&1
+            
+            :: Get the previous run path of Julia
+            if exist "%JULIA_DEPOT_PATH%\lastpath.txt" (
+                set /p lastpath=<"%JULIA_DEPOT_PATH%\lastpath.txt"
             )
-        
-            if exist "%JULIA_DEPOT_PATH%\packages\PyCall" (
-                call "%~dp0julia\bin\julia.exe" -e "using Pkg; Pkg.build(\"PyCall\");"
+            
+            :: Test if PyCall wants a recompilation
+            if "%lastpath%" neq "%JULIA_DEPOT_PATH%" (
+            
+                REM Remove all Conda and PyCall related files
+                powershell -Command "Remove-Item -LiteralPath '%JULIA_DEPOT_PATH%\conda'         -Force -Recurse" > nul 2>&1
+                powershell -Command "Remove-Item -LiteralPath '%JULIA_DEPOT_PATH%\prefs'         -Force -Recurse" > nul 2>&1
+                powershell -Command "Remove-Item -LiteralPath '%JULIA_DEPOT_PATH%\compiled'      -Force -Recurse" > nul 2>&1
+                powershell -Command "Remove-Item -LiteralPath '%JULIA_DEPOT_PATH%\scratchspaces' -Force -Recurse" > nul 2>&1
+            
+                for /f "delims=" %%a in ('dir /b /ad "%JULIA_DEPOT_PATH%\packages\PyCall\*"') do (
+                    powershell -Command "Remove-Item -LiteralPath '%JULIA_DEPOT_PATH%\packages\PyCall\%%a\deps\deps.jl' -Force" > nul 2>&1
+                )
+                for /f "delims=" %%a in ('dir /b /ad "%JULIA_DEPOT_PATH%\packages\Conda\*"') do (
+                    powershell -Command "Remove-Item -LiteralPath '%JULIA_DEPOT_PATH%\packages\Conda\%%a\deps\deps.jl' -Force" > nul 2>&1
+                )
+            
+                if exist "%JULIA_DEPOT_PATH%\packages\PyCall" (
+                    call "%~dp0julia\bin\julia.exe" -e "using Pkg; Pkg.build(\"PyCall\");"
+                )
             )
-        )
-        
-        :: Write new path (only if we are error free)
-        if "%lastpath%" neq "%JULIA_DEPOT_PATH%" if "%errorlevel%" equ "0" (
-            echo %JULIA_DEPOT_PATH%>"%JULIA_DEPOT_PATH%\lastpath.txt"
-        )
-        """))
+            
+            :: Write new path (only if we are error free)
+            if "%lastpath%" neq "%JULIA_DEPOT_PATH%" if "%errorlevel%" equ "0" (
+                echo %JULIA_DEPOT_PATH%>"%JULIA_DEPOT_PATH%\lastpath.txt"
+            )
+            """))
 
-    startup = app_paths.app_dir.joinpath('bin', 'julia', 'localdepot', 'config', 'startup.jl')
-    os.makedirs(startup.parent, exist_ok=True)
+        startup = app_paths.app_dir.joinpath('bin', 'julia', 'localdepot', 'config', 'startup.jl')
+        os.makedirs(startup.parent, exist_ok=True)
 
-    startup.open("w").write(textwrap.dedent(r"""        
-        ENV["JULIA_PKG_SERVER"] = ""
-        
-        # Force installation of packages
-        for _ in true
-            function lazy_add(pkgsym)
-            if !(isdir(joinpath(@__DIR__, "..", "packages", String(pkgsym))))
-                @eval using Pkg
-                Pkg.add(String(pkgsym))
-            end
-        end
-        
-        lazy_add(:Revise)
-        lazy_add(:OhMyREPL)
-        end
-        
-        # Force installation and inclusion of packages at REPL
-        Base.atreplinit() do _
-            function add_and_use(pkgsym)
-                try
-                    @eval using $pkgsym
-                    return true
-                catch e
+        startup.open("w").write(textwrap.dedent(r"""        
+            ENV["JULIA_PKG_SERVER"] = ""
+            
+            # Force installation of packages
+            for _ in true
+                function lazy_add(pkgsym)
+                if !(isdir(joinpath(@__DIR__, "..", "packages", String(pkgsym))))
                     @eval using Pkg
                     Pkg.add(String(pkgsym))
-                    @eval using $pkgsym
                 end
             end
             
-            add_and_use(:Revise)
-            add_and_use(:OhMyREPL)
-        end
-        """))
+            lazy_add(:Revise)
+            lazy_add(:OhMyREPL)
+            end
+            
+            # Force installation and inclusion of packages at REPL
+            Base.atreplinit() do _
+                function add_and_use(pkgsym)
+                    try
+                        @eval using $pkgsym
+                        return true
+                    catch e
+                        @eval using Pkg
+                        Pkg.add(String(pkgsym))
+                        @eval using $pkgsym
+                    end
+                end
+                
+                add_and_use(:Revise)
+                add_and_use(:OhMyREPL)
+            end
+            """))
 
 
 def juliainstall_dependencies(libdict: dict):
