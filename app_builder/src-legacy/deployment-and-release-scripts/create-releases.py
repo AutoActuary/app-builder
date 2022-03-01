@@ -121,9 +121,36 @@ def create_releases(version=None):
     if "startmenu" in config['application']:
         cmds = []
         for file in config["application"]["startmenu"]:
-            file = _Path(file).abspath().relpath()
-            link = file.basename().splitext()[0] + '.lnk'
-            cmds.append(f'call :CREATE-SHORTCUT "%installdir%\\{file}" "%menudir%\\{link}"')
+            if isinstance(file, str):
+                if not Path(file).expanduser().is_absolute():
+                    file = f"%installdir%\\{file}"
+
+                link = os.path.splitext(Path(file).name)[0] + '.lnk'
+                cmd = f'call :CREATE-SHORTCUT "%installdir%\\{file}" "%menudir%\\{link}"'
+
+            elif isinstance(file, list) and len(file) in (2, 3):
+                file_ = file[0]
+                link = file[1] if file[1].lower().endswith(".lnk") else file[1] + ".lnk"
+                icon = file_ if len(file) == 2 else file[2]
+
+                if not Path(file_).expanduser().is_absolute():
+                    file_ = f"%installdir%\\{file_}"
+
+                if not Path(link).expanduser().is_absolute():
+                    link = f"%menudir%\\{link}"
+
+                if not Path(icon).expanduser().is_absolute():
+                    icon = f"%installdir%\\{icon}"
+
+                cmd = f'call :CREATE-SHORTCUT "{file_}" "{link}" "" "{icon}"'
+
+            else:
+                err = (f"application.yaml shortcuts must either be a single string entry or a list of 2 or 3 entries, "
+                       f"[<source>, <dest>, <optional icon>], got: {file}")
+                raise RuntimeError(err)
+
+            cmds.append(cmd)
+
         txt = installout.open().read().replace("::__shortcuts__", '\n'.join(cmds))
         with installout.open("w") as f:
             f.write(txt)
