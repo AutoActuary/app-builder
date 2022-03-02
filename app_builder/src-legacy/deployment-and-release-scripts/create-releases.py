@@ -123,24 +123,25 @@ def create_releases(version=None):
         for file in config["application"]["startmenu"]:
             if isinstance(file, str):
                 if not Path(file).expanduser().is_absolute():
-                    file = f"%installdir%\\{file}"
+                    file = Path("%installdir%", file)
 
-                link = os.path.splitext(Path(file).name)[0] + '.lnk'
-                cmd = f'call :CREATE-SHORTCUT "%installdir%\\{file}" "%menudir%\\{link}"'
+                link = Path("%menudir%", os.path.splitext(file.name)[0] + '.lnk')
+
+                cmd = f'call :CREATE-SHORTCUT "{file}" "{link}"'
 
             elif isinstance(file, list) and len(file) in (2, 3):
-                file_ = file[0]
-                link = file[1] if file[1].lower().endswith(".lnk") else file[1] + ".lnk"
-                icon = file_ if len(file) == 2 else file[2]
+                file_ = Path(file[0])
+                link = Path(file[1] if file[1].lower().endswith(".lnk") else file[1] + ".lnk")
+                icon = Path(file_ if len(file) == 2 else file[2])
 
-                if not Path(file_).expanduser().is_absolute():
-                    file_ = f"%installdir%\\{file_}"
+                if not file_.expanduser().is_absolute():
+                    file_ = Path("%installdir%", file_)
 
-                if not Path(link).expanduser().is_absolute():
-                    link = f"%menudir%\\{link}"
+                if not link.expanduser().is_absolute():
+                    link = Path("%menudir%", link)
 
-                if not Path(icon).expanduser().is_absolute():
-                    icon = f"%installdir%\\{icon}"
+                if not icon.expanduser().is_absolute():
+                    icon = Path("%installdir%", icon)
 
                 cmd = f'call :CREATE-SHORTCUT "{file_}" "{link}" "" "{icon}"'
 
