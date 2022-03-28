@@ -235,7 +235,7 @@ goto :EOF
 :: Browse for a folder on your system
 :: ***********************************************
 :BROWSE-FOR-FOLDER <outputvarname>
-    ::I have no idea how this works exactly...
+    ::Run vbs routine to open Folder prompt and return selected Folder
     ::https://stackoverflow.com/a/39593074/1490584
     set %~1=
     set "rname=browsefolder%RANDOM%%RANDOM%%RANDOM%"
