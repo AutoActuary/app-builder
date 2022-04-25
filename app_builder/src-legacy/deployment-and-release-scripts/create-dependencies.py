@@ -75,10 +75,10 @@ def create_all_dependencies():
 
             print("Purge any R docs and i386 files")
             if app_paths.rpath.joinpath('unins000.dat').is_file():
-                app_paths.rpath.joinpath('unins000.dat').remove()
+                os.remove(app_paths.rpath.joinpath('unins000.dat'))
 
             if app_paths.rpath.joinpath('unins000.exe').is_file():
-                app_paths.rpath.joinpath('unins000.exe').remove()
+                os.remove(app_paths.rpath.joinpath('unins000.exe'))
 
             shutil.rmtree(app_paths.rpath.joinpath('bin/i386'), ignore_errors=True)
             shutil.rmtree(app_paths.rpath.joinpath('doc'), ignore_errors=True)
@@ -92,7 +92,7 @@ def create_all_dependencies():
 
             # Delete unnecessary file
             if app_paths.app_dir.joinpath("bin", "pandoc", "pandoc-citeproc.exe").is_file():
-                app_paths.app_dir.joinpath("bin", "pandoc", "pandoc-citeproc.exe").remove()
+                os.remove(app_paths.app_dir.joinpath("bin", "pandoc", "pandoc-citeproc.exe"))
 
         elif key.lower() == "minipython" and value:
             misc.get_minipython()

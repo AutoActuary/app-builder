@@ -12,6 +12,7 @@ import yaml
 from locate import allow_relative_location_imports
 import locate
 from path import Path as _Path
+from pathlib import Path
 
 allow_relative_location_imports('.')
 import app_paths
@@ -407,9 +408,9 @@ def get_pythonembed():
         )
 
     # Delete python30._pth
-    for i in app_paths.py_dir.walk():
-        if i.basename().startswith("python") and i.basename().endswith("._pth"):
-            i.remove()
+    for i in Path(app_paths.py_dir).rglob("*"):
+        if i.name.startswith("python") and i.name.endswith("._pth"):
+            os.remove(i)
 
     # ************************************************
     # Force working pip from bootstrap.pypa.io
