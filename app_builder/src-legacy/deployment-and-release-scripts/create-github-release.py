@@ -77,7 +77,15 @@ def create_token():
 
 create_token()
 
-github_release.get_releases(name_repo)
+try:
+    github_release.get_releases(name_repo)
+except Exception as e:
+    errstr = str(e).lower()
+    if "401 client error" in errstr and "unauthorized for url" in errstr:
+        os.unlink(tokenpath)
+        create_token()
+    else:
+        raise
 
 # *********************************
 # After token is sorted out
