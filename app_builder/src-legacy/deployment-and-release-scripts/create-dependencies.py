@@ -31,6 +31,10 @@ def split_prog_version(s: str):
     return s, None
 
 
+def is_prog(s, progname):
+    return s.lower() == progname.lower() or s.lower().startswith(f"{progname.lower()} ")
+
+
 def create_all_dependencies():
     # implicitly run any script named "pre-dependencies.bat" or "pre-dependencies.cmd" in dedicated locations
     for scriptsdir in [".", "bin", "src", "scripts"]:
@@ -48,11 +52,24 @@ def create_all_dependencies():
 
         # install python (if used)
         # add pip stuff, add logging information
-        if key.lower().startswith("python"):
+        if is_prog("python"):
 
             _, version = split_prog_version(key)
             misc.get_python(version)
+            
             if misc.islistlike(value):
+                pip = None
+                value_ = []
+                for v in value:
+                    for x in ["", "~", "=", ">", "<"]:
+                        if is_prog(v, f"pip{x}"):
+                            pip = v
+                    if v != pip:
+                        value_.append(v)
+
+                if pip is not None:
+                    subprocess.call([app_paths.python_bin, "-E", "-m", "pip", 'install', '--upgrade', pip])
+
                 misc.pipinstall_requirements(value)
 
             # Added some pip logging information
@@ -76,7 +93,7 @@ def create_all_dependencies():
                     misc.rmtree(file)
 
         # install R (if used)
-        if key.lower().startswith("r"):
+        if is_prog("r"):
             _, version = split_prog_version(key)
             misc.get_r(version)
             if misc.islistlike(value):
