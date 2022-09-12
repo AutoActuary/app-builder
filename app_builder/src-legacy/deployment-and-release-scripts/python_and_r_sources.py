@@ -95,6 +95,6 @@ def test_version_of_r_exe_using_subprocess(path_to_r_exe, pattern):
     version_exe = (
         subprocess.check_output([path_to_r_exe, "--version"], stderr=subprocess.STDOUT)
         .decode("utf-8")
-        .split()[2]
+        .split("version")[1].strip().split()[0]
     )
     return pattern_match_version(pattern, version_exe)
