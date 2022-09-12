@@ -1,5 +1,6 @@
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -107,7 +108,7 @@ def rmtree(
     def _onerror(_func: Callable, _path: Union[str, Path], _exc_info) -> None:
         # Is the error an access error ?
         try:
-            os.chmod(_path, os.stat.S_IWUSR)
+            os.chmod(_path, stat.S_IWUSR)
             _func(_path)
         except Exception as e:
             if ignore_errors:
