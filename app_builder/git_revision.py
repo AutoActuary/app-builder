@@ -5,11 +5,11 @@ from json import loads
 import tempfile
 import subprocess
 from contextlib import suppress
-import shutil
 import os
 from locate import this_dir
 import paths
 from shell import sh_lines, working_directory, sh_quiet
+import util
 
 
 def ensure_git():
@@ -81,14 +81,14 @@ def git_download(git_source, dest, revision=None):
         if Path(os.getcwd()).resolve() != Path(dest).resolve():
             raise (RuntimeError(f"Could not create and enter {dest}"))
 
-        git = ensure_git()        
+        git = ensure_git()
 
         # Test if we are currently tracking the ref
         def is_on_ref(revision):
             if revision is None:
                 return False
-            commit = sh_lines([git, 'rev-parse', 'HEAD'])[0]
             try:
+                commit = sh_lines([git, "rev-parse", "HEAD"])[0]
                 return commit == sh_lines([git, "rev-list", "-n", "1", revision], stderr=subprocess.DEVNULL)[0]
             except subprocess.CalledProcessError:
                 return False
@@ -109,7 +109,7 @@ def git_download(git_source, dest, revision=None):
                 if i.is_file():
                     os.remove(i)
                 else:
-                    shutil.rmtree(i)
+                    util.rmtree(i)
 
             subprocess.call([git, "clone", git_source, str(Path(".").resolve())])
             if not Path("./.git").is_dir():

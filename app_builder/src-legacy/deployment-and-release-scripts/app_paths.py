@@ -34,7 +34,7 @@ tools_dir = Path(app_dir, 'tools')
 temp_dir = Path(tools_dir, 'temp', 'package-downloads')
 py_dir = Path(app_dir, "bin", "python")
 julia_dir = Path(app_dir, "bin", "julia")
-rpath = app_dir.joinpath("bin", "r")
+r_dir = app_dir.joinpath("bin", "r")
 
 # deploy-tools directories
 template_dir = Path(locate.this_dir(), '..', 'templates').resolve()
@@ -46,7 +46,7 @@ sevenz_bin = Path(locate.this_dir(), '..', 'bin', '7z.exe').resolve()
 rcedit_bin = Path(locate.this_dir(), '..', 'bin', 'rcedit.exe').resolve()
 python_bin = Path(py_dir, 'python.exe')
 julia_bin = Path(julia_dir, 'julia.exe')
-rbin = rpath.joinpath("bin", "Rscript.exe")
+r_bin = r_dir.joinpath("bin", "Rscript.exe")
 
 # FIXME: This is an import side effect, and should be moved to a function that we call only when really needed.
 temp_dir.mkdir(parents=True, exist_ok=True)

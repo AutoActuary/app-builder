@@ -17,7 +17,7 @@ from app_builder import git_revision
 from app_builder import paths
 from app_builder.exec_py import exec_py
 from app_builder.shell import copy
-from app_builder.util import help, init
+from app_builder.util import help, init, rmtree
 
 
 class ApplicationYamlError(Exception):
@@ -103,7 +103,7 @@ def ensure_app_version():
                                          "-r", tmp_rev_repo.joinpath("requirements.txt"),
                                          f"--target={tmp_site}"])
 
-            shutil.rmtree(path_rev, ignore_errors=True)
+            rmtree(path_rev, ignore_errors=True)
             os.makedirs(path_rev.parent, exist_ok=True)
             shutil.copytree(tdir, path_rev)
 
@@ -175,7 +175,7 @@ def version_cleanup():
     )
 
     for i in discard:
-        shutil.rmtree(vdict[i])
+        rmtree(vdict[i])
 
 
 def run_versioned_main():

@@ -5,7 +5,7 @@ from pathlib import Path
 from textwrap import dedent
 import os
 from contextlib import contextmanager
-from typing import List
+from typing import List, Union, Callable
 import tempfile
 import sys
 
@@ -303,3 +303,41 @@ def create_7zip_from_filelist(
                 f.write("\n".join([str(i).replace("\\", "/") for i in filelist]))
 
             subprocess.call([sevenzip_bin, 'a', '-y'] + mode + [str(outpath), f"@{filelist_txt}"])
+
+
+def rmtree(
+        path: Union[str, Path], ignore_errors: bool = False, onerror: Callable = None
+) -> None:
+    """
+    Mimicks shutil.rmtree, but add support for deleting read-only files
+
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as tdir:
+    ...     os.makedirs(Path(tdir, "tmp"))
+    ...     with Path(tdir, "tmp", "f1").open("w") as f:
+    ...         _ = f.write("tmp")
+    ...     os.chmod(Path(tdir, "tmp", "f1"), stat.S_IREAD|stat.S_IRGRP|stat.S_IROTH)
+    ...     try:
+    ...         shutil.rmtree(Path(tdir, "tmp"))
+    ...     except Exception as e:
+    ...         print(e) # doctest: +ELLIPSIS
+    ...     rmtree(Path(tdir, "tmp"))
+    [WinError 5] Access is denied: '...f1'
+
+    """
+
+    def _onerror(_func: Callable, _path: Union[str, Path], _exc_info) -> None:
+        # Is the error an access error ?
+        try:
+            os.chmod(_path, os.stat.S_IWUSR)
+            _func(_path)
+        except Exception as e:
+            if ignore_errors:
+                pass
+            elif onerror is not None:
+                onerror(_func, _path, sys.exc_info())
+            else:
+                raise
+
+    return shutil.rmtree(path, False, _onerror)
+
