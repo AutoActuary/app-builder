@@ -204,35 +204,38 @@ def flatextract_file(archive, destdir, force=True):
 def download(dlurl, dest):
     dest = Path(dest)
     print(f'Download {dlurl} to {dest}')
-    tmploc = Path(tempfile.gettempdir(), "app-builder-downloads", Path(tempfile.TemporaryDirectory()).name, dest.name)
 
+    tdir_base = Path(tempfile.gettempdir(), "app-builder-downloads")
+    os.makedirs(tdir_base, exist_ok=True)
     os.makedirs(dest.parent, exist_ok=True)
-    os.makedirs(tmploc.parent, exist_ok=True)
 
-    if subprocess.call([app_paths.ps_bin, '-Command', 'gcm Invoke-WebRequest'],
-                       stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL) == 0:
+    with tempfile.TemporaryDirectory(dir=tdir_base) as tdir:
+        tmploc = Path(tdir, dest.name)
 
-        # New Powershell method is available
-        subprocess.call([
-            app_paths.ps_bin,
-            "-Command",
-            f"Invoke-WebRequest '{dlurl}' -OutFile '{tmploc}'"
-        ])
+        if subprocess.call([app_paths.ps_bin, '-Command', 'gcm Invoke-WebRequest'],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL) == 0:
 
-    else:
-        # Only old Powershell method is available
-        subprocess.call([
-            app_paths.ps_bin,
-            "-Command",
-            f"(New-Object Net.WebClient).DownloadFile('{dlurl}', '{tmploc}')"
-        ])
+            # New Powershell method is available
+            subprocess.call([
+                app_paths.ps_bin,
+                "-Command",
+                f"Invoke-WebRequest '{dlurl}' -OutFile '{tmploc}'"
+            ])
 
-    if dest.exists():
-        os.remove(dest)
+        else:
+            # Only old Powershell method is available
+            subprocess.call([
+                app_paths.ps_bin,
+                "-Command",
+                f"(New-Object Net.WebClient).DownloadFile('{dlurl}', '{tmploc}')"
+            ])
 
-    # Only move after successful download
-    shutil.move(tmploc, dest)
+        if dest.exists():
+            os.remove(dest)
+
+        # Only move after successful download
+        shutil.move(tmploc, dest)
 
 
 def islistlike(x):
@@ -321,7 +324,11 @@ def get_python(version):
     if not dlpath.exists():
         download(url, dlpath)
 
-    extract_file(dlpath, app_paths.py_dir)
+    with tempfile.TemporaryDirectory() as tdir:
+        extract_file(dlpath, tdir)
+        pydir = next(Path(tdir).glob("*/python-*"))
+        shutil.move(pydir, app_paths.py_dir)
+
 
 
 def get_julia():
