@@ -3,3 +3,4 @@ path
 githubrelease
 locate
 toml
+beautifulsoup4

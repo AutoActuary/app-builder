@@ -453,21 +453,6 @@ def is_pip(pname):
 
 def get_r(version):
 
-    """
-    if app_paths.python_bin.exists() and prs.test_version_of_python_exe_using_subprocess(app_paths.python_bin, version):
-        return
-
-    rmtree_exist_ok(app_paths.py_dir)
-    url = prs.get_winpython_version_link(version)
-    filename = Path(url).name
-    dlpath = app_paths.temp_dir.joinpath(filename)
-    if not dlpath.exists():
-        download(url, dlpath)
-
-    extract_file(dlpath, app_paths.py_dir)
-
-    """
-
     if app_paths.r_bin.exists() and prs.test_version_of_r_exe_using_subprocess(app_paths.r_bin, version):
         return
 
