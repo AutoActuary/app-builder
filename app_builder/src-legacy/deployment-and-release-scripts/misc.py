@@ -1,9 +1,10 @@
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from contextlib import suppress
-from typing import Union
+from typing import Union, Callable
 import textwrap
 import collections.abc
 import toml
@@ -16,6 +17,7 @@ from pathlib import Path
 
 allow_relative_location_imports('.')
 import app_paths
+import python_and_r_sources as prs
 
 
 def nested_update(d, u):
@@ -78,22 +80,60 @@ def move_tree(source, dest):
         for f in files:
             absf = os.path.abspath(ndir + "/" + f)
             os.rename(absf, dest + '/' + absf[len(source):])
-    shutil.rmtree(source)
+    rmtree(source)
 
 
-def rmtree(dirname):
+def rmtree(
+        path: Union[str, Path], ignore_errors: bool = False, onerror: Callable = None
+) -> None:
+    """
+    Mimicks shutil.rmtree, but add support for deleting read-only files
+
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as tdir:
+    ...     os.makedirs(Path(tdir, "tmp"))
+    ...     with Path(tdir, "tmp", "f1").open("w") as f:
+    ...         _ = f.write("tmp")
+    ...     os.chmod(Path(tdir, "tmp", "f1"), stat.S_IREAD|stat.S_IRGRP|stat.S_IROTH)
+    ...     try:
+    ...         shutil.rmtree(Path(tdir, "tmp"))
+    ...     except Exception as e:
+    ...         print(e) # doctest: +ELLIPSIS
+    ...     rmtree(Path(tdir, "tmp"))
+    [WinError 5] Access is denied: '...f1'
+
+    """
+
+    def _onerror(_func: Callable, _path: Union[str, Path], _exc_info) -> None:
+        # Is the error an access error ?
+        try:
+            os.chmod(_path, os.stat.S_IWUSR)
+            _func(_path)
+        except Exception as e:
+            if ignore_errors:
+                pass
+            elif onerror is not None:
+                onerror(_func, _path, sys.exc_info())
+            else:
+                raise
+
+    return shutil.rmtree(path, False, _onerror)
+
+
+
+def rmtree_exist_ok(dirname):
     """
     Rmtree without exist_ok error
     """
     if os.path.isdir(dirname):
-        shutil.rmtree(dirname)
+        rmtree(dirname)
 
 
 def rmpath(pathname):
     """
     Like rmtree, but file/tree agnostic
     """
-    rmtree(pathname)
+    rmtree_exist_ok(pathname)
     try:
         os.remove(pathname)
     except FileNotFoundError:
@@ -135,7 +175,7 @@ def extract_file(archive, destdir, force=True):
     print(f'Extract {archive} to {destdir}')
 
     if force:
-        rmtree(destdir)
+        rmtree_exist_ok(destdir)
 
     subprocess.call([
         app_paths.sevenz_bin,
@@ -258,22 +298,19 @@ def get_pandoc():
     )
 
 
-def get_python():
-    """
-    #Let's skip a port and just run the bootstrapper directly...
-    subprocess.call([thisdir.joinpath("bootstrap-python.bat")])
+def get_python(version):
 
-    #************************************************
-    # Force working pip from bootstrap.pypa.io
-    #************************************************
-    if 'get-pip.py' not in os.listdir(tempdir):
-        download('https://bootstrap.pypa.io/get-pip.py', tempdir.joinpath('get-pip.py'))
-    subprocess.call([pythonbin, tempdir.joinpath('get-pip.py')])
-    """
-    if not app_paths.python_bin.is_file():
-        subprocess.call([str(locate.this_dir().joinpath("..", "tools", "bootstrap-python.bat")),
-                         "-dest", str(app_paths.py_dir),
-                         "-temp", str(app_paths.temp_dir)])
+    if app_paths.python_bin.exists() and prs.test_version_of_python_exe_using_subprocess(app_paths.python_bin, version):
+        return
+
+    rmtree_exist_ok(app_paths.py_dir)
+    url = prs.get_winpython_version_link(version)
+    filename = Path(url).name
+    dlpath = app_paths.temp_dir.joinpath(filename)
+    if not dlpath.exists():
+        download(url, dlpath)
+
+    extract_file(dlpath, app_paths.py_dir)
 
 
 def get_julia():
@@ -389,70 +426,6 @@ def juliainstall_dependencies(libdict: dict):
     subprocess.call([app_paths.julia_bin, "-e", "using Pkg; Pkg.resolve(); Pkg.instantiate()"])
 
 
-def get_pythonembed():
-    if not app_paths.python_bin.is_file():
-        firstpass = app_paths.temp_dir.joinpath("https--www.python.org-downloads")
-        download("https://www.python.org/downloads/", firstpass)
-        landing = "https://www.python.org" + (
-            [i for i in open(firstpass, errors='ignore').read().split('"') if
-             i.startswith('/downloads/release/python-')][0])
-
-        get_program(
-            landing,
-            "",
-            app_paths.py_dir,
-            link_tester=lambda x: (x.startswith('https://www.python.org/ftp/python/') and
-                                   x.endswith('-embed-amd64.zip')),
-            link_chooser=lambda x: x[0],
-            extract_tester=lambda: app_paths.python_bin.is_file(),
-        )
-
-    # Delete python30._pth
-    for i in Path(app_paths.py_dir).rglob("*"):
-        if i.name.startswith("python") and i.name.endswith("._pth"):
-            os.remove(i)
-
-    # ************************************************
-    # Force working pip from bootstrap.pypa.io
-    # ************************************************
-    if 'get-pip.py' not in os.listdir(app_paths.temp_dir):
-        download('https://bootstrap.pypa.io/get-pip.py', app_paths.temp_dir.joinpath('get-pip.py'))
-
-    subprocess.call([app_paths.python_bin, "-E", app_paths.temp_dir.joinpath('get-pip.py')])
-
-
-def get_winpython():
-    # lets not download in circles...
-
-    get_program(
-        "https://github.com/winpython/winpython/releases",
-        "https://github.com/",
-        app_paths.py_dir,
-        link_tester=lambda x: (x.startswith('/winpython/winpython/') and
-                               x.endswith('dot.exe') and
-                               '64-' in x),
-        link_chooser=lambda x: x[0],
-        extract_tester=lambda: app_paths.python_bin.is_file(),
-    )
-
-    # ************************************************
-    # Remove winpython stuff, leave only python
-    # ************************************************
-    if not app_paths.python_bin.is_file():
-        for i in app_paths.py_dir.listdir():
-            if not i.basename().startswith('python-'):
-                rmpath(i)
-    unnest_dir(app_paths.py_dir)
-
-    # ************************************************
-    # Force working pip from bootstrap.pypa.io
-    # ************************************************
-    if 'get-pip.py' not in os.listdir(app_paths.temp_dir):
-        download('https://bootstrap.pypa.io/get-pip.py', app_paths.temp_dir.joinpath('get-pip.py'))
-
-    subprocess.call([app_paths.python_bin, "-E", app_paths.temp_dir.joinpath('get-pip.py')])
-
-
 def pipinstall(libname):
     subprocess.call([app_paths.python_bin, "-E", "-m", "pip", 'install', libname, '--no-warn-script-location'])
 
@@ -478,22 +451,34 @@ def is_pip(pname):
     return True
 
 
-def get_r():
-    get_program(
-        "https://cran.r-project.org/bin/windows/base/",
-        "https://cran.r-project.org/bin/windows/base/",
-        outdir=app_paths.rpath,
-        link_tester=lambda x: x.startswith('R') and x.endswith('-win.exe'),
-        extract_tester=lambda: app_paths.rbin.is_file(),
-        extractor=lambda x, y: subprocess.call([
-            x,
-            "/SUPPRESSMSGBOXES",
-            "/SP-",
-            "/VERYSILENT",
-            f"/DIR={y}",
-            "/NOICONS"
-        ])
-    )
+def get_r(version):
+
+    """
+    if app_paths.python_bin.exists() and prs.test_version_of_python_exe_using_subprocess(app_paths.python_bin, version):
+        return
+
+    rmtree_exist_ok(app_paths.py_dir)
+    url = prs.get_winpython_version_link(version)
+    filename = Path(url).name
+    dlpath = app_paths.temp_dir.joinpath(filename)
+    if not dlpath.exists():
+        download(url, dlpath)
+
+    extract_file(dlpath, app_paths.py_dir)
+
+    """
+
+    if app_paths.r_bin.exists() and prs.test_version_of_r_exe_using_subprocess(app_paths.r_bin, version):
+        return
+
+    rmtree_exist_ok(app_paths.r_dir)
+    url = prs.get_r_version_link(version)
+    filename = Path(url).name
+    dlpath = app_paths.temp_dir.joinpath(filename)
+    if not dlpath.exists():
+        download(url, dlpath)
+
+    subprocess.call([dlpath, "/SUPPRESSMSGBOXES", "/SP-", '/VERYSILENT', f'/DIR={app_paths.r_dir}', '/COMPONENTS=main,x64', "/NOICONS"])
 
 
 def get_mintty(icon: Union[_Path, None] = None):
@@ -553,7 +538,7 @@ def get_mintty(icon: Union[_Path, None] = None):
 
 def rinstall(libname):
     subprocess.call([
-        app_paths.rbin,
+        app_paths.r_bin,
         '-e',
         f"if(! '{libname}' %in% installed.packages()){{ install.packages('{libname}', repos='http://cran.us.r-project.org') }}"])
 

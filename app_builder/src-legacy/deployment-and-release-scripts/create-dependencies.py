@@ -12,7 +12,6 @@ from path import Path as _Path
 
 allow_relative_location_imports('.')
 import misc
-import collections.abc
 import app_paths
 
 """
@@ -20,6 +19,16 @@ Download/install python and R and other dependencies
 """
 
 config = misc.get_config()
+
+
+def split_prog_version(s: str):
+    if " " in s:
+        splt = s.split(" ")
+        if len(splt) != 2:
+            raise ValueError(f"Invalid version string: {s}")
+        return splt[0], splt[1]
+
+    return s, None
 
 
 def create_all_dependencies():
@@ -35,14 +44,14 @@ def create_all_dependencies():
     shutil.copy(app_paths.deployment_and_release_scripts_dir.joinpath("..", "bin", "7z.dll"),
                 app_paths.app_dir.joinpath("bin", "7z.dll"))
 
-    # legacy support for spelling mistake "dependancies"
     for key, value in config.get("dependencies", {}).items():
 
         # install python (if used)
         # add pip stuff, add logging information
         if key.lower().startswith("python"):
 
-            misc.get_python()
+            _, version = split_prog_version(key)
+            misc.get_python(version)
             if misc.islistlike(value):
                 misc.pipinstall_requirements(value)
 
@@ -64,28 +73,29 @@ def create_all_dependencies():
             print("Purge __pycache__ files")
             for file in app_paths.py_dir.rglob("*"):
                 if file.name == "__pycache__" and file.is_dir():
-                    shutil.rmtree(file)
+                    misc.rmtree(file)
 
         # install R (if used)
-        elif key.lower() == "r":
-            misc.get_r()
+        if key.lower().startswith("r"):
+            _, version = split_prog_version(key)
+            misc.get_r(version)
             if misc.islistlike(value):
                 for dep in value:
                     misc.rinstall(dep)
 
             print("Purge any R docs and i386 files")
-            if app_paths.rpath.joinpath('unins000.dat').is_file():
-                os.remove(app_paths.rpath.joinpath('unins000.dat'))
+            if app_paths.r_dir.joinpath('unins000.dat').is_file():
+                os.remove(app_paths.r_dir.joinpath('unins000.dat'))
 
-            if app_paths.rpath.joinpath('unins000.exe').is_file():
-                os.remove(app_paths.rpath.joinpath('unins000.exe'))
+            if app_paths.r_dir.joinpath('unins000.exe').is_file():
+                os.remove(app_paths.r_dir.joinpath('unins000.exe'))
 
-            shutil.rmtree(app_paths.rpath.joinpath('bin/i386'), ignore_errors=True)
-            shutil.rmtree(app_paths.rpath.joinpath('doc'), ignore_errors=True)
+            misc.rmtree(app_paths.r_dir.joinpath('bin/i386'), ignore_errors=True)
+            misc.rmtree(app_paths.r_dir.joinpath('doc'), ignore_errors=True)
 
-            for libdir in app_paths.rpath.joinpath('library').glob("*"):
-                shutil.rmtree(libdir.joinpath('libs/i386'), ignore_errors=True)
-                shutil.rmtree(libdir.joinpath('doc'), ignore_errors=True)
+            for libdir in app_paths.r_dir.joinpath('library').glob("*"):
+                misc.rmtree(libdir.joinpath('libs/i386'), ignore_errors=True)
+                misc.rmtree(libdir.joinpath('doc'), ignore_errors=True)
 
         elif key.lower() == "pandoc" and value:
             misc.get_pandoc()
@@ -94,8 +104,6 @@ def create_all_dependencies():
             if app_paths.app_dir.joinpath("bin", "pandoc", "pandoc-citeproc.exe").is_file():
                 os.remove(app_paths.app_dir.joinpath("bin", "pandoc", "pandoc-citeproc.exe"))
 
-        elif key.lower() == "minipython" and value:
-            misc.get_minipython()
 
         elif key.lower() == "julia" and (value or value == {}):
             misc.get_julia()
