@@ -202,8 +202,13 @@ def flatextract_file(archive, destdir, force=True):
 
 
 def download(dlurl, dest):
+    dest = Path(dest)
     print(f'Download {dlurl} to {dest}')
-    os.makedirs(_Path(dest).dirname(), exist_ok=True)
+    tmploc = Path(tempfile.gettempdir(), "app-builder-downloads", Path(tempfile.TemporaryDirectory()).name, dest.name)
+
+    os.makedirs(dest.parent, exist_ok=True)
+    os.makedirs(tmploc.parent, exist_ok=True)
+
     if subprocess.call([app_paths.ps_bin, '-Command', 'gcm Invoke-WebRequest'],
                        stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL) == 0:
@@ -212,7 +217,7 @@ def download(dlurl, dest):
         subprocess.call([
             app_paths.ps_bin,
             "-Command",
-            f"Invoke-WebRequest '{dlurl}' -OutFile '{dest}'"
+            f"Invoke-WebRequest '{dlurl}' -OutFile '{tmploc}'"
         ])
 
     else:
@@ -220,8 +225,14 @@ def download(dlurl, dest):
         subprocess.call([
             app_paths.ps_bin,
             "-Command",
-            f"(New-Object Net.WebClient).DownloadFile('{dlurl}', '{dest}')"
+            f"(New-Object Net.WebClient).DownloadFile('{dlurl}', '{tmploc}')"
         ])
+
+    if dest.exists():
+        os.remove(dest)
+
+    # Only move after successful download
+    shutil.move(tmploc, dest)
 
 
 def islistlike(x):
