@@ -51,9 +51,11 @@ Github.com and follow from step (1):
 (3) Select scopes -> choose only "Full control of private repositories":
     [x] repo
       [x] repo:status
-      [x] repo_tools ...
+      [x] repo_deployment
+      ...
       [x] security_events
-    [ ] write:packages ...
+    [ ] write:packages 
+    ...
     [ ] admin:gpg_key
 
 (4) Copy the newly generated ac89b6d5-like token and paste it here.
