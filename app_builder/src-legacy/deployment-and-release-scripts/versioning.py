@@ -25,7 +25,7 @@ def get_githuburl():
         if giturl is None:
             return None
 
-        giturl = giturl.split('@')[-1].replace('.git', "").replace(':', "/")
+        giturl = (giturl.split('@')[-1] if "@" in giturl else giturl).replace('.git', "").replace(':', "/")
         if giturl.startswith('github.com'):
             giturl = f"https://{giturl}"
 
