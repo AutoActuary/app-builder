@@ -18,6 +18,10 @@ def get_winpython_version_link(version):
     """
     >>> get_winpython_version_link("3.8.2")
     'https://github.com/winpython/winpython/releases/download/2.3.20200319/Winpython64-3.8.2.0dot.exe'
+
+    >>> get_winpython_version_link(None) # doctest: +ELLIPSIS
+    'https://github.com/winpython/winpython/releases/download/.../Winpython...exe'
+
     """
 
     if version is None:
