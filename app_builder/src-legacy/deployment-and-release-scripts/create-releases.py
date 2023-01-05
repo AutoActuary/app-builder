@@ -182,7 +182,7 @@ def create_releases(version=None):
     # **********************************************
     # Zip all the application files as one thing
     # **********************************************
-    zipext = f".{config.get('compression', '7z')}"
+    zipext = f".{config['application'].get('compression', '7z')}"
     if zipext not in (".zip", ".7z"):
         raise RuntimeError(f"Unknown compression type: {zipext[1:]}; required to be either 'zip' or '7z'")
 
