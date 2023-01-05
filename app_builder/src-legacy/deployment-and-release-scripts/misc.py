@@ -599,7 +599,7 @@ def mapped_zip(zippath,
         # https://stackoverflow.com/a/28474846
         if copymode:
             mode = ["-mx0"]
-        elif str(outpath)[-4:].lower() == ".zip":
+        elif str(zip_out)[-4:].lower() == ".zip":
             mode = []
         else:
             mode = ["-t7z", "-m0=lzma2:d1024m", "-mx=9", "-aoa", "-mfb=64", "-md=32m", "-ms=on"]
