@@ -197,7 +197,12 @@ def create_7zip_from_include_exclude_and_rename_list(
 
     # Lastly, zip everything from 1:1 mapping, then from the copied non-1:1 mapping
     # https://stackoverflow.com/a/28474846
-    mode = ["-mx0"] if copymode else ["-t7z", "-m0=lzma2:d1024m", "-mx=9", "-aoa", "-mfb=64", "-md=32m", "-ms=on"]
+    if copymode:
+        mode = ["-mx0"]
+    elif str(outpath)[-4:].lower() == ".zip":
+        mode = []
+    else:
+        mode = ["-t7z", "-m0=lzma2:d1024m", "-mx=9", "-aoa", "-mfb=64", "-md=32m", "-ms=on"]
 
     if not append:
         try:
