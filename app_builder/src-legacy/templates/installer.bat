@@ -81,9 +81,9 @@ if /I "%installdir%" EQU "" (
 :: ====== Find the zipfile to extract ======
 
 :: different location on server and development
-set "zipfile=%~dp0..\releases\%progname%.7z"
-if exist "%~dp0%progname%.7z" (
-    set "zipfile=%~dp0%progname%.7z"
+set "zipfile=%~dp0%progname%.7z"
+if exist "%~dp0%progname%.zip" (
+    set "zipfile=%~dp0%progname%.zip"
 )
 call :FULL-FILE-PATH zipfile "%zipfile%"
 
