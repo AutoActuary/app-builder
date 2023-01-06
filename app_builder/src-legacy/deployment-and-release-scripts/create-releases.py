@@ -202,7 +202,7 @@ def create_releases(version=None):
         mapping = config['application']['programdata'] + [
             ["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
             [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"],
-            [f"{config['application']['icon']}", "./bin/icon.ico"]],
+            [f"{config['application']['icon']}", "./bin/icon.ico"]]
 
 
         misc.mapped_zip(programzip,
