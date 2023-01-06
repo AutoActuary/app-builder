@@ -89,6 +89,10 @@ call :FULL-FILE-PATH zipfile "%zipfile%"
 
 
 :: ====== Remove previous versions  ======
+
+:: Remove program registration
+call powershell -nop -exec bypass -c "Remove-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%1' -Force"
+
 :: Forceful delete method
 if exist "%installdir%\bin\python\python.exe" if exist "%installdir%\tools\deploy-scripts\tools\remove-and-kill-directory.py" (
     goto :remove-and-kill-routine
@@ -168,6 +172,8 @@ copy "%installdir%\Uninstall %progname%.lnk" "%menudir%\Uninstall %progname%.lnk
 
 :skipaddingshortcuts
 
+call :REGISTER-PROGRAM "%progname%" "%installdir%"
+
 :: ====== Should we keep the bin directory  ======
 if "%keepbindir%" equ "0" call :DELETE-DIRECTORY "%installdir%\bin"
 
@@ -232,6 +238,22 @@ goto :EOF
 
 goto :EOF
 
+
+:: ***********************************************
+:: Register Uninstaller
+:: ***********************************************
+:REGISTER-PROGRAM <progname> <installdir>
+    setlocal
+
+    call powershell -nop -exec bypass -c "Remove-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%1' -Force"
+
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' -Name '%1'"
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%1' -Name DisplayIcon -Value '%~2\bin\icon.ico'"
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%1' -Name DisplayName -Value '%1'"
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%1' -Name InstallLocation -Value '%~2'"
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%1' -Name UninstallString -Value '%~2\bin\Uninstall %1.bat'"
+
+goto :EOF
 
 :: ***********************************************
 :: Windows del command is too limited
