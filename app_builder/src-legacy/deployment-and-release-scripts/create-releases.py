@@ -201,7 +201,8 @@ def create_releases(version=None):
     if data_fields == {'programdata'}:
         mapping = config['application']['programdata'] + [
             ["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
-            [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"]]
+            [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"],
+            [f"{config['application']['icon']}", "./bin/icon.ico"]],
 
 
         misc.mapped_zip(programzip,
@@ -250,7 +251,8 @@ def create_releases(version=None):
         globs_exclude = []
         paths_rename = []
         for i, j in [["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
-                     [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"]]:
+                     [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"],
+                     [f"{config['application']['icon']}", "./bin/icon.ico"]]:
 
             globs_include.append(i)
             paths_rename.append([i, j])
