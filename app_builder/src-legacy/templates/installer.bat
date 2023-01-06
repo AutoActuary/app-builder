@@ -148,6 +148,10 @@ echo () This may take a while...
 
 
 call "%sevenzbin%" x -y "-o%installdir%" "%zipfile%" > nul
+set "sevenzerr=%errorlevel%"
+
+if "%sevenzerr%" equ "0" call "%sevenzbin%" x -y "-o%installdir%" "%zipfile%" > nul
+if "%sevenzerr%" neq "0" call :UNZIP-WITH-EXPLORER "%zipfile%" "%installdir%"
 set "extractflag=%errorlevel%"
 
 
@@ -183,10 +187,9 @@ if "%extractflag%" NEQ "0" (
 
 :: ================================================
 :: This is where we store the .bat subroutines
-::    =/\                 /\=
-::    / \'._   (\_/)   _.'/ \
-::   / .''._'--(o.o)--'_.''. \
-::  /_.' `\;-,'\___/',-;/` '._\
+::     /\'._   (\_/)   _.'/\
+::    /.''._'--(o.o)--'_.''.\
+::   /.' `\;-,'\___/',-;/` '.\
 ::             "   "          
 goto :EOF
 
@@ -194,8 +197,18 @@ goto :EOF
 :: ***********************************************
 :: Get full file path
 :: ***********************************************
-:FULL-FILE-PATH <%~1 outputvarname> <%~2 path>
+:FULL-FILE-PATH <outputvarname> <path>
     set "%~1=%~f2"
+goto :EOF
+
+
+:: ***********************************************
+:: Unzip using default Windows mechanism 
+:: ***********************************************
+:UNZIP-WITH-EXPLORER <inputzip> <outputdir>
+    mkdir "%~2" >nul 2>&1
+    call powershell -nop -exec bypass -c "$sa = New-Object -ComObject Shell.Application; $in = $sa.NameSpace('%~1'); $out = $sa.NameSpace('%~2'); $out.CopyHere($in.Items(), 16)"
+
 goto :EOF
 
 
@@ -215,8 +228,7 @@ goto :EOF
     if "%~4" NEQ "" set "ico=$s.IconLocation='%~4,0'"
     set "save=$s.Save()"
     
-    ::string it together in one powershell command
-    call powershell "%dest%;%src%;%args%;%ico%;%save%"
+    call powershell -nop -exec bypass -c "%dest%;%src%;%args%;%ico%;%save%"
 
 goto :EOF
 
@@ -226,7 +238,7 @@ goto :EOF
 :: ***********************************************
 :DELETE-DIRECTORY <dirname>
     if not exist "%~1" ( goto :EOF )
-    powershell -Command "Remove-Item -LiteralPath '%~1' -Force -Recurse"
+    powershell -nop -exec bypass -c "Remove-Item -LiteralPath '%~1' -Force -Recurse"
 
 goto :EOF
 
