@@ -245,13 +245,13 @@ goto :EOF
 :REGISTER-PROGRAM <progname> <installdir>
     setlocal
 
-    call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%1' -Force"
+    call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' -Force"
 
-    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' -Name '%1'"
-    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%1' -Name DisplayIcon -Value '%~2\bin\icon.ico'"
-    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%1' -Name DisplayName -Value '%1'"
-    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%1' -Name InstallLocation -Value '%~2'"
-    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%1' -Name UninstallString -Value '%~2\bin\Uninstall %1.bat'"
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' -Name '%~1'"
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' -Name DisplayIcon -Value '%~2\bin\icon.ico'"
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' -Name DisplayName -Value '%~1'"
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' -Name InstallLocation -Value '%~2'"
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' -Name UninstallString -Value '%~2\bin\Uninstall %~1.bat'"
 
 goto :EOF
 
