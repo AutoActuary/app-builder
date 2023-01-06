@@ -91,7 +91,7 @@ call :FULL-FILE-PATH zipfile "%zipfile%"
 :: ====== Remove previous versions  ======
 
 :: Remove program registration
-call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%progname%' -Force"
+call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%progname%' -Recurse -Force -Confirm:$false"
 
 :: Forceful delete method
 if exist "%installdir%\bin\python\python.exe" if exist "%installdir%\tools\deploy-scripts\tools\remove-and-kill-directory.py" (
@@ -245,8 +245,7 @@ goto :EOF
 :REGISTER-PROGRAM <progname> <installdir>
     setlocal
 
-    call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' -Force"
-
+    call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' -Recurse -Force -Confirm:$false"
     call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' -Name '%~1'"
     call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name DisplayIcon -Value '%~2\bin\icon.ico'"
     call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name DisplayName -Value '%~1'"
