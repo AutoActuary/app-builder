@@ -91,7 +91,7 @@ call :FULL-FILE-PATH zipfile "%zipfile%"
 :: ====== Remove previous versions  ======
 
 :: Remove program registration
-call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%progname%' -Recurse -Force -Confirm:$false"
+call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%progname%' -Recurse -Force -Confirm:$false" > nul 2>&1
 
 :: Forceful delete method
 if exist "%installdir%\bin\python\python.exe" if exist "%installdir%\tools\deploy-scripts\tools\remove-and-kill-directory.py" (
@@ -245,12 +245,12 @@ goto :EOF
 :REGISTER-PROGRAM <progname> <installdir>
     setlocal
 
-    call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' -Recurse -Force -Confirm:$false"
-    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' -Name '%~1'"
-    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name DisplayIcon -Value '%~2\bin\icon.ico'"
-    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name DisplayName -Value '%~1'"
-    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name InstallLocation -Value '%~2'"
-    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name UninstallString -Value '%~2\bin\Uninstall %~1.bat'"
+    call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' -Recurse -Force -Confirm:$false" > nul 2>&1
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' -Name '%~1'" > nul 2>&1
+    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name DisplayIcon -Value '%~2\bin\icon.ico'" > nul 2>&1
+    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name DisplayName -Value '%~1'" > nul 2>&1
+    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name InstallLocation -Value '%~2'" > nul 2>&1
+    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name UninstallString -Value '%~2\bin\Uninstall %~1.bat'" > nul 2>&1
 
 goto :EOF
 

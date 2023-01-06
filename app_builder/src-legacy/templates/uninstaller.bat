@@ -50,6 +50,7 @@ for %%d in (. bin src scripts) do for %%x in (bat cmd) do (
 )
 
 :: ====== Delete the known locations ======
+call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%progname%' -Recurse -Force -Confirm:$false" > nul 2>&1
 
 :: Forceful delete method
 if exist "%installdir%\bin\python\python.exe" if exist "%installdir%\tools\deploy-scripts\tools\remove-and-kill-directory.py" (
