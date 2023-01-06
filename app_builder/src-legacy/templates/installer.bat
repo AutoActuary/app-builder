@@ -246,11 +246,11 @@ goto :EOF
     setlocal
 
     call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' -Recurse -Force -Confirm:$false" > nul 2>&1
-    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' -Name '%~1'" > nul 2>&1
-    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name DisplayIcon -Value '%~2\bin\icon.ico'" > nul 2>&1
-    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name DisplayName -Value '%~1'" > nul 2>&1
-    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name InstallLocation -Value '%~2'" > nul 2>&1
-    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name UninstallString -Value [char]34+'%~2\bin\Uninstall %~1.bat'+[char]34" > nul 2>&1
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' -Name '%~1'" > nul
+    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name DisplayIcon -Value '%~2\bin\icon.ico'" > nul
+    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name DisplayName -Value '%~1'" > nul
+    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name InstallLocation -Value '%~2'" > nul
+    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name UninstallString -Value ([char]34 + '%~2\bin\Uninstall %~1.bat' + [char]34)" > nul
 
 goto :EOF
 
