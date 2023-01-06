@@ -147,7 +147,7 @@ echo () Installing to %installdir%
 echo () This may take a while...
 
 
-call "%sevenzbin%" x -y "-o%installdir%" "%zipfile%" > nul
+call "%sevenzbin%" -h > nul 2>&1
 set "sevenzerr=%errorlevel%"
 
 if "%sevenzerr%" equ "0" call "%sevenzbin%" x -y "-o%installdir%" "%zipfile%" > nul
