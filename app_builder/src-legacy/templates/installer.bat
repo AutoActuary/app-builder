@@ -80,11 +80,11 @@ if /I "%installdir%" EQU "" (
 
 :: ====== Find the zipfile to extract ======
 
-:: different location on server and development
-set "zipfile=%~dp0%progname%.7z"
-if exist "%~dp0%progname%.zip" (
-    set "zipfile=%~dp0%progname%.zip"
-)
+:: Directory or zip file or 7z file
+set "zipfile=%~dp0%progname%" & set "zipisdir=1"
+if exist "%~dp0%progname%.zip" ( set "zipfile=%~dp0%progname%.zip" & set "zipisdir=0" )
+if exist "%~dp0%progname%.7z" ( set "zipfile=%~dp0%progname%.7z" & set "zipisdir=0" )
+
 call :FULL-FILE-PATH zipfile "%zipfile%"
 
 
@@ -154,9 +154,16 @@ echo () This may take a while...
 call "%sevenzbin%" -h > nul 2>&1
 set "sevenzerr=%errorlevel%"
 
-if "%sevenzerr%" equ "0" call "%sevenzbin%" x -y "-o%installdir%" "%zipfile%" > nul
-if "%sevenzerr%" neq "0" call :UNZIP-WITH-EXPLORER "%zipfile%" "%installdir%"
+if "%zipisdir%" equ "1" (
+    robocopy "%zipfile%" "%installdir%" /E /J /MT:4 /DCOPY:DATE /IS /IT /IM /X /V /NFL
+) else (
+    if "%sevenzerr%" equ "0" call "%sevenzbin%" x -y "-o%installdir%" "%zipfile%" > nul
+    if "%sevenzerr%" neq "0" call :UNZIP-WITH-EXPLORER "%zipfile%" "%installdir%"
+)
+
 set "extractflag=%errorlevel%"
+if "%zipisdir%" equ "1" if  %errorlevel% lss 8 set "extractflag=0"
+
 
 
 :: ====== Create Shortcuts and Menu items  ======
