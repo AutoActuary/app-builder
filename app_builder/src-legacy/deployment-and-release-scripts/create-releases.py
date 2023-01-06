@@ -182,7 +182,11 @@ def create_releases(version=None):
     # **********************************************
     # Zip all the application files as one thing
     # **********************************************
-    programzip = app_paths.tools_dir.joinpath('releases', config['application']['name'] + ".7z")
+    zipext = f".{config['application'].get('compression', '7z')}"
+    if zipext not in (".zip", ".7z"):
+        raise RuntimeError(f"Unknown compression type: {zipext[1:]}; required to be either 'zip' or '7z'")
+
+    programzip = app_paths.tools_dir.joinpath('releases', config['application']['name'] + zipext)
 
     data_fields = {'programdata', 'data'}.intersection(config['application'])
     if len(data_fields) == 2:
@@ -197,7 +201,8 @@ def create_releases(version=None):
     if data_fields == {'programdata'}:
         mapping = config['application']['programdata'] + [
             ["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
-            [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"]]
+            [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"],
+            [f"{config['application']['icon']}", "./bin/icon.ico"]]
 
 
         misc.mapped_zip(programzip,
@@ -246,7 +251,8 @@ def create_releases(version=None):
         globs_exclude = []
         paths_rename = []
         for i, j in [["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
-                     [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"]]:
+                     [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"],
+                     [f"{config['application']['icon']}", "./bin/icon.ico"]]:
 
             globs_include.append(i)
             paths_rename.append([i, j])

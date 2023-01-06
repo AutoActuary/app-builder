@@ -89,6 +89,10 @@ call :FULL-FILE-PATH zipfile "%zipfile%"
 
 
 :: ====== Remove previous versions  ======
+
+:: Remove program registration
+call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%progname%' -Recurse -Force -Confirm:$false" > nul 2>&1
+
 :: Forceful delete method
 if exist "%installdir%\bin\python\python.exe" if exist "%installdir%\tools\deploy-scripts\tools\remove-and-kill-directory.py" (
     goto :remove-and-kill-routine
@@ -147,7 +151,11 @@ echo () Installing to %installdir%
 echo () This may take a while...
 
 
-call "%sevenzbin%" x -y "-o%installdir%" "%zipfile%" > nul
+call "%sevenzbin%" -h > nul 2>&1
+set "sevenzerr=%errorlevel%"
+
+if "%sevenzerr%" equ "0" call "%sevenzbin%" x -y "-o%installdir%" "%zipfile%" > nul
+if "%sevenzerr%" neq "0" call :UNZIP-WITH-EXPLORER "%zipfile%" "%installdir%"
 set "extractflag=%errorlevel%"
 
 
@@ -163,6 +171,8 @@ copy "%installdir%\Uninstall %progname%.lnk" "%menudir%\Uninstall %progname%.lnk
 ::__shortcuts__
 
 :skipaddingshortcuts
+
+call :REGISTER-PROGRAM "%progname%" "%installdir%"
 
 :: ====== Should we keep the bin directory  ======
 if "%keepbindir%" equ "0" call :DELETE-DIRECTORY "%installdir%\bin"
@@ -183,10 +193,9 @@ if "%extractflag%" NEQ "0" (
 
 :: ================================================
 :: This is where we store the .bat subroutines
-::    =/\                 /\=
-::    / \'._   (\_/)   _.'/ \
-::   / .''._'--(o.o)--'_.''. \
-::  /_.' `\;-,'\___/',-;/` '._\
+::     /\'._   (\_/)   _.'/\
+::    /.''._'--(o.o)--'_.''.\
+::   /.' `\;-,'\___/',-;/` '.\
 ::             "   "          
 goto :EOF
 
@@ -194,8 +203,18 @@ goto :EOF
 :: ***********************************************
 :: Get full file path
 :: ***********************************************
-:FULL-FILE-PATH <%~1 outputvarname> <%~2 path>
+:FULL-FILE-PATH <outputvarname> <path>
     set "%~1=%~f2"
+goto :EOF
+
+
+:: ***********************************************
+:: Unzip using default Windows mechanism 
+:: ***********************************************
+:UNZIP-WITH-EXPLORER <inputzip> <outputdir>
+    mkdir "%~2" >nul 2>&1
+    call powershell -nop -exec bypass -c "$sa = New-Object -ComObject Shell.Application; $in = $sa.NameSpace('%~1'); $out = $sa.NameSpace('%~2'); $out.CopyHere($in.Items(), 16)"
+
 goto :EOF
 
 
@@ -215,18 +234,32 @@ goto :EOF
     if "%~4" NEQ "" set "ico=$s.IconLocation='%~4,0'"
     set "save=$s.Save()"
     
-    ::string it together in one powershell command
-    call powershell "%dest%;%src%;%args%;%ico%;%save%"
+    call powershell -nop -exec bypass -c "%dest%;%src%;%args%;%ico%;%save%"
 
 goto :EOF
 
+
+:: ***********************************************
+:: Register Uninstaller
+:: ***********************************************
+:REGISTER-PROGRAM <progname> <installdir>
+    setlocal
+
+    call powershell -nop -exec bypass -c "Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' -Recurse -Force -Confirm:$false" > nul 2>&1
+    call powershell -nop -exec bypass -c "New-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' -Name '%~1'" > nul
+    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name DisplayIcon -Value '%~2\bin\icon.ico'" > nul
+    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name DisplayName -Value '%~1'" > nul
+    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name InstallLocation -Value '%~2'" > nul
+    call powershell -nop -exec bypass -c "Get-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%~1' | New-ItemProperty -Name UninstallString -Value ([char]34 + '%~2\bin\Uninstall %~1.bat' + [char]34)" > nul
+
+goto :EOF
 
 :: ***********************************************
 :: Windows del command is too limited
 :: ***********************************************
 :DELETE-DIRECTORY <dirname>
     if not exist "%~1" ( goto :EOF )
-    powershell -Command "Remove-Item -LiteralPath '%~1' -Force -Recurse"
+    powershell -nop -exec bypass -c "Remove-Item -LiteralPath '%~1' -Force -Recurse"
 
 goto :EOF
 
