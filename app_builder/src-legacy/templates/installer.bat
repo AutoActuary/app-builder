@@ -16,7 +16,6 @@ set "all_params=;%~1;%~2;%~3;%~4;%~5;%~6;%~7;%~8;%~9;"
 set "pauseatend=1"
 set "silentinstall=0"
 if "%all_params:;--silent-install;=%" NEQ "%all_params%" (
-    echo ^(^) Activate silent installation
     set "pauseatend=0"
     set "silentinstall=1"
 )
@@ -46,7 +45,11 @@ if exist "%~dp0bin\7z.exe"    ( set "sevenzbin=%~dp0bin\7z.exe"    )
 :: Set the start menu directory
 set "menudir=%AppData%\Microsoft\Windows\Start Menu\Programs\%menuname%"
 
-if "%silentinstall%" EQU "1" goto :exitchoice
+
+if "%silentinstall%" EQU "1" (
+    echo ^(^) Activate silent installation
+    goto :exitchoice
+)
 
 :: ====== Installation directory presets ======
 set "dirchoices=[Y/N/D]"
