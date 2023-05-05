@@ -1,20 +1,26 @@
 @echo off
 setlocal
 
+:: Templated parameters
 set "progname=__name__"
 set "installdir=__installdir__"
-
 set "addshortcuts=__addshortcuts__"
 set "keepbindir=__keepbindir__"
 set "suppressdirchoice=__suppressdirchoice__"
 set "menuname=__menuname__"
 
-:: ====== Pause at the end  ======
-if "%~1" NEQ "" (goto :continuebat)
-    call "%~dp0\%~n0" 1
-    pause
-    exit /b %errorlevel%
-:continuebat
+
+:: Commandline and global parameters
+set "all_params=;%~1;%~2;%~3;%~4;%~5;%~6;%~7;%~8;%~9;"
+
+set "pauseatend=1"
+set "silentinstall=0"
+if "%all_params:;--silent-install;=%" NEQ "%all_params%" (
+    echo ^(^) Activate silent installation
+    set "pauseatend=0"
+    set "silentinstall=1"
+)
+
 
 :: ====== Start the install script ======
 cls
@@ -40,6 +46,7 @@ if exist "%~dp0bin\7z.exe"    ( set "sevenzbin=%~dp0bin\7z.exe"    )
 :: Set the start menu directory
 set "menudir=%AppData%\Microsoft\Windows\Start Menu\Programs\%menuname%"
 
+if "%silentinstall%" EQU "1" goto :exitchoice
 
 :: ====== Installation directory presets ======
 set "dirchoices=[Y/N/D]"
@@ -58,7 +65,7 @@ if "%suppressdirchoice%" equ "0" Echo   [D]irectory: choose my own directory
 Echo:
 set /P c="Install and overwrite %progname% to %installdir% %dirchoices%? "
 if /I "%c%" EQU "Y" goto :exitchoice
-if /I "%c%" EQU "N" goto :EOF
+if /I "%c%" EQU "N" goto :EOF-PAUSE
 if /I "%c%" EQU "D" goto :selectdir
 goto :choice
 :selectdir
@@ -67,13 +74,13 @@ call :BROWSE-FOR-FOLDER installdir
 if /I "%installdir%" EQU "Dialog Cancelled" (
     ECHO: 1>&2
     ECHO Dialog box cancelled 1>&2
-    goto :EOF
+    goto :EOF-PAUSE
 )
 
 if /I "%installdir%" EQU "" (
     ECHO: 1>&2
     ECHO Error, folder selection broke 1>&2
-    goto :EOF
+    goto :EOF-PAUSE
 )
 :exitchoice
 
@@ -111,7 +118,7 @@ call "%installdir%\bin\python\python.exe" "%installdir%\tools\deploy-scripts\too
 :: If the user clicked "Cancel" when Excel is locking a PID, python exits with errorlevel 111
 if "%errorlevel%" equ "111" (
     echo Installation cancelled
-    goto :EOF
+    goto :EOF-PAUSE
 )
 
 :: Wait for 90 seconds to make sure the directory is deleted then forfully continue
@@ -197,7 +204,7 @@ if "%extractflag%" NEQ "0" (
 ::    /.''._'--(o.o)--'_.''.\
 ::   /.' `\;-,'\___/',-;/` '.\
 ::             "   "          
-goto :EOF
+goto :EOF-PAUSE
 
 
 :: ***********************************************
@@ -292,3 +299,7 @@ goto :EOF
     for %%g in ("_vbs_ _cmd_") do if defined %%g set %%g=
 
 goto :EOF
+
+
+:EOF-PAUSE
+    if "%pauseatend%" EQU "1" pause
