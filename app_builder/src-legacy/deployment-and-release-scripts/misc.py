@@ -442,7 +442,7 @@ def juliainstall_dependencies(libdict: dict):
         with path.open("w") as f:
             toml.dump(reqs, f)
 
-    subprocess.call([app_paths.julia_bin, "-e", "using Pkg; Pkg.resolve(); Pkg.instantiate()"])
+    subprocess.call([app_paths.julia_bin, "-e", "using Pkg; Pkg.update(); Pkg.resolve(); Pkg.instantiate()"])
 
 
 def pipinstall(libname):
