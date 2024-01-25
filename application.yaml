@@ -1,7 +1,6 @@
-app-builder: v0.2.5
+app-builder: v0.5.3
 
 Application:
-
   name: App Builder
   asciibanner: app_builder/src-legacy/assets/asciibanner-AA.txt
   icon: app_builder/src-legacy/assets/autoactuary.ico
@@ -20,3 +19,5 @@ Application:
       - bin/post-dependencies.cmd
       - bin/pre-build.cmd
     
+dependencies:
+    python 3.11.6: []
