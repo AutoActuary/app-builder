@@ -93,7 +93,7 @@ def create_all_dependencies():
                     misc.rmtree(file)
 
         # install R (if used)
-        if is_prog(key, "r"):
+        elif is_prog(key, "r"):
             _, version = split_prog_version(key)
             misc.get_r(version)
             if misc.islistlike(value):
