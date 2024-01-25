@@ -27,15 +27,24 @@ def get_winpython_version_link(version):
     if version is None:
         version = ""
 
-    url = "https://api.github.com/repos/winpython/winpython/releases"
-    response = json.loads(requests.get(url).text)
-    for i, release in enumerate(response):
-        for i in release["assets"]:
-            n = i["name"].lower()
-            if n.endswith("dot.exe"):
-                asset_version = n.replace("winpython64-", "").replace("dot.exe", "")
-                if pattern_match_version(version, asset_version):
-                    return i["browser_download_url"]
+    page = 1
+    while True:
+        url = f"https://api.github.com/repos/winpython/winpython/releases?page={page}&per_page=100"
+        response = json.loads(requests.get(url).text)
+        if not response:  # Break the loop if no data is returned
+            break
+
+        for release in response:
+            for asset in release["assets"]:
+                n = asset["name"].lower()
+                if n.endswith("dot.exe"):
+                    asset_version = n.replace("winpython64-", "").replace("dot.exe", "")
+                    if pattern_match_version(version, asset_version):
+                        return asset["browser_download_url"]
+
+        page += 1
+
+    return None
 
 
 def test_version_of_python_exe_using_subprocess(path_to_python_exe, pattern):
