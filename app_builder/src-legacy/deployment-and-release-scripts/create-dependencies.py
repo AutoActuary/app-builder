@@ -4,7 +4,9 @@ import subprocess
 from pathlib import Path
 from contextlib import suppress
 
-import app_builder
+import uuid
+import tempfile
+from itertools import chain
 from app_builder import git_revision
 
 from locate import allow_relative_location_imports
@@ -56,12 +58,81 @@ def create_all_dependencies():
         app_paths.app_dir.joinpath("bin", "7z.dll"),
     )
 
+
+    def python_post_process():
+        # Added some pip logging information
+        pipversionfile = app_paths.temp_dir.joinpath("..\\pipfreeze.txt")
+        with pipversionfile.open("w") as f:
+            try:
+                pyversion = misc.sh(f'"{app_paths.python_bin}" --version')
+                f.write(pyversion + "\n\n")
+            except Exception as e:
+                print(e)
+            try:
+                pipfreeze = misc.sh(f'"{app_paths.python_bin}" -m pip freeze')
+                f.write(pipfreeze + "\n")
+            except Exception as e:
+                print(e)
+
+        # Delete all __pycache__ from python (+/- 40mb)
+        print("Purge __pycache__ files")
+        for file in app_paths.py_dir.rglob("*"):
+            if file.name == "__pycache__" and file.is_dir():
+                misc.rmtree(file)
+
     for key, value in config.get("dependencies", {}).items():
 
-        # install python (if used)
-        # add pip stuff, add logging information
-        if is_prog(key, "python"):
+        # https://github.com/AutoActuary/app-builder/issues/38
+        if str(key).lower() == "python" and isinstance(value, dict):
 
+            valid_keys = "version", "pip", "requirements", "requirements_files"
+            invalid_keys = list(set(value.keys()) - set(valid_keys))
+            if invalid_keys:
+                raise RuntimeError(
+                    f"Valid keys for `dependencies: python` are {valid_keys}; got {invalid_keys}"
+                )
+
+            version = value.get("version", None)
+            pip = value.get("pip", None)
+            requirements = value.get("requirements", [])
+            requirements_files = value.get("requirements_files", [])
+
+            requirements_tmp = Path(tempfile) / f"{uuid.uuid4()}.txt"
+            requirements_tmp.write_text("\n".join(requirements), encoding="utf-8")
+
+            if pip is not None:
+                subprocess.call(
+                    [
+                        app_paths.python_bin,
+                        "-E",
+                        "-m",
+                        "pip",
+                        "install",
+                        "--upgrade",
+                        f"pip=={pip}",
+                    ]
+                )
+
+            subprocess.call(
+                [
+                    app_paths.python_bin,
+                    "-E",
+                    "-m",
+                    "pip",
+                    "install",
+                    *chain(
+                        *[["-r", f] for f in [requirements_tmp, *requirements_files]]
+                    ),
+                    "--no-warn-script-location",
+                ]
+            )
+
+            requirements_tmp.unlink()
+
+            python_post_process()
+
+        # Legacy way
+        elif is_prog(key, "python"):
             _, version = split_prog_version(key)
             misc.get_python(version)
 
@@ -90,25 +161,7 @@ def create_all_dependencies():
 
                 misc.pipinstall_requirements(value)
 
-            # Added some pip logging information
-            pipversionfile = app_paths.temp_dir.joinpath("..\\pipfreeze.txt")
-            with pipversionfile.open("w") as f:
-                try:
-                    pyversion = misc.sh(f'"{app_paths.python_bin}" --version')
-                    f.write(pyversion + "\n\n")
-                except Exception as e:
-                    print(e)
-                try:
-                    pipfreeze = misc.sh(f'"{app_paths.python_bin}" -m pip freeze')
-                    f.write(pipfreeze + "\n")
-                except Exception as e:
-                    print(e)
-
-            # Delete all __pycache__ from python (+/- 40mb)
-            print("Purge __pycache__ files")
-            for file in app_paths.py_dir.rglob("*"):
-                if file.name == "__pycache__" and file.is_dir():
-                    misc.rmtree(file)
+            python_post_process()
 
         # install R (if used)
         elif is_prog(key, "r"):
