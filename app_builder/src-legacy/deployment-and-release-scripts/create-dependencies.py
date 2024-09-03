@@ -58,7 +58,6 @@ def create_all_dependencies():
         app_paths.app_dir.joinpath("bin", "7z.dll"),
     )
 
-
     def python_post_process():
         # Added some pip logging information
         pipversionfile = app_paths.temp_dir.joinpath("..\\pipfreeze.txt")
@@ -95,7 +94,11 @@ def create_all_dependencies():
             version = value.get("version", None)
             pip = value.get("pip", None)
             requirements = value.get("requirements", [])
-            requirements_files = value.get("requirements_files", [])
+
+            # Relative to app_dir
+            requirements_files = [
+                Path(app_paths.app_dir, i) for i in value.get("requirements_files", [])
+            ]
 
             requirements_tmp = Path(tempfile) / f"{uuid.uuid4()}.txt"
             requirements_tmp.write_text("\n".join(requirements), encoding="utf-8")
@@ -113,22 +116,21 @@ def create_all_dependencies():
                     ]
                 )
 
-            subprocess.call(
-                [
-                    app_paths.python_bin,
-                    "-E",
-                    "-m",
-                    "pip",
-                    "install",
-                    *chain(
-                        *[["-r", f] for f in [requirements_tmp, *requirements_files]]
-                    ),
-                    "--no-warn-script-location",
-                ]
-            )
+            if all_requirements_files := [requirements_tmp, *requirements_files]:
+                subprocess.call(
+                    [
+                        app_paths.python_bin,
+                        "-E",
+                        "-m",
+                        "pip",
+                        "install",
+                        *chain(*[["-r", f] for f in all_requirements_files]),
+                        "--upgrade",
+                        "--no-warn-script-location",
+                    ]
+                )
 
             requirements_tmp.unlink()
-
             python_post_process()
 
         # Legacy way
@@ -160,7 +162,6 @@ def create_all_dependencies():
                     )
 
                 misc.pipinstall_requirements(value)
-
             python_post_process()
 
         # install R (if used)
