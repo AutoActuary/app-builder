@@ -10,7 +10,7 @@ from app_builder import git_revision
 from locate import allow_relative_location_imports
 from path import Path as _Path
 
-allow_relative_location_imports('.')
+allow_relative_location_imports(".")
 import misc
 import app_paths
 
@@ -39,14 +39,22 @@ def create_all_dependencies():
     # implicitly run any script named "pre-dependencies.bat" or "pre-dependencies.cmd" in dedicated locations
     for scriptsdir in [".", "bin", "src", "scripts"]:
         for ext in ("bat", "cmd"):
-            for script in _Path(app_paths.app_dir).joinpath(scriptsdir).glob(f"pre-dependencies.{ext}"):
+            for script in (
+                _Path(app_paths.app_dir)
+                .joinpath(scriptsdir)
+                .glob(f"pre-dependencies.{ext}")
+            ):
                 subprocess.call(script)
 
     os.makedirs(app_paths.app_dir.joinpath("bin"), exist_ok=True)
-    shutil.copy(app_paths.deployment_and_release_scripts_dir.joinpath("..", "bin", "7z.exe"),
-                app_paths.app_dir.joinpath("bin", "7z.exe"))
-    shutil.copy(app_paths.deployment_and_release_scripts_dir.joinpath("..", "bin", "7z.dll"),
-                app_paths.app_dir.joinpath("bin", "7z.dll"))
+    shutil.copy(
+        app_paths.deployment_and_release_scripts_dir.joinpath("..", "bin", "7z.exe"),
+        app_paths.app_dir.joinpath("bin", "7z.exe"),
+    )
+    shutil.copy(
+        app_paths.deployment_and_release_scripts_dir.joinpath("..", "bin", "7z.dll"),
+        app_paths.app_dir.joinpath("bin", "7z.dll"),
+    )
 
     for key, value in config.get("dependencies", {}).items():
 
@@ -56,7 +64,7 @@ def create_all_dependencies():
 
             _, version = split_prog_version(key)
             misc.get_python(version)
-            
+
             if misc.islistlike(value):
                 pip = None
                 value_ = []
@@ -68,13 +76,23 @@ def create_all_dependencies():
                         value_.append(v)
 
                 if pip is not None:
-                    subprocess.call([app_paths.python_bin, "-E", "-m", "pip", 'install', '--upgrade', pip])
+                    subprocess.call(
+                        [
+                            app_paths.python_bin,
+                            "-E",
+                            "-m",
+                            "pip",
+                            "install",
+                            "--upgrade",
+                            pip,
+                        ]
+                    )
 
                 misc.pipinstall_requirements(value)
 
             # Added some pip logging information
             pipversionfile = app_paths.temp_dir.joinpath("..\\pipfreeze.txt")
-            with pipversionfile.open('w') as f:
+            with pipversionfile.open("w") as f:
                 try:
                     pyversion = misc.sh(f'"{app_paths.python_bin}" --version')
                     f.write(pyversion + "\n\n")
@@ -101,26 +119,29 @@ def create_all_dependencies():
                     misc.rinstall(dep)
 
             print("Purge any R docs and i386 files")
-            if app_paths.r_dir.joinpath('unins000.dat').is_file():
-                os.remove(app_paths.r_dir.joinpath('unins000.dat'))
+            if app_paths.r_dir.joinpath("unins000.dat").is_file():
+                os.remove(app_paths.r_dir.joinpath("unins000.dat"))
 
-            if app_paths.r_dir.joinpath('unins000.exe').is_file():
-                os.remove(app_paths.r_dir.joinpath('unins000.exe'))
+            if app_paths.r_dir.joinpath("unins000.exe").is_file():
+                os.remove(app_paths.r_dir.joinpath("unins000.exe"))
 
-            misc.rmtree(app_paths.r_dir.joinpath('bin/i386'), ignore_errors=True)
-            misc.rmtree(app_paths.r_dir.joinpath('doc'), ignore_errors=True)
+            misc.rmtree(app_paths.r_dir.joinpath("bin/i386"), ignore_errors=True)
+            misc.rmtree(app_paths.r_dir.joinpath("doc"), ignore_errors=True)
 
-            for libdir in app_paths.r_dir.joinpath('library').glob("*"):
-                misc.rmtree(libdir.joinpath('libs/i386'), ignore_errors=True)
-                misc.rmtree(libdir.joinpath('doc'), ignore_errors=True)
+            for libdir in app_paths.r_dir.joinpath("library").glob("*"):
+                misc.rmtree(libdir.joinpath("libs/i386"), ignore_errors=True)
+                misc.rmtree(libdir.joinpath("doc"), ignore_errors=True)
 
         elif key.lower() == "pandoc" and value:
             misc.get_pandoc()
 
             # Delete unnecessary file
-            if app_paths.app_dir.joinpath("bin", "pandoc", "pandoc-citeproc.exe").is_file():
-                os.remove(app_paths.app_dir.joinpath("bin", "pandoc", "pandoc-citeproc.exe"))
-
+            if app_paths.app_dir.joinpath(
+                "bin", "pandoc", "pandoc-citeproc.exe"
+            ).is_file():
+                os.remove(
+                    app_paths.app_dir.joinpath("bin", "pandoc", "pandoc-citeproc.exe")
+                )
 
         elif key.lower() == "julia" and (value or value == {}):
             misc.get_julia()
@@ -134,16 +155,19 @@ def create_all_dependencies():
             misc.get_mintty(icon)
 
         elif key.lower() == "deploy-scripts":
-            git_revision.git_download('git@github.com:AutoActuary/deploy-scripts.git',
-                                      app_paths.app_dir.joinpath("tools", "deploy-scripts"), str(value))
+            git_revision.git_download(
+                "git@github.com:AutoActuary/deploy-scripts.git",
+                app_paths.app_dir.joinpath("tools", "deploy-scripts"),
+                str(value),
+            )
 
         else:
-            repo = ''
+            repo = ""
             with suppress(TypeError):
                 repo = str(value[0])
 
-            if 'github.com' in repo:
-                reponame = repo.split('/')[-1].split('.git')[0]
+            if "github.com" in repo:
+                reponame = repo.split("/")[-1].split(".git")[0]
                 checkout = value[1]
                 repopath = app_paths.tools_dir.joinpath(reponame)
 
@@ -152,7 +176,11 @@ def create_all_dependencies():
     # implicitly run any script named "post-dependencies.bat" or "post-dependencies.cmd" in dedicated locations
     for scriptsdir in [".", "bin", "src", "scripts"]:
         for ext in ("bat", "cmd"):
-            for script in _Path(app_paths.app_dir).joinpath(scriptsdir).glob(f"post-dependencies.{ext}"):
+            for script in (
+                _Path(app_paths.app_dir)
+                .joinpath(scriptsdir)
+                .glob(f"post-dependencies.{ext}")
+            ):
                 subprocess.call(script)
 
 
