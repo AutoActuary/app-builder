@@ -1,4 +1,4 @@
-pyyaml==6*
+pyyaml==6.*
 path==16.*
 githubrelease==1.5.*
 locate==1.1.1
