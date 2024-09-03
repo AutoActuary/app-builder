@@ -92,9 +92,14 @@ def create_all_dependencies():
                 )
 
             version = value.get("version", None)
-            pip = value.get("pip", None)
-            requirements = value.get("requirements", [])
+            if version is not None:
+                version = str(version)
 
+            pip = value.get("pip", None)
+            if pip is not None:
+                pip = str(pip)
+                
+            requirements = value.get("requirements", [])
             misc.get_python(version)
 
             # Relative to app_dir
