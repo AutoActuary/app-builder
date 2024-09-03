@@ -1,4 +1,4 @@
-app-builder: v0.5.3
+app-builder: b1afcfb
 
 Application:
   name: App Builder
@@ -20,4 +20,9 @@ Application:
       - bin/pre-build.cmd
     
 dependencies:
-    python 3.11.6: []
+    python:
+      version: 3.11.6
+      pip: 23.2.1
+      requirements_files: [
+        "requirements.txt"
+      ]

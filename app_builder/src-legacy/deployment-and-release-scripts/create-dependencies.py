@@ -95,6 +95,8 @@ def create_all_dependencies():
             pip = value.get("pip", None)
             requirements = value.get("requirements", [])
 
+            misc.get_python(version)
+            
             # Relative to app_dir
             requirements_files = [
                 Path(app_paths.app_dir, i) for i in value.get("requirements_files", [])
