@@ -96,13 +96,13 @@ def create_all_dependencies():
             requirements = value.get("requirements", [])
 
             misc.get_python(version)
-            
+
             # Relative to app_dir
             requirements_files = [
                 Path(app_paths.app_dir, i) for i in value.get("requirements_files", [])
             ]
 
-            requirements_tmp = Path(tempfile) / f"{uuid.uuid4()}.txt"
+            requirements_tmp = Path(tempfile.gettempdir()) / f"{uuid.uuid4()}.txt"
             requirements_tmp.write_text("\n".join(requirements), encoding="utf-8")
 
             if pip is not None:
