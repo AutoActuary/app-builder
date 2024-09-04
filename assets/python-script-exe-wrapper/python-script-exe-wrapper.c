@@ -165,67 +165,43 @@
 
 
     // ********************************************
-    // Py name to be checked
+    // Link to the python file
     // ********************************************
-
     TCHAR* progFile1  = exeBaseDir;
-    TCHAR* progFile2  = L"\\py\\";     //First look in bin
-    TCHAR* progFile3  = L"\\src\\"; //then in scripts
-    TCHAR* progFile4  = L"\\";          //then in same dir
-    TCHAR* progFile5  = progName;
-    TCHAR* progFile6  = L".cmd";        //Try cmd, "", ".sh"
-    TCHAR* progFile7  = L".py";
+    TCHAR* progFile2  = L"\\py\\";
+    TCHAR* progFile3  = progName;
+    TCHAR* progFile4  = L".py";
 
-    totlen = (_tcslen(progFile1)+_tcslen(progFile2)+_tcslen(progFile3)+_tcslen(progFile4)+_tcslen(progFile5)+_tcslen(progFile6)+_tcslen(progFile7));
+    totlen = (_tcslen(progFile1)+_tcslen(progFile2)+_tcslen(progFile3)+_tcslen(progFile4));
 
     TCHAR* progFile;
     progFile = (TCHAR*) malloc((totlen+1)*2);
     progFile[0] = '\0';
     progFile[1] = '\0';
 
-    bool is_bash = false;
-    for(int i=0; i<3; i++){
-        for(int j=0; j<3; j++){
-            _tcscpy(progFile, progFile1);
-            if     (i==0){_tcscat(progFile, progFile2);}
-            else if(i==1){_tcscat(progFile, progFile3);}
-            else if(i==2){_tcscat(progFile, progFile4);}
 
-            //if the directory doesn't exist, break early
-            if(0 != _waccess(progFile, 0)){ break;}
+    //Pick correct cmd sequence sequence
+    _tcscat(progFile, progFile1);
+    _tcscat(progFile, progFile2);
+    _tcscat(progFile, progFile3);
+    _tcscat(progFile, progFile4);
 
-            _tcscat(progFile, progFile5);
-
-            if     (j==0){_tcscat(progFile, progFile6);}
-            else if(j==2){_tcscat(progFile, progFile7);}
-        
-            //test if c:\path\to\progName.ext exists
-            if(0 == _waccess(progFile, 0)){
-                if(j==1 || j ==2){ is_bash = true; }
-
-                goto breakout_launcher;
-            }
-        }
+    if(0 != _waccess(progFile, 0)){
+      system("powershell -command \"[reflection.assembly]::LoadWithPartialName('System.Windows.Forms')|out-null;[windows.forms.messagebox]::Show('Could not find .py file with the same name in src, py, or . directory.', 'Execution error')\" ");
+      exit(-1);
     }
-    system("powershell -command \"[reflection.assembly]::LoadWithPartialName('System.Windows.Forms')|out-null;[windows.forms.messagebox]::Show('Could not find .py file with the same name in src, py, or . directory.', 'Execution error')\" ");
-    exit(-1);
-    breakout_launcher:;
-
 
     // *******************************************
-    // Get into this form: cmd.exe /c ""c:\path\...\python\python.exe" "c:\path\...\python\Scripts\<name>.exe" arg1 ... "
+    // Get into this form: "c:\path\...\python\python.exe" "c:\path\...\python\Scripts\<name>.exe" arg1 ...
     // *******************************************
-    TCHAR* cmdLine1  = L"cmd.exe /c \"";
-    TCHAR* cmdLine2  = L"\"";
-    TCHAR* cmdLine3  = pythonPath;
-    TCHAR* cmdLine4  = L"\" ";
-    TCHAR* cmdLine5  = L"\"";
-    TCHAR* cmdLine6  = progFile;
-    TCHAR* cmdLine7  = L"\" "; 
-    TCHAR* cmdLine8  = cmdArgs;
-    TCHAR* cmdLine9 = L"\"";
+    TCHAR* cmdLine1  = L"\"";
+    TCHAR* cmdLine2  = pythonPath;
+    TCHAR* cmdLine3  = L"\" \"";
+    TCHAR* cmdLine4  = progFile;
+    TCHAR* cmdLine5  = L"\" "; 
+    TCHAR* cmdLine6  = cmdArgs;
 
-    totlen = (_tcslen(cmdLine1)+_tcslen(cmdLine2)+_tcslen(cmdLine3)+_tcslen(cmdLine4)+_tcslen(cmdLine5)+_tcslen(cmdLine6)+_tcslen(cmdLine7)+_tcslen(cmdLine8)+_tcslen(cmdLine9));
+    totlen = (_tcslen(cmdLine1)+_tcslen(cmdLine2)+_tcslen(cmdLine3)+_tcslen(cmdLine4)+_tcslen(cmdLine5)+_tcslen(cmdLine6));
 
     TCHAR* cmdLine;
     cmdLine = (TCHAR*) malloc((totlen+3)*2);
@@ -239,9 +215,6 @@
     _tcscat(cmdLine, cmdLine4);
     _tcscat(cmdLine, cmdLine5);
     _tcscat(cmdLine, cmdLine6);
-    _tcscat(cmdLine, cmdLine7);
-    _tcscat(cmdLine, cmdLine8);
-    _tcscat(cmdLine, cmdLine9);
     
     //_tprintf(cmdLine);
     //_tprintf(L"\n");
