@@ -4,6 +4,7 @@ import fnmatch
 import re
 import locate
 
+
 def iglob(p, pattern):
     rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
     return [f for f in Path(p).glob("*") if rule.match(f.name)]
@@ -20,32 +21,38 @@ def find_application_base_directory(start_dir) -> Path:
 
         parent = d.parent
         if parent == d:  # like "c:" == "c:"
-            raise FileNotFoundError("Expected git repository with `application.yaml` at base!")
+            raise FileNotFoundError(
+                "Expected git repository with `application.yaml` at base!"
+            )
         d = parent
 
     raise FileNotFoundError("Expected git repository with `application.yaml` at base!")
 
 
 # App directories
-deployment_and_release_scripts_dir = locate.this_dir().joinpath('..', 'deployment-and-release-scripts').resolve()
+deployment_and_release_scripts_dir = (
+    locate.this_dir().joinpath("..", "deployment-and-release-scripts").resolve()
+)
 
 app_dir = find_application_base_directory(Path(".").resolve())
-tools_dir = Path(app_dir, 'tools')
-temp_dir = Path(tools_dir, 'temp', 'package-downloads')
+tools_dir = Path(app_dir, "tools")
+temp_dir = Path(tools_dir, "temp", "package-downloads")
 py_dir = Path(app_dir, "bin", "python")
 julia_dir = Path(app_dir, "bin", "julia")
 r_dir = app_dir.joinpath("bin", "r")
 
 # deploy-tools directories
-template_dir = Path(locate.this_dir(), '..', 'templates').resolve()
-asset_dir = Path(locate.this_dir(), '..', "assets").resolve()
+template_dir = Path(locate.this_dir(), "..", "templates").resolve()
+asset_dir = Path(locate.this_dir(), "..", "assets").resolve()
 
 # Binaries
-ps_bin = Path(os.environ['SYSTEMROOT'], 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-sevenz_bin = Path(locate.this_dir(), '..', 'bin', '7z.exe').resolve()
-rcedit_bin = Path(locate.this_dir(), '..', 'bin', 'rcedit.exe').resolve()
-python_bin = Path(py_dir, 'python.exe')
-julia_bin = Path(julia_dir, 'julia.exe')
+ps_bin = Path(
+    os.environ["SYSTEMROOT"], "System32", "WindowsPowerShell", "v1.0", "powershell.exe"
+)
+sevenz_bin = Path(locate.this_dir(), "..", "bin", "7z.exe").resolve()
+rcedit_bin = Path(locate.this_dir(), "..", "bin", "rcedit.exe").resolve()
+python_bin = Path(py_dir, "python.exe")
+julia_bin = Path(julia_dir, "julia.exe")
 r_bin = r_dir.joinpath("bin", "Rscript.exe")
 
 # FIXME: This is an import side effect, and should be moved to a function that we call only when really needed.

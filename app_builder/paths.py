@@ -4,7 +4,9 @@ from locate import this_dir
 import tempfile
 import hashlib
 
-installed_dir = Path(os.environ['LOCALAPPDATA']).joinpath("autoactuary", "app-builder").resolve()
+installed_dir = (
+    Path(os.environ["LOCALAPPDATA"]).joinpath("autoactuary", "app-builder").resolve()
+)
 base_dir = this_dir().parent
 temp_dir = Path(tempfile.gettempdir()).joinpath(f"app-builder-7dfd13678769")
 

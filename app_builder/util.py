@@ -12,7 +12,9 @@ import sys
 
 
 def help():
-    print(dedent("""
+    print(
+        dedent(
+            """
         Usage: app-builder [Options]
         Options:
           -h, --help             Print these options
@@ -20,14 +22,16 @@ def help():
           -l, --local-release    Create a local release
           -g, --github-release   Create a release and upload it to GitHub
           -i, --init             Initiate current git repo as an app-builder project             
-        """))
+        """
+        )
+    )
 
 
 def init():
     gitbase = None
     parts = Path(".").resolve().parts
 
-    for i in range(len(parts)+1, 0, -1):
+    for i in range(len(parts) + 1, 0, -1):
         d = Path("/".join(parts[0:i]))
         if len(list(d.glob(".git"))):
             gitbase = d
@@ -38,7 +42,9 @@ def init():
     appyaml = gitbase.joinpath("application.yaml")
 
     if appyaml.exists():
-        raise RuntimeError(f"Git repository already has an 'application.yaml' file in '{d}'")
+        raise RuntimeError(
+            f"Git repository already has an 'application.yaml' file in '{d}'"
+        )
 
     os.makedirs(dst := gitbase.joinpath("application-templates"), exist_ok=True)
     for i in Path(__file__).resolve().parent.joinpath("assets", "templates").glob("*"):
@@ -46,7 +52,8 @@ def init():
 
     with appyaml.open("w") as f:
         f.write(
-            dedent(r"""
+            dedent(
+                r"""
             app-builder: v0.2.1
             
             application:
@@ -80,10 +87,9 @@ def init():
                 # You can list the packages via pip versioning (i.e. `pyyaml~=5.3`)  
                 - pyyaml
                   
-            """).strip()
+            """
+            ).strip()
         )
-
-
 
 
 @contextmanager
@@ -166,14 +172,14 @@ def comparable_filename(fname):
 
 
 def create_7zip_from_include_exclude_and_rename_list(
-        outpath,
-        basedir,
-        include_list,
-        exclude_list,
-        rename_list = None,
-        copymode=False,
-        append=False,
-        sevenzip_bin="7z"
+    outpath,
+    basedir,
+    include_list,
+    exclude_list,
+    rename_list=None,
+    copymode=False,
+    append=False,
+    sevenzip_bin="7z",
 ):
     r"""
     >>> with tempfile.TemporaryDirectory() as d:
@@ -203,7 +209,15 @@ def create_7zip_from_include_exclude_and_rename_list(
     elif str(outpath)[-4:].lower() == ".zip":
         mode = []
     else:
-        mode = ["-t7z", "-m0=lzma2:d1024m", "-mx=9", "-aoa", "-mfb=64", "-md=32m", "-ms=on"]
+        mode = [
+            "-t7z",
+            "-m0=lzma2:d1024m",
+            "-mx=9",
+            "-aoa",
+            "-mfb=64",
+            "-md=32m",
+            "-ms=on",
+        ]
 
     if not append:
         try:
@@ -218,7 +232,9 @@ def create_7zip_from_include_exclude_and_rename_list(
 
             for i, j in rename_list:
                 if os.path.isabs(j):
-                    raise RuntimeError(f"Can only rename to a relative path (relative to the base of the zip). Got {j}")
+                    raise RuntimeError(
+                        f"Can only rename to a relative path (relative to the base of the zip). Got {j}"
+                    )
 
             for _, j in filedict.items():
                 if os.path.isabs(j):
@@ -231,12 +247,16 @@ def create_7zip_from_include_exclude_and_rename_list(
                             break
 
                     if not matched:
-                        raise RuntimeError("Although absolute filepaths may be given in the 'include' list, it needs to"
-                                           f" be renamed to relative locations using a 'rename' entry. Got {j}")
+                        raise RuntimeError(
+                            "Although absolute filepaths may be given in the 'include' list, it needs to"
+                            f" be renamed to relative locations using a 'rename' entry. Got {j}"
+                        )
 
             for src, dst in rename_list:
                 dst_stage = Path(stage_dir).joinpath(dst)
-                renerr = RuntimeError(f"Cannot rename non-included or excluded paths. Got '{src}'")
+                renerr = RuntimeError(
+                    f"Cannot rename non-included or excluded paths. Got '{src}'"
+                )
 
                 if os.path.isfile(src):
                     os.makedirs(dst_stage.parent, exist_ok=True)
@@ -254,7 +274,7 @@ def create_7zip_from_include_exclude_and_rename_list(
 
                         if key.startswith(src_slash):
 
-                            file_dst_branch = os.path.abspath(srcfile)[len(src_slash):]
+                            file_dst_branch = os.path.abspath(srcfile)[len(src_slash) :]
                             file_dst_path = dst_stage.joinpath(file_dst_branch)
 
                             os.makedirs(file_dst_path.parent, exist_ok=True)
@@ -265,28 +285,27 @@ def create_7zip_from_include_exclude_and_rename_list(
                             except KeyError:
                                 raise renerr
 
-            create_7zip_from_filelist(outpath,
-                                      basedir,
-                                      filedict.values(),
-                                      copymode=copymode,
-                                      append=append,
-                                      sevenzip_bin=sevenzip_bin)
+            create_7zip_from_filelist(
+                outpath,
+                basedir,
+                filedict.values(),
+                copymode=copymode,
+                append=append,
+                sevenzip_bin=sevenzip_bin,
+            )
 
-            create_7zip_from_filelist(outpath,
-                                      stage_dir,
-                                      os.listdir(stage_dir),
-                                      copymode=copymode,
-                                      append=True,
-                                      sevenzip_bin=sevenzip_bin)
+            create_7zip_from_filelist(
+                outpath,
+                stage_dir,
+                os.listdir(stage_dir),
+                copymode=copymode,
+                append=True,
+                sevenzip_bin=sevenzip_bin,
+            )
 
 
 def create_7zip_from_filelist(
-        outpath,
-        basedir,
-        filelist,
-        copymode=False,
-        append=False,
-        sevenzip_bin="7z"
+    outpath, basedir, filelist, copymode=False, append=False, sevenzip_bin="7z"
 ):
     """
     Use 7zip to create an archive from a list of files
@@ -294,7 +313,19 @@ def create_7zip_from_filelist(
 
     # Lastly, zip everything from 1:1 mapping, then from the copied non-1:1 mapping
     # https://stackoverflow.com/a/28474846
-    mode = ["-mx0"] if copymode else ["-t7z", "-m0=lzma2:d1024m", "-mx=9", "-aoa", "-mfb=64", "-md=32m", "-ms=on"]
+    mode = (
+        ["-mx0"]
+        if copymode
+        else [
+            "-t7z",
+            "-m0=lzma2:d1024m",
+            "-mx=9",
+            "-aoa",
+            "-mfb=64",
+            "-md=32m",
+            "-ms=on",
+        ]
+    )
 
     if not append:
         try:
@@ -308,11 +339,13 @@ def create_7zip_from_filelist(
             with open(filelist_txt, "w") as f:
                 f.write("\n".join([str(i).replace("\\", "/") for i in filelist]))
 
-            subprocess.call([sevenzip_bin, 'a', '-y'] + mode + [str(outpath), f"@{filelist_txt}"])
+            subprocess.call(
+                [sevenzip_bin, "a", "-y"] + mode + [str(outpath), f"@{filelist_txt}"]
+            )
 
 
 def rmtree(
-        path: Union[str, Path], ignore_errors: bool = False, onerror: Callable = None
+    path: Union[str, Path], ignore_errors: bool = False, onerror: Callable = None
 ) -> None:
     """
     Mimicks shutil.rmtree, but add support for deleting read-only files
@@ -347,4 +380,3 @@ def rmtree(
                 raise
 
     return shutil.rmtree(path, False, _onerror)
-

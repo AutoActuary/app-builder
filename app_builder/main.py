@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 from locate import allow_relative_location_imports
+
 allow_relative_location_imports("..")
 from app_builder import exec_py
 
@@ -49,10 +50,16 @@ if __name__ == "__main__":
     vertup = caller_version_tuple()
 
     if vertup is None or vertup >= (0, 1, 0):
-        exec_py.exec_py(this_dir().joinpath("src-legacy", "tools", "application.py"), globals())
+        exec_py.exec_py(
+            this_dir().joinpath("src-legacy", "tools", "application.py"), globals()
+        )
 
     else:
         print()
-        print("Error: this version requires an installation of App-Builder-v0.1.0.exe or higher")
-        print("Please Download and install here: https://github.com/AutoActuary/app-builder/releases")
+        print(
+            "Error: this version requires an installation of App-Builder-v0.1.0.exe or higher"
+        )
+        print(
+            "Please Download and install here: https://github.com/AutoActuary/app-builder/releases"
+        )
         sys.exit(-1)

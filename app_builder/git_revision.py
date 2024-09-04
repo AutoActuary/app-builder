@@ -18,7 +18,7 @@ def ensure_git():
     portable version from github and put that into temporary path.
     """
     git = "git.exe"
-    
+
     # Make sure bundled git is in path as a fallback (end of path)
     bindir = this_dir().parent.joinpath("bin")
     if not bindir.joinpath("python", "python.exe").is_file():
@@ -27,7 +27,7 @@ def ensure_git():
     git_bundled = bindir.joinpath("git", "bin", "git.exe")
     git_bundled_dir = git_bundled.parent.parent
     if f";{git_bundled_dir.joinpath('bin')};" not in f";{os.environ['PATH']};":
-        os.environ['PATH'] = f"{os.environ['PATH']};{git_bundled_dir.joinpath('bin')}"
+        os.environ["PATH"] = f"{os.environ['PATH']};{git_bundled_dir.joinpath('bin')}"
 
     # Is git installed?
     try:
@@ -35,14 +35,16 @@ def ensure_git():
 
     # Download portable git from github
     except (subprocess.CalledProcessError, FileNotFoundError):
-        github_latest = 'https://api.github.com/repos/git-for-windows/git/releases/latest'
+        github_latest = (
+            "https://api.github.com/repos/git-for-windows/git/releases/latest"
+        )
         if not git_bundled.is_file():
             giturl = None
             d = loads(urlopen(github_latest).read().decode("utf-8"))
-            for s in d['assets']:
-                if 'browser_download_url' in s:
-                    url = s['browser_download_url']
-                    if url.endswith('.7z.exe') and "64-bit" in url:
+            for s in d["assets"]:
+                if "browser_download_url" in s:
+                    url = s["browser_download_url"]
+                    if url.endswith(".7z.exe") and "64-bit" in url:
                         giturl = url
 
             if giturl is None:
@@ -53,14 +55,22 @@ def ensure_git():
                 print(f"Downloading git from '{giturl}'")
                 urllib.request.urlretrieve(giturl, dlpath)
                 os.makedirs(git_bundled_dir, exist_ok=True)
-                subprocess.call([str(this_dir().joinpath('src-legacy', 'bin', '7z.exe')), "x",
-                                 str(dlpath), f'-o{git_bundled_dir}', '-y'], stdout=subprocess.DEVNULL)
+                subprocess.call(
+                    [
+                        str(this_dir().joinpath("src-legacy", "bin", "7z.exe")),
+                        "x",
+                        str(dlpath),
+                        f"-o{git_bundled_dir}",
+                        "-y",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                )
 
         e = None
-        try:                
+        try:
             sh_lines([git, "--version"], stderr=subprocess.DEVNULL)
         except (subprocess.CalledProcessError, FileNotFoundError):
-            try:                
+            try:
                 sh_lines([str(git_bundled), "--version"], stderr=subprocess.DEVNULL)
                 git = str(git_bundled)
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
@@ -89,7 +99,13 @@ def git_download(git_source, dest, revision=None):
                 return False
             try:
                 commit = sh_lines([git, "rev-parse", "HEAD"])[0]
-                return commit == sh_lines([git, "rev-list", "-n", "1", revision], stderr=subprocess.DEVNULL)[0]
+                return (
+                    commit
+                    == sh_lines(
+                        [git, "rev-list", "-n", "1", revision],
+                        stderr=subprocess.DEVNULL,
+                    )[0]
+                )
             except subprocess.CalledProcessError:
                 return False
 
@@ -99,9 +115,9 @@ def git_download(git_source, dest, revision=None):
                 sh_quiet([git, "clean", "-qdfx"])
                 return None
 
-        gitremote = None # noqa
+        gitremote = None  # noqa
         with suppress(subprocess.CalledProcessError):
-            gitremote = sh_lines([git, 'config', '--get', 'remote.origin.url'])[0]
+            gitremote = sh_lines([git, "config", "--get", "remote.origin.url"])[0]
 
         # If not correct git source, re-download
         if gitremote != git_source:
@@ -113,7 +129,7 @@ def git_download(git_source, dest, revision=None):
 
             subprocess.call([git, "clone", git_source, str(Path(".").resolve())])
             if not Path("./.git").is_dir():
-                raise(RuntimeError(f"Could not `git clone {git_source} .`"))
+                raise (RuntimeError(f"Could not `git clone {git_source} .`"))
 
         sh_quiet([git, "reset", "--hard"])
         sh_quiet([git, "clean", "-qdfx"])
@@ -125,12 +141,14 @@ def git_download(git_source, dest, revision=None):
                         continue
                     sh_quiet([git, "branch", "--track", branch.split("/")[-1], branch])
 
-            sh_quiet([git, "fetch",  "--all"])
+            sh_quiet([git, "fetch", "--all"])
             sh_quiet([git, "fetch", "--tags", "--force"])
 
             # set revision to default branch
             if revision is None:
-                revision = sh_lines([git, "symbolic-ref", "refs/remotes/origin/HEAD"])[0].split("/")[-1]
+                revision = sh_lines([git, "symbolic-ref", "refs/remotes/origin/HEAD"])[
+                    0
+                ].split("/")[-1]
 
             sh_quiet([git, "pull", "origin", revision])
             sh_quiet([git, "checkout", "--force", revision])

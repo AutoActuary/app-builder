@@ -4,7 +4,7 @@ from pathlib import Path
 from locate import allow_relative_location_imports, this_dir
 
 # Borrow implementation from non-legacy future application
-allow_relative_location_imports('../../..')
+allow_relative_location_imports("../../..")
 from app_builder import exec_py
 from app_builder import util
 
@@ -20,13 +20,28 @@ elif command in ("-i", "--init"):
     util.init()
 
 elif command in ("-d", "--get-dependencies"):
-    exec_py.exec_py(this_dir().joinpath("..", "deployment-and-release-scripts", "create-dependencies.py"), globals())
+    exec_py.exec_py(
+        this_dir().joinpath(
+            "..", "deployment-and-release-scripts", "create-dependencies.py"
+        ),
+        globals(),
+    )
 
 elif command in ("-l", "--local-release"):
-    exec_py.exec_py(this_dir().joinpath("..", "deployment-and-release-scripts", "create-releases.py"), globals())
+    exec_py.exec_py(
+        this_dir().joinpath(
+            "..", "deployment-and-release-scripts", "create-releases.py"
+        ),
+        globals(),
+    )
 
 elif command in ("-g", "--github-release"):
-    exec_py.exec_py(this_dir().joinpath("..", "deployment-and-release-scripts", "create-github-release.py"), globals())
+    exec_py.exec_py(
+        this_dir().joinpath(
+            "..", "deployment-and-release-scripts", "create-github-release.py"
+        ),
+        globals(),
+    )
 
 else:
     print("Error: wrong commandline arguments")

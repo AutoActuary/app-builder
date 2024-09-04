@@ -48,10 +48,12 @@ def exec_py(filepath, global_names=None, local_names=None):
     if global_names is None:
         global_names = {}
 
-    global_names.update({
-        "__file__": str(filepath),
-        "__name__": "__main__",
-    })
+    global_names.update(
+        {
+            "__file__": str(filepath),
+            "__name__": "__main__",
+        }
+    )
 
-    with open(filepath, 'rb') as file:
-        exec(compile(file.read(), filepath, 'exec'), global_names, local_names)
+    with open(filepath, "rb") as file:
+        exec(compile(file.read(), filepath, "exec"), global_names, local_names)
