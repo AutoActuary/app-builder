@@ -446,7 +446,7 @@ def juliainstall_dependencies(libdict: dict):
 
 
 def pipinstall(libname):
-    subprocess.call([app_paths.python_bin, "-E", "-m", "pip", 'install', libname, '--no-warn-script-location'])
+    subprocess.call([app_paths.python_bin, "-E", "-m", "pip", 'install', libname, '--no-warn-script-location', '--no-user'])
 
 
 def pipinstall_requirements(liblist):
@@ -454,7 +454,7 @@ def pipinstall_requirements(liblist):
     open(reqfile, "w").write(
         "\n".join(liblist)
     )
-    subprocess.call([app_paths.python_bin, "-E", "-m", "pip", 'install', '-r', reqfile, '--no-warn-script-location'])
+    subprocess.call([app_paths.python_bin, "-E", "-m", "pip", 'install', '-r', reqfile, '--no-warn-script-location',  '--no-user'])
     os.unlink(reqfile)
 
 

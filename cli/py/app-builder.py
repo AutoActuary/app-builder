@@ -11,6 +11,7 @@ import time
 import sys
 
 from locate import allow_relative_location_imports
+
 allow_relative_location_imports("../..")
 
 from app_builder import git_revision
@@ -21,7 +22,7 @@ from app_builder.util import help, init, rmtree
 
 
 class ApplicationYamlError(Exception):
-     pass
+    pass
 
 
 def iglob(p, pattern):
@@ -34,8 +35,10 @@ def get_app_base_directory(start_dir) -> Path:
     Travel up from the starting directory to find the application's base directory, pattern contains 'Application.yaml'.
     """
     d = start_dir.resolve()
-    err = ApplicationYamlError("Expected git repository with 'application.yaml' at base. To initiate app-builder within"
-                               " the current repo, use `app-builder --init`")
+    err = ApplicationYamlError(
+        "Expected git repository with 'application.yaml' at base. To initiate app-builder within"
+        " the current repo, use `app-builder --init`"
+    )
     for i in range(1000):
         if len(iglob(d, "application.yaml") + iglob(d, ".git")) == 2:
             return d.resolve()
@@ -62,8 +65,8 @@ def get_app_version():
                     "app-builder expects 'application.yaml' files to start with `app-builder: <version>`"
                 )
             else:
-                version = line.split(':', 1)[1].strip()
-                if (version[0]+version[-1]) in ('""', "''"):
+                version = line.split(":", 1)[1].strip()
+                if (version[0] + version[-1]) in ('""', "''"):
                     version = version[1:-1]
                 assert version != ""
                 break
@@ -80,7 +83,9 @@ def ensure_app_version():
 
         print(f"Requested version '{rev}' in application.yaml")
         print(f"Initiate app-builder '{rev}' dependencies")
-        git_revision.git_download("https://github.com/AutoActuary/app-builder.git", paths.live_repo, rev)
+        git_revision.git_download(
+            "https://github.com/AutoActuary/app-builder.git", paths.live_repo, rev
+        )
 
         # Use temp directory so that we can't accidently end up half way
         with tempfile.TemporaryDirectory() as tdir:
@@ -96,12 +101,19 @@ def ensure_app_version():
                     continue
                 copy(i, tmp_rev_repo.joinpath(i.name))
 
-            assert 0 == subprocess.call([sys.executable,
-                                         "-m",
-                                         "pip",
-                                         "install",
-                                         "-r", tmp_rev_repo.joinpath("requirements.txt"),
-                                         f"--target={tmp_site}"])
+            assert 0 == subprocess.call(
+                [
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "install",
+                    "-r",
+                    tmp_rev_repo.joinpath("requirements.txt"),
+                    f"--target={tmp_site}",
+                    "--no-warn-script-location",
+                    "--no-user",
+                ]
+            )
 
             rmtree(path_rev, ignore_errors=True)
             os.makedirs(path_rev.parent, exist_ok=True)
@@ -112,42 +124,46 @@ def ensure_app_version():
 
     # Inject launcher - note that launcher may change with the app-builder version driving this, so keep it volatile
     with open(path_rev.joinpath("run.py"), "w") as fw:
-        fw.write(dedent(r"""
-            from pathlib import Path
-            import subprocess
-            import sys
-            import os
-            from textwrap import dedent
+        fw.write(
+            dedent(
+                r"""
+                from pathlib import Path
+                import subprocess
+                import sys
+                import os
+                from textwrap import dedent
 
-            this_dir = Path(__file__).resolve().parent
-            site_dir = this_dir.joinpath('site-packages')
-            script = this_dir.joinpath("repo", "app_builder", "main.py")
-            
-            def repr_str(x):
-                return repr(str(x))
-            
-            sys.exit(
-                subprocess.call(
-                    [
-                        sys.executable,
-                        "-c",
-                        dedent(f'''
-                            import sys;
-                            sys.argv = sys.argv[0:1]+{repr(sys.argv[1:])};
-                            sys.path.insert(0, {repr_str(site_dir)});
-                            script = f{repr_str(script)};
-                            globs = globals();
-                            globs["__file__"] = script;
-                            globs["__name__"] = "__main__";
-                            file = open(script, 'rb');
-                            script_txt = file.read();
-                            file.close();
-                            exec(compile(script_txt, script, 'exec'), globs);
-                        '''),
-                    ]
+                this_dir = Path(__file__).resolve().parent
+                site_dir = this_dir.joinpath('site-packages')
+                script = this_dir.joinpath("repo", "app_builder", "main.py")
+                
+                def repr_str(x):
+                    return repr(str(x))
+                
+                sys.exit(
+                    subprocess.call(
+                        [
+                            sys.executable,
+                            "-c",
+                            dedent(f'''
+                                import sys;
+                                sys.argv = sys.argv[0:1]+{repr(sys.argv[1:])};
+                                sys.path.insert(0, {repr_str(site_dir)});
+                                script = f{repr_str(script)};
+                                globs = globals();
+                                globs["__file__"] = script;
+                                globs["__name__"] = "__main__";
+                                file = open(script, 'rb');
+                                script_txt = file.read();
+                                file.close();
+                                exec(compile(script_txt, script, 'exec'), globs);
+                            '''),
+                        ]
+                    )
                 )
+                """
             )
-            """))
+        )
 
     return rev
 
@@ -171,7 +187,7 @@ def version_cleanup():
 
     # But don't keep any of those 40 versions if they haven't been used within the last 30 days
     discard = discard.union(
-        [i for i in maybe_discard if time.time() - i > 60*60*24*30]
+        [i for i in maybe_discard if time.time() - i > 60 * 60 * 24 * 30]
     )
 
     for i in discard:
@@ -185,10 +201,12 @@ def run_versioned_main():
 
     # If something is wrong with application.yaml rather print help menu
     except ApplicationYamlError:
-        if len(sys.argv) < 2 or (len(sys.argv) >= 2 and sys.argv[1].lower() in ["-h", "--help"]):
+        if len(sys.argv) < 2 or (
+            len(sys.argv) >= 2 and sys.argv[1].lower() in ["-h", "--help"]
+        ):
             help()
 
-        elif len(sys.argv) >= 2 and sys.argv[1].lower() in ['-i', '--init']:
+        elif len(sys.argv) >= 2 and sys.argv[1].lower() in ["-i", "--init"]:
             init()
 
         else:

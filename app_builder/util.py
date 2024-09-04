@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 from textwrap import dedent
 import os
+import stat
 from contextlib import contextmanager
 from typing import List, Union, Callable
 import tempfile
@@ -317,6 +318,7 @@ def rmtree(
     Mimicks shutil.rmtree, but add support for deleting read-only files
 
     >>> import tempfile
+    >>> import stat
     >>> with tempfile.TemporaryDirectory() as tdir:
     ...     os.makedirs(Path(tdir, "tmp"))
     ...     with Path(tdir, "tmp", "f1").open("w") as f:
@@ -334,7 +336,7 @@ def rmtree(
     def _onerror(_func: Callable, _path: Union[str, Path], _exc_info) -> None:
         # Is the error an access error ?
         try:
-            os.chmod(_path, os.stat.S_IWUSR)
+            os.chmod(_path, stat.S_IWUSR)
             _func(_path)
         except Exception as e:
             if ignore_errors:
