@@ -1,4 +1,4 @@
-app-builder: e60cebc
+app-builder: 1904b38
 
 Application:
   name: App Builder
@@ -23,6 +23,5 @@ dependencies:
     python:
       version: 3.11.6
       pip: 23.2.1
-      requirements_files: [
-        "requirements.txt"
-      ]
+      requirements_files:
+        - "requirements.txt"
