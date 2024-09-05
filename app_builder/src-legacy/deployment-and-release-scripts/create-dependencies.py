@@ -58,6 +58,13 @@ def create_all_dependencies():
         app_paths.app_dir.joinpath("bin", "7z.dll"),
     )
 
+    def python_no_user_process():
+        site_text = (app_paths.python_lib() / "site.py").read_text(encoding="utf-8")
+        site_text = site_text.replace(
+            "\nENABLE_USER_SITE =", "\nENABLE_USER_SITE = False # "
+        )
+        (app_paths.python_lib() / "site.py").write_text(site_text, encoding="utf-8")
+
     def python_post_process():
         # Added some pip logging information
         pipversionfile = app_paths.temp_dir.joinpath("..\\pipfreeze.txt")
@@ -72,13 +79,6 @@ def create_all_dependencies():
                 f.write(pipfreeze + "\n")
             except Exception as e:
                 print(e)
-
-        # Edit site.py
-        site_text = (app_paths.python_lib / "site.py").read_text(encoding="utf-8")
-        site_text = site_text.replace(
-            "\nENABLE_USER_SITE =", "\nENABLE_USER_SITE = False # "
-        )
-        (app_paths.python_lib / "site.py").write_text(site_text, encoding="utf-8")
 
         # Delete all __pycache__ from python (+/- 40mb)
         print("Purge __pycache__ files")
@@ -108,6 +108,7 @@ def create_all_dependencies():
 
             requirements = value.get("requirements", [])
             misc.get_python(version)
+            python_no_user_process()
 
             # Relative to app_dir
             requirements_files = [
@@ -156,6 +157,7 @@ def create_all_dependencies():
         elif is_prog(key, "python"):
             _, version = split_prog_version(key)
             misc.get_python(version)
+            python_no_user_process()
 
             if misc.islistlike(value):
                 pip = None
