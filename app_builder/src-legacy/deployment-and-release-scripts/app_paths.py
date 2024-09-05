@@ -4,6 +4,7 @@ import fnmatch
 import re
 import locate
 import subprocess
+import ast
 
 
 def iglob(p, pattern):
@@ -67,11 +68,18 @@ def site_packages():
     if _site_packages_cache:
         return _site_packages_cache["value"]
 
-    command = [python_bin, "-c", "import site; print(site.getsitepackages()[0])"]
+    command = [python_bin, "-c", "import site; print(site.getsitepackages())"]
 
     try:
         result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
-        path = Path(result.stdout.strip())
+        paths = ast.literal_eval(result.stdout.strip())
+
+        path = [
+            i
+            for i in paths
+            if i.replace("\\", "/").rstrip("/").endswith("/site-packages")
+        ][0]
+
         _site_packages_cache["value"] = path
         return path
 
