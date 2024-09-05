@@ -68,11 +68,11 @@ def python_real_bin() -> Path:
     if _real_python_bin_cache:
         return _real_python_bin_cache["value"]
 
-    command = [python_bin, "-c", "import sys; print(repr(sys.executable))"]
+    command = [python_bin, "-c", "import sys; print(sys.executable)"]
 
     try:
         result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
-        path = Path(ast.literal_eval(result.stdout))
+        path = Path(result.stdout.strip())
 
         _real_python_bin_cache["value"] = Path(path)
         return path
