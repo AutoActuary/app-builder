@@ -58,9 +58,6 @@ def create_all_dependencies():
         app_paths.app_dir.joinpath("bin", "7z.dll"),
     )
 
-    def python_no_user_process():
-        (app_paths.python_real_bin().parent / "pyvenv.cfg").write_text("include-system-site-packages = false", encoding="utf-8")
-
     def python_post_process():
         # Added some pip logging information
         pipversionfile = app_paths.temp_dir.joinpath("..\\pipfreeze.txt")
@@ -104,7 +101,6 @@ def create_all_dependencies():
 
             requirements = value.get("requirements", [])
             misc.get_python(version)
-            python_no_user_process()
 
             # Relative to app_dir
             requirements_files = [
