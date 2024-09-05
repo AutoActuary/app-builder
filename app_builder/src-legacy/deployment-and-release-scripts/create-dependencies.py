@@ -88,7 +88,7 @@ def create_all_dependencies():
             invalid_keys = list(set(value.keys()) - set(valid_keys))
             if invalid_keys:
                 raise RuntimeError(
-                    f"Valid keys for `dependencies: python` are {valid_keys}; got {invalid_keys}"
+                    f"Valid keys for `dependencies: python: <keys>` are {valid_keys}; got {invalid_keys}"
                 )
 
             version = value.get("version", None)

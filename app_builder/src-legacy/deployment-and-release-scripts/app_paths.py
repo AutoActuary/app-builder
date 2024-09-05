@@ -62,34 +62,6 @@ r_bin = r_dir.joinpath("bin", "Rscript.exe")
 temp_dir.mkdir(parents=True, exist_ok=True)
 
 
-_real_python_bin_cache = {}
-
-
-def python_real_bin() -> Path:
-    if _real_python_bin_cache:
-        return _real_python_bin_cache["value"]
-
-    command = [
-        python_bin,
-        "-S",
-        "-c",
-        "import sys; print(sys.executable)",
-    ]
-
-    try:
-        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
-        path = Path(result.stdout.strip())
-
-        _real_python_bin_cache["value"] = path
-        return path
-
-    except subprocess.CalledProcessError as e:
-        cmd_str = " ".join([f'"{i}"' for i in command])
-        raise RuntimeError(
-            f"Could not find `site-packages` directory from command `{cmd_str}`"
-        ) from e
-
-
 @cache
 def python_real_bin() -> Path:
     command = [
