@@ -61,26 +61,20 @@ r_bin = r_dir.joinpath("bin", "Rscript.exe")
 temp_dir.mkdir(parents=True, exist_ok=True)
 
 
-_site_packages_cache = {}
+_real_python_bin_cache = {}
 
 
-def site_packages():
-    if _site_packages_cache:
-        return _site_packages_cache["value"]
+def python_real_bin() -> Path:
+    if _real_python_bin_cache:
+        return _real_python_bin_cache["value"]
 
-    command = [python_bin, "-c", "import site; print(site.getsitepackages())"]
+    command = [python_bin, "-c", "import sys; print(repr(sys.executable))"]
 
     try:
         result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
-        paths = ast.literal_eval(result.stdout.strip())
+        path = Path(ast.literal_eval(result.stdout))
 
-        path = [
-            i
-            for i in paths
-            if i.replace("\\", "/").rstrip("/").endswith("/site-packages")
-        ][0]
-
-        _site_packages_cache["value"] = path
+        _real_python_bin_cache["value"] = Path(path)
         return path
 
     except subprocess.CalledProcessError as e:
@@ -88,3 +82,11 @@ def site_packages():
         raise RuntimeError(
             f"Could not find `site-packages` directory from command `{cmd_str}`"
         ) from e
+
+
+def python_lib() -> Path:
+    return python_real_bin().parent / "Lib"
+
+
+def python_site_packages() -> Path:
+    return python_real_bin().parent / "Lib" / "site-packages"

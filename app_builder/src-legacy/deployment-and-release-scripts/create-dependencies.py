@@ -73,6 +73,13 @@ def create_all_dependencies():
             except Exception as e:
                 print(e)
 
+        # Edit site.py
+        site_text = (app_paths.python_lib / "site.py").read_text(encoding="utf-8")
+        site_text = site_text.replace(
+            "\nENABLE_USER_SITE =", "\nENABLE_USER_SITE = False # "
+        )
+        (app_paths.python_lib / "site.py").write_text(site_text, encoding="utf-8")
+
         # Delete all __pycache__ from python (+/- 40mb)
         print("Purge __pycache__ files")
         for file in app_paths.py_dir.rglob("*"):
@@ -122,7 +129,7 @@ def create_all_dependencies():
                         f"pip=={pip}",
                         "--no-warn-script-location",
                         "--target",
-                        app_paths.site_packages(),
+                        app_paths.python_site_packages(),
                     ]
                 )
 
@@ -138,7 +145,7 @@ def create_all_dependencies():
                         "--upgrade",
                         "--no-warn-script-location",
                         "--target",
-                        app_paths.site_packages(),
+                        app_paths.python_site_packages(),
                     ]
                 )
 
@@ -172,7 +179,7 @@ def create_all_dependencies():
                             pip,
                             "--no-warn-script-location",
                             "--target",
-                            app_paths.site_packages(),
+                            app_paths.python_site_packages(),
                         ]
                     )
 
