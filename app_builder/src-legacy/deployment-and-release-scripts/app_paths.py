@@ -3,6 +3,7 @@ from pathlib import Path
 import fnmatch
 import re
 import locate
+import subprocess
 
 
 def iglob(p, pattern):
@@ -57,3 +58,25 @@ r_bin = r_dir.joinpath("bin", "Rscript.exe")
 
 # FIXME: This is an import side effect, and should be moved to a function that we call only when really needed.
 temp_dir.mkdir(parents=True, exist_ok=True)
+
+
+_site_packages_cache = {}
+
+
+def site_packages():
+    if _site_packages_cache:
+        return _site_packages_cache["value"]
+
+    command = [python_bin, "-c", "import site; print(site.getsitepackages()[0])"]
+
+    try:
+        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
+        path = Path(result.stdout.strip())
+        _site_packages_cache["value"] = path
+        return path
+
+    except subprocess.CalledProcessError as e:
+        cmd_str = " ".join([f'"{i}"' for i in command])
+        raise RuntimeError(
+            f"Could not find `site-packages` directory from command `{cmd_str}`"
+        ) from e

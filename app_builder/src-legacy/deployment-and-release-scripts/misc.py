@@ -512,7 +512,8 @@ def pipinstall(libname):
             "install",
             libname,
             "--no-warn-script-location",
-            "--no-user",
+            "--target",
+            app_paths.site_packages(),
         ]
     )
 
@@ -530,7 +531,8 @@ def pipinstall_requirements(liblist):
             "-r",
             reqfile,
             "--no-warn-script-location",
-            "--no-user",
+            "--target",
+            app_paths.site_packages(),
         ]
     )
     os.unlink(reqfile)

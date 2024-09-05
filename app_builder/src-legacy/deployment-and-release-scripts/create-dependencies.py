@@ -121,7 +121,8 @@ def create_all_dependencies():
                         "--upgrade",
                         f"pip=={pip}",
                         "--no-warn-script-location",
-                        "--no-user",
+                        "--target",
+                        app_paths.site_packages(),
                     ]
                 )
 
@@ -136,7 +137,8 @@ def create_all_dependencies():
                         *chain(*[["-r", f] for f in all_requirements_files]),
                         "--upgrade",
                         "--no-warn-script-location",
-                        "--no-user",
+                        "--target",
+                        app_paths.site_packages(),
                     ]
                 )
 
@@ -168,6 +170,9 @@ def create_all_dependencies():
                             "install",
                             "--upgrade",
                             pip,
+                            "--no-warn-script-location",
+                            "--target",
+                            app_paths.site_packages(),
                         ]
                     )
 

@@ -109,9 +109,9 @@ def ensure_app_version():
                     "install",
                     "-r",
                     tmp_rev_repo.joinpath("requirements.txt"),
-                    f"--target={tmp_site}",
+                    f"--target",
+                    str(tmp_site),
                     "--no-warn-script-location",
-                    "--no-user",
                 ]
             )
 

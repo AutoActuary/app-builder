@@ -54,38 +54,38 @@ def init():
         f.write(
             dedent(
                 r"""
-            app-builder: v0.2.1
-            
-            application:
-            
-              # Basic information for your app 
-              name: TempApp
-              asciibanner: application-templates/asciibanner.txt
-              icon: application-templates/icon.ico
-              installdir: '%localappdata%\TempApp'
-            
-              # Pause at the end of the installation sequence  
-              pause: true
-            
-              # Add shortcuts from `installdir` to start-menu
-              startmenu:
-                - application-templates/program.cmd
-            
-              # Choose which files to include, exclude, and rename
-              data:
-                include:
-                  - "*"
-                exclude:
-                  - .git*
-                  - tools
-                  - application.yaml
-                # You can use also use `rename: [[a/src, b/dst], [src2, dst2]]` as a way to remap your file system
-            
-            # Bundle Python/R/Julia and packages into bin/*
-            dependencies:
-              python:
-                # You can list the packages via pip versioning (i.e. `pyyaml~=5.3`)  
-                - pyyaml
+                app-builder: v0.2.1
+                
+                application:
+                
+                # Basic information for your app 
+                name: TempApp
+                asciibanner: application-templates/asciibanner.txt
+                icon: application-templates/icon.ico
+                installdir: '%localappdata%\TempApp'
+                
+                # Pause at the end of the installation sequence  
+                pause: true
+                
+                # Add shortcuts from `installdir` to start-menu
+                startmenu:
+                    - application-templates/program.cmd
+                
+                # Choose which files to include, exclude, and rename
+                data:
+                    include:
+                    - "*"
+                    exclude:
+                    - .git*
+                    - tools
+                    - application.yaml
+                    # You can use also use `rename: [[a/src, b/dst], [src2, dst2]]` as a way to remap your file system
+                
+                # Bundle Python/R/Julia and packages into bin/*
+                dependencies:
+                python:
+                    # You can list the packages via pip versioning (i.e. `pyyaml~=5.3`)  
+                    - pyyaml
                   
             """
             ).strip()

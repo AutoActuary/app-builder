@@ -9,7 +9,7 @@ from pathlib import Path
 import os
 import doctest
 import unittest
-import locate 
+import locate
 
 src_dir = Path(__file__).parent / "app_builder"
 
@@ -55,13 +55,14 @@ def load_doctests(loader, tests, ignore):
     """
     Discover and load all doctests in the specified directory.
     """
-    
+
     # Traverse the directory tree to find Python files
     for f in src_dir.glob("*"):
         if f.suffix == ".py":
             tests.addTests(doctest.DocTestSuite(f.with_suffix("").name))
 
     return tests
+
 
 if __name__ == "__main__":
     main()
