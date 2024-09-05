@@ -121,8 +121,6 @@ def create_all_dependencies():
                         "--upgrade",
                         f"pip=={pip}",
                         "--no-warn-script-location",
-                        "--target",
-                        app_paths.python_site_packages(),
                     ]
                 )
 
@@ -137,8 +135,6 @@ def create_all_dependencies():
                         *chain(*[["-r", f] for f in all_requirements_files]),
                         "--upgrade",
                         "--no-warn-script-location",
-                        "--target",
-                        app_paths.python_site_packages(),
                     ]
                 )
 
@@ -149,7 +145,6 @@ def create_all_dependencies():
         elif is_prog(key, "python"):
             _, version = split_prog_version(key)
             misc.get_python(version)
-            python_no_user_process()
 
             if misc.islistlike(value):
                 pip = None
@@ -172,8 +167,6 @@ def create_all_dependencies():
                             "--upgrade",
                             pip,
                             "--no-warn-script-location",
-                            "--target",
-                            app_paths.python_site_packages(),
                         ]
                     )
 

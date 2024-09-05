@@ -4,6 +4,7 @@ import fnmatch
 import re
 import locate
 import subprocess
+from functools import cache
 import ast
 
 
@@ -89,9 +90,70 @@ def python_real_bin() -> Path:
         ) from e
 
 
+@cache
+def python_real_bin() -> Path:
+    command = [
+        python_bin,
+        "-S",
+        "-c",
+        "import sys; print(repr(sys.executable))",
+    ]
+
+    try:
+        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
+        path = Path(ast.literal_eval(result.stdout))
+        return path
+
+    except subprocess.CalledProcessError as e:
+        cmd_str = " ".join([f'"{i}"' for i in command])
+        raise RuntimeError(
+            f"Could not find `site-packages` directory from command `{cmd_str}`"
+        ) from e
+
+
+@cache
 def python_lib() -> Path:
-    return python_real_bin().parent / "Lib"
+    command = [
+        python_bin,
+        "-S",
+        "-c",
+        "import pathlib; print(repr(str(pathlib.Path(pathlib.__file__).parent)))",
+    ]
+
+    try:
+        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
+        return Path(ast.literal_eval(result.stdout))
+
+    except subprocess.CalledProcessError as e:
+        cmd_str = " ".join([f'"{i}"' for i in command])
+        raise RuntimeError(
+            f"Could not find `Lib` directory from command `{cmd_str}`"
+        ) from e
 
 
+@cache
 def python_site_packages() -> Path:
-    return python_real_bin().parent / "Lib" / "site-packages"
+    command = [
+        python_bin,
+        "-c",
+        "import sys; print(repr(sys.path))",
+    ]
+
+    try:
+        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
+        last_line = result.stdout.strip().split("\n")[-1]
+        paths = ast.literal_eval(last_line)
+
+        # return the first site-packages instance
+        path = [
+            i
+            for i in paths
+            if i.replace("\\", "/").lower().endswith("/lib/site-packages")
+        ][0]
+        return Path(path)
+
+    except subprocess.CalledProcessError as e:
+        cmd_str = " ".join([f'"{i}"' for i in command])
+        raise RuntimeError(
+            f"Could not find `site-packages` directory from command `{cmd_str}`"
+        ) from e
