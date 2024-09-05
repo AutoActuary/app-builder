@@ -60,9 +60,12 @@ def create_all_dependencies():
 
     def python_no_user_process():
         site_text = (app_paths.python_lib() / "site.py").read_text(encoding="utf-8")
-        site_text = site_text.replace(
-            "\nENABLE_USER_SITE =", "\nENABLE_USER_SITE = False # "
-        )
+        src = "\nENABLE_USER_SITE ="
+        dst = "\nENABLE_USER_SITE = False #"
+
+        if not dst in site_text:
+            site_text = site_text.replace(src, dst)
+
         (app_paths.python_lib() / "site.py").write_text(site_text, encoding="utf-8")
 
     def python_post_process():
