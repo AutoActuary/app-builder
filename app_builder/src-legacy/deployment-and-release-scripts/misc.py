@@ -360,7 +360,24 @@ def get_python(version):
     with tempfile.TemporaryDirectory() as tdir:
         extract_file(dlpath, tdir)
         pydir = next(Path(tdir).glob("*/python-*"))
-        shutil.move(pydir, app_paths.py_dir)
+
+        # We want the following directory structure:
+        (app_paths.py_dir / "Lib").mkdir(parents=True, exist_ok=True)
+
+        shutil.move(
+            pydir / "Lib" / "site-packages", app_paths.py_dir / "Lib" / "site-packages"
+        )
+        shutil.move(pydir / "Scripts", app_paths.py_dir / "Scripts")
+        shutil.move(pydir, app_paths.py_dir / "Bin")
+        shutil.copy(
+            app_paths.asset_dir
+            / "python-venv-exe-wrapper"
+            / "python-venv-exe-wrapper.exe",
+            app_paths.py_dir / "python.exe",
+        )
+        (app_paths.py_dir / "pyvenv.cfg").write_text(
+            "include-system-site-packages = false"
+        )
 
 
 def get_julia():
@@ -512,8 +529,6 @@ def pipinstall(libname):
             "install",
             libname,
             "--no-warn-script-location",
-            "--target",
-            app_paths.python_site_packages(),
         ]
     )
 
@@ -531,8 +546,6 @@ def pipinstall_requirements(liblist):
             "-r",
             reqfile,
             "--no-warn-script-location",
-            "--target",
-            app_paths.python_site_packages(),
         ]
     )
     os.unlink(reqfile)

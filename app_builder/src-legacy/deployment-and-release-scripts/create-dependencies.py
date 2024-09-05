@@ -58,16 +58,6 @@ def create_all_dependencies():
         app_paths.app_dir.joinpath("bin", "7z.dll"),
     )
 
-    def python_no_user_process():
-        site_text = (app_paths.python_lib() / "site.py").read_text(encoding="utf-8")
-        src = "\nENABLE_USER_SITE ="
-        dst = "\nENABLE_USER_SITE = False #"
-
-        if not dst in site_text:
-            site_text = site_text.replace(src, dst)
-
-        (app_paths.python_lib() / "site.py").write_text(site_text, encoding="utf-8")
-
     def python_post_process():
         # Added some pip logging information
         pipversionfile = app_paths.temp_dir.joinpath("..\\pipfreeze.txt")
@@ -98,7 +88,7 @@ def create_all_dependencies():
             invalid_keys = list(set(value.keys()) - set(valid_keys))
             if invalid_keys:
                 raise RuntimeError(
-                    f"Valid keys for `dependencies: python` are {valid_keys}; got {invalid_keys}"
+                    f"Valid keys for `dependencies: python: <keys>` are {valid_keys}; got {invalid_keys}"
                 )
 
             version = value.get("version", None)
@@ -111,7 +101,6 @@ def create_all_dependencies():
 
             requirements = value.get("requirements", [])
             misc.get_python(version)
-            python_no_user_process()
 
             # Relative to app_dir
             requirements_files = [
@@ -132,8 +121,6 @@ def create_all_dependencies():
                         "--upgrade",
                         f"pip=={pip}",
                         "--no-warn-script-location",
-                        "--target",
-                        app_paths.python_site_packages(),
                     ]
                 )
 
@@ -148,8 +135,6 @@ def create_all_dependencies():
                         *chain(*[["-r", f] for f in all_requirements_files]),
                         "--upgrade",
                         "--no-warn-script-location",
-                        "--target",
-                        app_paths.python_site_packages(),
                     ]
                 )
 
@@ -160,7 +145,6 @@ def create_all_dependencies():
         elif is_prog(key, "python"):
             _, version = split_prog_version(key)
             misc.get_python(version)
-            python_no_user_process()
 
             if misc.islistlike(value):
                 pip = None
@@ -183,8 +167,6 @@ def create_all_dependencies():
                             "--upgrade",
                             pip,
                             "--no-warn-script-location",
-                            "--target",
-                            app_paths.python_site_packages(),
                         ]
                     )
 
