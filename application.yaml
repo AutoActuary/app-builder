@@ -1,4 +1,4 @@
-app-builder: 6b9719059ac5bd98292ea7b5fa49d5b1aa256865
+app-builder: v0.8.0
 
 Application:
   name: App Builder
