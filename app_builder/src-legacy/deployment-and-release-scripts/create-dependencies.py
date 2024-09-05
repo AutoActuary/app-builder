@@ -59,10 +59,7 @@ def create_all_dependencies():
     )
 
     def python_no_user_process():
-        print(app_paths.python_real_bin().parent / "pyvenv.cfg")
-        (app_paths.python_real_bin().parent / "pyvenv.cfg").write_text(
-            "include-system-site-packages = false", encoding="utf-8"
-        )
+        (app_paths.python_real_bin().parent / "pyvenv.cfg").write_text("include-system-site-packages = false", encoding="utf-8")
 
     def python_post_process():
         # Added some pip logging information
