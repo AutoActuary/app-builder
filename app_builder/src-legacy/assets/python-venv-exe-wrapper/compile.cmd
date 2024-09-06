@@ -39,42 +39,20 @@ Remove-Item -Recurse -Force $tempBuild -ErrorAction Ignore
 New-Item -Type Directory -Force -Path $tempBuild | Out-Null
 
 
-
 $thisdir = Split-Path $Env:_cmd
 
-# In base directory
+# For python.exe
 & "$tempFolderPath/tcc/tcc.exe" -D_UNICODE "$thisdir/python-venv-exe-wrapper.c" -luser32 -lkernel32 -o "$tempBuild/python-venv-exe-wrapper.exe"
-
-$ico_path = Join-Path $thisdir "python.ico"
-& "$rceditExePath" "$tempBuild/python-venv-exe-wrapper.exe" --set-icon "$ico_path"
-
-if (Test-Path "$thisdir/python-venv-exe-wrapper.exe") {
-    Remove-Item "$thisdir/python-venv-exe-wrapper.exe" -Force
-}
+& "$rceditExePath" "$tempBuild/python-venv-exe-wrapper.exe" --set-icon (Join-Path $thisdir "icons/python.ico")
+if (Test-Path "$thisdir/python-venv-exe-wrapper.exe") { Remove-Item "$thisdir/python-venv-exe-wrapper.exe" -Force}
 Copy-Item "$tempBuild/python-venv-exe-wrapper.exe" -Destination "$thisdir/python-venv-exe-wrapper.exe"
 
 
-# In scripts directory
-& "$tempFolderPath/tcc/tcc.exe" -D_UNICODE "$thisdir/python-scripts-exe-wrapper.c" -luser32 -lkernel32 -o "$tempBuild/python-scripts-exe-wrapper.exe"
-
-$ico_path = Join-Path $thisdir "python.ico"
-& "$rceditExePath" "$tempBuild/python-scripts-exe-wrapper.exe" --set-icon "$ico_path"
-
-if (Test-Path "$thisdir/python-scripts-exe-wrapper.exe") {
-    Remove-Item "$thisdir/python-scripts-exe-wrapper.exe" -Force
-}
-Copy-Item "$tempBuild/python-scripts-exe-wrapper.exe" -Destination "$thisdir/python-scripts-exe-wrapper.exe"
-
-
-& "$tempFolderPath/tcc/tcc.exe" -D_UNICODE -DNOSHELL "$thisdir/python-scripts-exe-wrapper.c" -luser32 -lkernel32 -o "$tempBuild/pythonw-scripts-exe-wrapper.exe"
-
-$ico_path = Join-Path $thisdir "pythonw.ico"
-& "$rceditExePath" "$tempBuild/pythonw-scripts-exe-wrapper.exe" --set-icon "$ico_path"
-
-if (Test-Path "$thisdir/pythonw-scripts-exe-wrapper.exe") {
-    Remove-Item "$thisdir/pythonw-scripts-exe-wrapper.exe" -Force
-}
-Copy-Item "$tempBuild/pythonw-scripts-exe-wrapper.exe" -Destination "$thisdir/pythonw-scripts-exe-wrapper.exe"
+# For pythonw.exe
+& "$tempFolderPath/tcc/tcc.exe" -D_UNICODE -DNOSHELL "$thisdir/python-venv-exe-wrapper.c" -luser32 -lkernel32 -o "$tempBuild/pythonw-venv-exe-wrapper.exe"
+& "$rceditExePath" "$tempBuild/pythonw-venv-exe-wrapper.exe" --set-icon (Join-Path $thisdir "icons/pythonw.ico")
+if (Test-Path "$thisdir/pythonw-venv-exe-wrapper.exe") { Remove-Item "$thisdir/pythonw-venv-exe-wrapper.exe" -Force}
+Copy-Item "$tempBuild/pythonw-venv-exe-wrapper.exe" -Destination "$thisdir/pythonw-venv-exe-wrapper.exe"
 
 
 Write-Host ""

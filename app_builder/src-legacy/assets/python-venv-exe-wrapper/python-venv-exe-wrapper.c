@@ -1,41 +1,7 @@
-//#define NOSHELL
-
 #define _WIN32_WINNT 0x0500
 #include <windows.h>
 #include <stdbool.h>
 #include <tchar.h>
-#include <wctype.h>
-
-// Function to check if a directory name matches python\-\d.\d.*
-int matchPythonDir(TCHAR* dirName) {
-    int len = _tcslen(dirName);
-
-    if (len < 10) {
-        return 0;
-    }
-
-    // Check if the name starts with "python-"
-    if (_tcsncmp(dirName, _T("python-"), 7) != 0) {
-        return 0;
-    }
-
-    // Check if the 8th character is a digit (index 7)
-    if (!iswdigit(dirName[7])) {
-        return 0;
-    }
-
-    // Check if the 9th character is a dot (index 8)
-    if (dirName[8] != _T('.')) {
-        return 0;
-    }
-
-    // Check if the 10th character is a digit (index 9)
-    if (!iswdigit(dirName[9])) {
-        return 0;
-    }
-
-    return 1;
-}
 
 
 #ifdef NOSHELL
@@ -145,64 +111,39 @@ int matchPythonDir(TCHAR* dirName) {
 
     int totlen;
 
-
-
     // *******************************************
-    // Now search for "python-<digit>.<digit><anything>"
+    // Find the basedir of venv where these exes might possibly be
     // *******************************************
+    TCHAR* venvBaseDir;
+    venvBaseDir = (TCHAR*) malloc((_tcslen(exeBaseDir)+10)*2);
+    venvBaseDir[0] = '\0';
+    venvBaseDir[1] = '\0';
 
-    WIN32_FIND_DATAW findFileData;
-    HANDLE hFind;
-
-    // Prepare the search pattern: <exeBaseDir>\*
-    //TCHAR searchPattern[MAX_PATH];
-    TCHAR* searchPattern;
-    searchPattern = (TCHAR*) malloc((_tcslen(exeBaseDir)+10)*2);
-    _stprintf(searchPattern, _T("%s\\*"), exeBaseDir);
-
-    // Find the first file in the directory
-    hFind = FindFirstFileW(searchPattern, &findFileData);
-    if (hFind == INVALID_HANDLE_VALUE) {
-        _ftprintf(stderr, _T("Cannot find \"%s\\python-<version>\"; GetLastError() = (%d)\n"), exeBaseDir, GetLastError());
-        return 1;
+    _tcscpy(venvBaseDir, exeBaseDir);
+    totlen = _tcslen(venvBaseDir);
+    
+    if(totlen >= 8 // \Scripts
+      && (venvBaseDir[(totlen-1)*2] == 's' || venvBaseDir[(totlen-1)*2] == 'S')
+      && (venvBaseDir[(totlen-2)*2] == 't' || venvBaseDir[(totlen-2)*2] == 'T')
+      && (venvBaseDir[(totlen-3)*2] == 'p' || venvBaseDir[(totlen-3)*2] == 'P')
+      && (venvBaseDir[(totlen-4)*2] == 'i' || venvBaseDir[(totlen-4)*2] == 'I')
+      && (venvBaseDir[(totlen-5)*2] == 'r' || venvBaseDir[(totlen-5)*2] == 'R')
+      && (venvBaseDir[(totlen-6)*2] == 'c' || venvBaseDir[(totlen-6)*2] == 'C')
+      && (venvBaseDir[(totlen-7)*2] == 's' || venvBaseDir[(totlen-7)*2] == 'S')
+      && (venvBaseDir[(totlen-8)*2] == '\\' || venvBaseDir[(totlen-8)*2] == '/')
+    ){
+      _tcscat(venvBaseDir, L"\\..");
     }
-
-    do {
-        if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY){
-            if(
-              _tcslen(findFileData.cFileName) > 8 
-              && findFileData.cFileName[0] == L'p'
-              && findFileData.cFileName[1] == L'y'
-              && findFileData.cFileName[2] == L't'
-              && findFileData.cFileName[3] == L'h'
-              && findFileData.cFileName[4] == L'o'
-              && findFileData.cFileName[5] == L'n'
-              && findFileData.cFileName[6] == L'-'
-              && findFileData.cFileName[7] == L'3'
-              && findFileData.cFileName[8] == L'.'
-            ){
-                goto found_python_dir;
-            }
-        }
-    } while (FindNextFileW(hFind, &findFileData) != 0);
-
-    _ftprintf(stderr, _T("Cannot find \"%s\\python-<version>\"\n"), exeBaseDir);
-    return 1;
-
-    found_python_dir:
-    FindClose(hFind);
 
     // *******************************************
     // Get into this form: "c:\path\to\python.exe" args...
     // *******************************************
     TCHAR* cmdLine1 = L"\"";
-    TCHAR* cmdLine2 = exeBaseDir;
-    TCHAR* cmdLine3 = L"\\";
-    TCHAR* cmdLine4 = findFileData.cFileName;
-    TCHAR* cmdLine5 = L"\\python.exe\" ";
-    TCHAR* cmdLine6 = cmdArgs;
+    TCHAR* cmdLine2 = venvBaseDir;
+    TCHAR* cmdLine3 = L"\\python\\python.exe\" ";
+    TCHAR* cmdLine4 = cmdArgs;
 
-    totlen = (_tcslen(cmdLine1)+_tcslen(cmdLine2)+_tcslen(cmdLine3)+_tcslen(cmdLine4)+_tcslen(cmdLine5)+_tcslen(cmdLine6));
+    totlen = (_tcslen(cmdLine1)+_tcslen(cmdLine2)+_tcslen(cmdLine3)+_tcslen(cmdLine4));
 
     TCHAR* cmdLine;
     cmdLine = (TCHAR*) malloc((totlen+3)*2);
@@ -214,9 +155,6 @@ int matchPythonDir(TCHAR* dirName) {
     _tcscat(cmdLine, cmdLine2);
     _tcscat(cmdLine, cmdLine3);
     _tcscat(cmdLine, cmdLine4);
-    _tcscat(cmdLine, cmdLine5);
-    _tcscat(cmdLine, cmdLine6);
-    
 
     // ************************************
     // Prepare and run CreateProcessW
