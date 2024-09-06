@@ -368,16 +368,20 @@ def get_python(version):
             pydir / "Lib" / "site-packages", app_paths.py_dir / "Lib" / "site-packages"
         )
         shutil.move(pydir / "Scripts", app_paths.py_dir / "Scripts")
-        shutil.move(pydir, app_paths.py_dir / "Bin")
-        shutil.copy(
-            app_paths.asset_dir
-            / "python-venv-exe-wrapper"
-            / "python-venv-exe-wrapper.exe",
-            app_paths.py_dir / "python.exe",
-        )
+        shutil.move(pydir, app_paths.py_dir / pydir.name)
         (app_paths.py_dir / "pyvenv.cfg").write_text(
             "include-system-site-packages = false"
         )
+
+        for i, j in [
+            ("python-venv-exe-wrapper.exe", "python.exe"),
+            ("python-scripts-exe-wrapper.exe", "Scripts/python.exe"),
+            ("pythonw-scripts-exe-wrapper.exe", "Scripts/pythonw.exe"),
+        ]:
+            shutil.copy(
+                app_paths.asset_dir / "python-venv-exe-wrapper" / i,
+                app_paths.py_dir / j,
+            )
 
 
 def get_julia():

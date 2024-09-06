@@ -4,6 +4,39 @@
 #include <windows.h>
 #include <stdbool.h>
 #include <tchar.h>
+#include <wctype.h>
+
+// Function to check if a directory name matches python\-\d.\d.*
+int matchPythonDir(TCHAR* dirName) {
+    int len = _tcslen(dirName);
+
+    if (len < 10) {
+        return 0;
+    }
+
+    // Check if the name starts with "python-"
+    if (_tcsncmp(dirName, _T("python-"), 7) != 0) {
+        return 0;
+    }
+
+    // Check if the 8th character is a digit (index 7)
+    if (!iswdigit(dirName[7])) {
+        return 0;
+    }
+
+    // Check if the 9th character is a dot (index 8)
+    if (dirName[8] != _T('.')) {
+        return 0;
+    }
+
+    // Check if the 10th character is a digit (index 9)
+    if (!iswdigit(dirName[9])) {
+        return 0;
+    }
+
+    return 1;
+}
+
 
 #ifdef NOSHELL
     int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
@@ -71,7 +104,7 @@
     for(int i=0; i<_tcslen(exeBaseDir); i++){
       //must be easier way to index unicode string
       TCHAR c = *(TCHAR *)(&exeBaseDir[i*2]);
-      if(c == L'\\' || c == L'//'){
+      if(c == L'\\' || c == L'/'){
         nrOfSlashed+=1;
         slashLoc=i;
       }
@@ -103,8 +136,8 @@
                          (progName[(fnameend-3)*2] == 'e' || progName[(fnameend-3)*2] == 'E') &&
                          (progName[(fnameend-2)*2] == 'x' || progName[(fnameend-2)*2] == 'X') &&
                          (progName[(fnameend-1)*2] == 'e' || progName[(fnameend-1)*2] == 'E') ){
-        progName[(fnameend-4)*2]   = '\0';
-        progName[(fnameend-4)*2+1] = '\0';
+      progName[(fnameend-4)*2]   = '\0';
+      progName[(fnameend-4)*2+1] = '\0';
     }
 
     //_tprintf(progName);
@@ -113,93 +146,60 @@
     int totlen;
 
 
-    // ******************************************
-    // Find python.exe path ...\bin\python\python.exe
-    // ******************************************
-    TCHAR* pythonPath;
-    TCHAR* subPythonPath  = L"\\bin\\python\\python.exe";
-    
-    pythonPath[0] = '\0';
-    pythonPath[1] = '\0';
-    pythonPath = (TCHAR*) malloc((_tcslen(exeBaseDir)+_tcslen(subPythonPath)+3)*2);
+    // *******************************************
+    // Now search for "python-<digit>.<digit><anything>"
+    // *******************************************
 
-    _tcscpy(pythonPath, exeBaseDir);
-    _tcscat(pythonPath, L"\\");
-    totlen = _tcslen(pythonPath);
+    WIN32_FIND_DATAW findFileData;
+    HANDLE hFind;
 
-    //128 is maximum number of possible sub-folders
-    for(int i=0; i<500; i++){
+    // Prepare the search pattern: <exeBaseDir>\*
+    //TCHAR searchPattern[MAX_PATH];
+    TCHAR* searchPattern;
+    searchPattern = (TCHAR*) malloc((_tcslen(exeBaseDir)+10)*2);
+    _stprintf(searchPattern, _T("%s\\..\\*"), exeBaseDir);
 
-        slashLoc = -1;
-        for(int j=_tcslen(pythonPath)-1; j>=0; j--){
-          TCHAR c = *(TCHAR *)(&pythonPath[j*2]);
-          if(c == L'\\' || c == L'//'){
-            slashLoc=j;
-            break;
-          }
-        }
-
-        if(slashLoc == -1){
-            goto err_python;
-        }
-
-        
-        pythonPath[2*slashLoc] = '\0';
-        pythonPath[2*slashLoc+1] = '\0';  
-
-        _tcscat(pythonPath, subPythonPath);
-        
-        if(0 == _waccess(pythonPath, 0)){
-            goto breakout_python;
-        }
-
-        //truncate back and then add \..
-        pythonPath[2*slashLoc] = '\0';
-        pythonPath[2*slashLoc+1] = '\0';
+    // Find the first file in the directory
+    hFind = FindFirstFileW(searchPattern, &findFileData);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        _ftprintf(stderr, _T("Cannot find \"%s\\python-<version>\"; GetLastError() = (%d)\n"), exeBaseDir, GetLastError());
+        return 1;
     }
 
-    err_python:;
-    system("powershell -nop -command \"[reflection.assembly]::LoadWithPartialName('System.Windows.Forms')|out-null;[windows.forms.messagebox]::Show('Cannot find ...\\bin\\python\\python.exe in any parent directory.', 'Execution error')\" ");
-    exit(-1);
-    breakout_python:;
+    do {
+        if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY){
+            if(
+              _tcslen(findFileData.cFileName) > 8 
+              && findFileData.cFileName[0] == L'p'
+              && findFileData.cFileName[1] == L'y'
+              && findFileData.cFileName[2] == L't'
+              && findFileData.cFileName[3] == L'h'
+              && findFileData.cFileName[4] == L'o'
+              && findFileData.cFileName[5] == L'n'
+              && findFileData.cFileName[6] == L'-'
+              && findFileData.cFileName[7] == L'3'
+              && findFileData.cFileName[8] == L'.'
+            ){
+                goto found_python_dir;
+            }
+        }
+    } while (FindNextFileW(hFind, &findFileData) != 0);
 
+    _ftprintf(stderr, _T("Cannot find \"%s\\python-<version>\"\n"), exeBaseDir);
+    return 1;
 
-    // ********************************************
-    // Link to the python file
-    // ********************************************
-    TCHAR* progFile1  = exeBaseDir;
-    TCHAR* progFile2  = L"\\py\\";
-    TCHAR* progFile3  = progName;
-    TCHAR* progFile4  = L".py";
-
-    totlen = (_tcslen(progFile1)+_tcslen(progFile2)+_tcslen(progFile3)+_tcslen(progFile4));
-
-    TCHAR* progFile;
-    progFile = (TCHAR*) malloc((totlen+1)*2);
-    progFile[0] = '\0';
-    progFile[1] = '\0';
-
-
-    //Pick correct cmd sequence sequence
-    _tcscat(progFile, progFile1);
-    _tcscat(progFile, progFile2);
-    _tcscat(progFile, progFile3);
-    _tcscat(progFile, progFile4);
-
-    if(0 != _waccess(progFile, 0)){
-      system("powershell -command \"[reflection.assembly]::LoadWithPartialName('System.Windows.Forms')|out-null;[windows.forms.messagebox]::Show('Could not find .py file with the same name in src, py, or . directory.', 'Execution error')\" ");
-      exit(-1);
-    }
+    found_python_dir:
+    FindClose(hFind);
 
     // *******************************************
-    // Get into this form: "c:\path\...\python\python.exe" "c:\path\...\python\Scripts\<name>.exe" arg1 ...
+    // Get into this form: "c:\path\to\python.exe" "c:\path\to\<progName>.zip" <args...>
     // *******************************************
-    TCHAR* cmdLine1  = L"\"";
-    TCHAR* cmdLine2  = pythonPath;
-    TCHAR* cmdLine3  = L"\" \"";
-    TCHAR* cmdLine4  = progFile;
-    TCHAR* cmdLine5  = L"\" "; 
-    TCHAR* cmdLine6  = cmdArgs;
+    TCHAR* cmdLine1 = L"\"";
+    TCHAR* cmdLine2 = exeBaseDir;
+    TCHAR* cmdLine3 = L"\\..\\";
+    TCHAR* cmdLine4 = findFileData.cFileName;
+    TCHAR* cmdLine5 = L"\\python.exe\" ";
+    TCHAR* cmdLine6 = cmdArgs;
 
     totlen = (_tcslen(cmdLine1)+_tcslen(cmdLine2)+_tcslen(cmdLine3)+_tcslen(cmdLine4)+_tcslen(cmdLine5)+_tcslen(cmdLine6));
 
@@ -215,9 +215,6 @@
     _tcscat(cmdLine, cmdLine4);
     _tcscat(cmdLine, cmdLine5);
     _tcscat(cmdLine, cmdLine6);
-    
-    //_tprintf(cmdLine);
-    //_tprintf(L"\n");
 
     // ************************************
     // Prepare and run CreateProcessW

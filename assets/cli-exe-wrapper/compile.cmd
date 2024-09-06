@@ -6,7 +6,7 @@
     powershell -nologo -nop -exec bypass "%_ps1%" %*
     del /f "%_ps1%"
     if /i "%comspec% /c ``%~0` `" equ "%cmdcmdline:"=`%" (
-        explorer "%temp%\python-script-exe-wrapper"
+        explorer "%temp%\cli-exe-wrapper"
         pause
     )
     goto :EOF
@@ -24,12 +24,12 @@ if (Test-Path -Path "$tempFolderPath/tcc/tcc.exe" -PathType Leaf) {
 }
 
 
-$tempBuild = Join-Path $Env:Temp "python-script-exe-wrapper"
+$tempBuild = Join-Path $Env:Temp "cli-exe-wrapper"
 Remove-Item -Recurse -Force $tempBuild -ErrorAction Ignore
 New-Item -Type Directory -Force -Path $tempBuild | Out-Null
 
 $thisdir = Split-Path $Env:_cmd
-& "$tempFolderPath/tcc/tcc.exe" -D_UNICODE "$thisdir/python-script-exe-wrapper.c" -luser32 -lkernel32 -o "$tempBuild/python-script-exe-wrapper.exe"
+& "$tempFolderPath/tcc/tcc.exe" -D_UNICODE "$thisdir/cli-exe-wrapper.c" -luser32 -lkernel32 -o "$tempBuild/cli-exe-wrapper.exe"
 
 Write-Host ""
-Write-Host "Compiled output: $tempBuild/python-script-exe-wrapper.exe"
+Write-Host "Compiled output: $tempBuild/cli-exe-wrapper.exe"
