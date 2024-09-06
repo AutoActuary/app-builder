@@ -348,7 +348,13 @@ def get_python(version):
             app_paths.python_bin, version
         )
     ):
-        return
+        # Also, if the classic Python structure is present... redo as a venv
+        if not [
+            True
+            for fname in ["DLLs", "Doc", "libs", "Tools", "LICENSE.txt", "NEWS.txt"]
+            if (Path(app_paths.python_bin.parent) / fname).exists()
+        ]:
+            return
 
     rmtree_exist_ok(app_paths.py_dir)
     url = prs.get_winpython_version_link(version)
@@ -368,16 +374,20 @@ def get_python(version):
             pydir / "Lib" / "site-packages", app_paths.py_dir / "Lib" / "site-packages"
         )
         shutil.move(pydir / "Scripts", app_paths.py_dir / "Scripts")
-        shutil.move(pydir, app_paths.py_dir / "Bin")
-        shutil.copy(
-            app_paths.asset_dir
-            / "python-venv-exe-wrapper"
-            / "python-venv-exe-wrapper.exe",
-            app_paths.py_dir / "python.exe",
-        )
+        shutil.move(pydir, app_paths.py_dir / "python")
         (app_paths.py_dir / "pyvenv.cfg").write_text(
             "include-system-site-packages = false"
         )
+
+        for src, dst in [
+            ("python-venv-exe-wrapper.exe", "python.exe"),
+            ("python-venv-exe-wrapper.exe", "Scripts/python.exe"),
+            ("pythonw-venv-exe-wrapper.exe", "Scripts/pythonw.exe"),
+        ]:
+            shutil.copy(
+                app_paths.asset_dir / "python-venv-exe-wrapper" / src,
+                app_paths.py_dir / dst,
+            )
 
 
 def get_julia():

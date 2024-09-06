@@ -71,7 +71,7 @@
     for(int i=0; i<_tcslen(exeBaseDir); i++){
       //must be easier way to index unicode string
       TCHAR c = *(TCHAR *)(&exeBaseDir[i*2]);
-      if(c == L'\\' || c == L'//'){
+      if(c == L'\\' || c == L'/'){
         nrOfSlashed+=1;
         slashLoc=i;
       }

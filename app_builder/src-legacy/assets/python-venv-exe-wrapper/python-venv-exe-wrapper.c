@@ -1,9 +1,8 @@
-//#define NOSHELL
-
 #define _WIN32_WINNT 0x0500
 #include <windows.h>
 #include <stdbool.h>
 #include <tchar.h>
+
 
 #ifdef NOSHELL
     int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
@@ -71,7 +70,7 @@
     for(int i=0; i<_tcslen(exeBaseDir); i++){
       //must be easier way to index unicode string
       TCHAR c = *(TCHAR *)(&exeBaseDir[i*2]);
-      if(c == L'\\' || c == L'//'){
+      if(c == L'\\' || c == L'/'){
         nrOfSlashed+=1;
         slashLoc=i;
       }
@@ -103,8 +102,8 @@
                          (progName[(fnameend-3)*2] == 'e' || progName[(fnameend-3)*2] == 'E') &&
                          (progName[(fnameend-2)*2] == 'x' || progName[(fnameend-2)*2] == 'X') &&
                          (progName[(fnameend-1)*2] == 'e' || progName[(fnameend-1)*2] == 'E') ){
-        progName[(fnameend-4)*2]   = '\0';
-        progName[(fnameend-4)*2+1] = '\0';
+      progName[(fnameend-4)*2]   = '\0';
+      progName[(fnameend-4)*2+1] = '\0';
     }
 
     //_tprintf(progName);
@@ -112,14 +111,37 @@
 
     int totlen;
 
+    // *******************************************
+    // Find the basedir of venv where these exes might possibly be
+    // *******************************************
+    TCHAR* venvBaseDir;
+    venvBaseDir = (TCHAR*) malloc((_tcslen(exeBaseDir)+10)*2);
+    venvBaseDir[0] = '\0';
+    venvBaseDir[1] = '\0';
+
+    _tcscpy(venvBaseDir, exeBaseDir);
+    totlen = _tcslen(venvBaseDir);
+    
+    if(totlen >= 8 // \Scripts
+      && (venvBaseDir[(totlen-1)*2] == 's' || venvBaseDir[(totlen-1)*2] == 'S')
+      && (venvBaseDir[(totlen-2)*2] == 't' || venvBaseDir[(totlen-2)*2] == 'T')
+      && (venvBaseDir[(totlen-3)*2] == 'p' || venvBaseDir[(totlen-3)*2] == 'P')
+      && (venvBaseDir[(totlen-4)*2] == 'i' || venvBaseDir[(totlen-4)*2] == 'I')
+      && (venvBaseDir[(totlen-5)*2] == 'r' || venvBaseDir[(totlen-5)*2] == 'R')
+      && (venvBaseDir[(totlen-6)*2] == 'c' || venvBaseDir[(totlen-6)*2] == 'C')
+      && (venvBaseDir[(totlen-7)*2] == 's' || venvBaseDir[(totlen-7)*2] == 'S')
+      && (venvBaseDir[(totlen-8)*2] == '\\' || venvBaseDir[(totlen-8)*2] == '/')
+    ){
+      _tcscat(venvBaseDir, L"\\..");
+    }
 
     // *******************************************
-    // Get into this form: "c:\path\...\python\python.exe" "c:\path\...\python\Scripts\<name>.exe" arg1 ...
+    // Get into this form: "c:\path\to\python.exe" args...
     // *******************************************
-    TCHAR* cmdLine1  = L"\"";
-    TCHAR* cmdLine2  = exeBaseDir;
-    TCHAR* cmdLine3  = L"\\Bin\\python.exe\" ";
-    TCHAR* cmdLine4  = cmdArgs;
+    TCHAR* cmdLine1 = L"\"";
+    TCHAR* cmdLine2 = venvBaseDir;
+    TCHAR* cmdLine3 = L"\\python\\python.exe\" ";
+    TCHAR* cmdLine4 = cmdArgs;
 
     totlen = (_tcslen(cmdLine1)+_tcslen(cmdLine2)+_tcslen(cmdLine3)+_tcslen(cmdLine4));
 
@@ -133,9 +155,6 @@
     _tcscat(cmdLine, cmdLine2);
     _tcscat(cmdLine, cmdLine3);
     _tcscat(cmdLine, cmdLine4);
-    
-    //_tprintf(cmdLine);
-    //_tprintf(L"\n");
 
     // ************************************
     // Prepare and run CreateProcessW
