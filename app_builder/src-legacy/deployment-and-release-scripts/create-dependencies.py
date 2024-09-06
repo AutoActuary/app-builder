@@ -63,12 +63,12 @@ def create_all_dependencies():
         pipversionfile = app_paths.temp_dir.joinpath("..\\pipfreeze.txt")
         with pipversionfile.open("w") as f:
             try:
-                pyversion = misc.sh(f'"{app_paths.python_real_bin()}" --version')
+                pyversion = misc.sh(f'"{app_paths.python_bin}" --version')
                 f.write(pyversion + "\n\n")
             except Exception as e:
                 print(e)
             try:
-                pipfreeze = misc.sh(f'"{app_paths.python_real_bin()}" -m pip freeze')
+                pipfreeze = misc.sh(f'"{app_paths.python_bin}" -m pip freeze')
                 f.write(pipfreeze + "\n")
             except Exception as e:
                 print(e)
@@ -113,7 +113,7 @@ def create_all_dependencies():
             if pip is not None:
                 subprocess.call(
                     [
-                        app_paths.python_real_bin(),
+                        app_paths.python_bin,
                         "-E",
                         "-m",
                         "pip",
@@ -127,7 +127,7 @@ def create_all_dependencies():
             if all_requirements_files := [requirements_tmp, *requirements_files]:
                 subprocess.call(
                     [
-                        app_paths.python_real_bin(),
+                        app_paths.python_bin,
                         "-E",
                         "-m",
                         "pip",
@@ -159,7 +159,7 @@ def create_all_dependencies():
                 if pip is not None:
                     subprocess.call(
                         [
-                            app_paths.python_real_bin(),
+                            app_paths.python_bin,
                             "-E",
                             "-m",
                             "pip",

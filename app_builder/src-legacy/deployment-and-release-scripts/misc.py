@@ -348,13 +348,7 @@ def get_python(version):
             app_paths.python_bin, version
         )
     ):
-        # Also, if the classic Python structure is present... redo as a venv
-        if not [
-            True
-            for fname in ["DLLs", "Doc", "libs", "Tools", "LICENSE.txt", "NEWS.txt"]
-            if (Path(app_paths.python_bin.parent) / fname).exists()
-        ]:
-            return
+        return
 
     rmtree_exist_ok(app_paths.py_dir)
     url = prs.get_winpython_version_link(version)

@@ -54,7 +54,7 @@ ps_bin = Path(
 )
 sevenz_bin = Path(locate.this_dir(), "..", "bin", "7z.exe").resolve()
 rcedit_bin = Path(locate.this_dir(), "..", "bin", "rcedit.exe").resolve()
-python_bin = Path(py_dir, "python.exe")
+python_bin = Path(py_dir, "python", "python.exe")
 julia_bin = Path(julia_dir, "julia.exe")
 r_bin = r_dir.joinpath("bin", "Rscript.exe")
 
