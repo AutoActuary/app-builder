@@ -153,10 +153,7 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     recent_tag = None
     current_tag = None
     try:
-        last_tag_commit = misc.sh(
-            'git log --first-parent --tags --simplify-by-decoration --pretty="format:%H" -n 1'
-        )
-        recent_tag = misc.sh(f"git describe --tags {last_tag_commit}")
+        recent_tag = misc.last_seen_git_tag_only_on_this_branch(current_branch)
         current_tag = misc.sh(f"git describe --tags")
     except:
         pass
@@ -166,7 +163,11 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     else:
         msg = (
             f"Type new version number for this release"
-            + (f" (last version was {recent_tag})" if recent_tag is not None else "")
+            + (
+                f" (last version on {current_branch} was {recent_tag})"
+                if recent_tag is not None
+                else ""
+            )
             + ": v"
         )
 

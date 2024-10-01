@@ -51,6 +51,24 @@ def sh(cmd, std_err_to_stdout=False):
         return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
 
 
+def last_seen_git_tag_only_on_this_branch(branch):
+    cmd = [
+        "git",
+        "log",
+        "--first-parent",
+        branch,
+        "--simplify-by-decoration",
+        "--decorate=full",
+        "--pretty=format:%H %D",
+    ]
+    all_tags_information = subprocess.check_output(cmd, text=True)
+
+    for line in all_tags_information.split("\n"):
+        if "tag:" in line:
+            return line.split("tag:")[1].strip().rstrip(",").split("/")[-1]
+    return None
+
+
 def get_config():
     config = yaml.load(
         app_paths.app_dir.joinpath("Application.yaml").open().read(),
