@@ -106,7 +106,9 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     # *************************************
     # Ensure that the environment is as expected
     # ************************************
+    config = misc.get_config()
 
+    current_branch = misc.sh("git branch --show-current")
     try:
         main_branch = misc.sh("git symbolic-ref refs/remotes/origin/HEAD", True).split(
             "/"
@@ -114,12 +116,21 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     except subprocess.CalledProcessError as e:
         # HEAD branch not set yet
         if "exit status 128" in str(e):
-            main_branch = misc.sh("git branch --show-current")
+            main_branch = current_branch
         else:
             raise
 
-    if misc.sh("git branch --show-current") != main_branch:
-        print(f"You need to be on {main_branch}, checkout {main_branch} and try again.")
+    if "allowed_branches" in config:
+        allowed_branches = config["allowed_branches"]
+        if isinstance(allowed_branches, str):
+            allowed_branches = [allowed_branches]
+    else:
+        allowed_branches = [main_branch]
+
+    if current_branch not in allowed_branches:
+        print(
+            f"You can only create releases from these branches {allowed_branches}, git checkout and try again."
+        )
         sys.exit()
 
     print("Downloading GitHub tag information...")
@@ -128,18 +139,20 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
 
     if "Your branch is up to date with" not in misc.sh("git status -uno"):
         print(
-            f"You need to be in sync with Github and on the latest {main_branch} commit:"
+            f"You need to be in sync with Github and on the latest commit of your branch:"
         )
-        print(f"git pull origin {main_branch}")
-        print(f"git push origin {main_branch}")
+        print(f"git pull origin {current_branch}")
+        print(f"git push origin {current_branch}")
         sys.exit()
+
+    target_commitish = misc.sh("git rev-parse HEAD")
 
     # *************************************
     # Get all the tag information
     # ************************************
     recent_tag = ""
     try:
-        recent_tag = misc.sh("git describe --tags")
+        recent_tag = misc.sh(f"git describe --tags {current_branch}")
     except:
         pass
 
@@ -160,7 +173,11 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     # ************************************
     if tagname != recent_tag:
         github_release.gh_release_create(
-            name_repo, tagname, publish=True, name=f"Released {strdate} {tagname}"
+            name_repo,
+            tagname,
+            publish=True,
+            name=f"Released {strdate} {tagname}",
+            target_commitish=target_commitish,
         )
 
     print("\nYou can add a description to the release online...\n")

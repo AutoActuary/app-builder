@@ -60,9 +60,13 @@ def get_app_version():
             if line == "":
                 continue
 
-            if ":" not in line or line.split(":")[0].strip().lower() != "app-builder":
+            # Allow both app-builder and app_builder for legacy reasons
+            if ":" not in line or line.split(":")[0].strip().lower() not in (
+                "app-builder",
+                "app_builder",
+            ):
                 raise ApplicationYamlError(
-                    "app-builder expects 'application.yaml' files to start with `app-builder: <version>`"
+                    "app-builder expects 'application.yaml' files to start with `app_builder: <version>`"
                 )
             else:
                 version = line.split(":", 1)[1].strip()
