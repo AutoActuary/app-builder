@@ -150,16 +150,25 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     # *************************************
     # Get all the tag information
     # ************************************
-    recent_tag = ""
+    recent_tag = None
+    current_tag = None
     try:
-        recent_tag = misc.sh(f"git describe --tags {current_branch}")
+        last_tag_commit = misc.sh(
+            'git log --first-parent --tags --simplify-by-decoration --pretty="format:%H" -n 1'
+        )
+        recent_tag = misc.sh(f"git describe --tags {last_tag_commit}")
+        current_tag = misc.sh(f"git describe --tags")
     except:
         pass
 
-    msg = (
-        f"Type new version number for brand new release, else type current version number \n"
-        f"{recent_tag} to upload assets: v"
-    )
+    if recent_tag == current_tag and recent_tag is not None:
+        msg = f"You are still on commit version {recent_tag}, retype to upload additional assets: v"
+    else:
+        msg = (
+            f"Type new version number for this release"
+            + (f" (last version was {recent_tag})" if recent_tag is not None else "")
+            + ": v"
+        )
 
     while (user_input := input(msg)).strip() == "":
         pass

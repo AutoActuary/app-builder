@@ -1,5 +1,4 @@
 app_builder: v0.11.0
-allowed_branches: ["main"]
 
 Application:
   name: App Builder
