@@ -65,7 +65,9 @@ def last_seen_git_tag_only_on_this_branch(branch):
 
     for line in all_tags_information.split("\n"):
         if "tag:" in line:
-            return line.split("tag:")[1].strip().rstrip(",").split("/")[-1]
+            # Example: e6734... HEAD -> refs/heads/3.x, tag: refs/tags/v3.0.0, refs/remotes/origin/HEAD, refs/remotes/origin/3.x
+            tag = line.split("tag:")[1].strip().split(",")[0].strip().split("/")[-1]
+            return tag
     return None
 
 
