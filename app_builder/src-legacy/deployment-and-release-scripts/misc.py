@@ -393,73 +393,40 @@ def get_python(version):
             "include-system-site-packages = false"
         )
 
+        # Add the app-builder thin wrappers and the Lib/venv activate scripts to Scripts
+        py_venv_exe = (
+            app_paths.asset_dir
+            / "python-venv-exe-wrapper"
+            / "python-venv-exe-wrapper.exe"
+        )
+        pyw_venv_exe = (
+            app_paths.asset_dir
+            / "python-venv-exe-wrapper"
+            / "pythonw-venv-exe-wrapper.exe"
+        )
+        venv_scripts_dir = app_paths.py_dir / "python" / "Lib" / "venv" / "scripts"
+        activate_venv_scripts = [
+            *(venv_scripts_dir / "nt").glob("*activate*"),
+            *(venv_scripts_dir / "common").glob("*activate*"),
+        ]
+
         for src, dst in [
-            (
-                app_paths.asset_dir
-                / "python-venv-exe-wrapper"
-                / "python-venv-exe-wrapper.exe",
-                "python.exe",
-            ),
-            (
-                app_paths.asset_dir
-                / "python-venv-exe-wrapper"
-                / "python-venv-exe-wrapper.exe",
-                "Scripts/python.exe",
-            ),
-            (
-                app_paths.asset_dir
-                / "python-venv-exe-wrapper"
-                / "pythonw-venv-exe-wrapper.exe",
-                "Scripts/pythonw.exe",
-            ),
-            (
-                app_paths.py_dir
-                / "python"
-                / "Lib"
-                / "venv"
-                / "scripts"
-                / "common"
-                / "activate",
-                "Scripts/activate",
-            ),
-            (
-                app_paths.py_dir
-                / "python"
-                / "Lib"
-                / "venv"
-                / "scripts"
-                / "common"
-                / "Activate.ps1",
-                "Scripts/Activate.ps1",
-            ),
-            (
-                app_paths.py_dir
-                / "python"
-                / "Lib"
-                / "venv"
-                / "scripts"
-                / "nt"
-                / "activate.bat",
-                "Scripts/activate.bat",
-            ),
-            (
-                app_paths.py_dir
-                / "python"
-                / "Lib"
-                / "venv"
-                / "scripts"
-                / "nt"
-                / "deactivate.bat",
-                "Scripts/deactivate.bat",
-            ),
+            (py_venv_exe, "python.exe"),
+            (py_venv_exe, "Scripts/python.exe"),
+            (pyw_venv_exe, "Scripts/pythonw.exe"),
+            *((i, f"Scripts/{i.name}") for i in activate_venv_scripts),
         ]:
             shutil.copy(
                 src,
                 app_paths.py_dir / dst,
             )
 
-        def script_replacements(fnames: str, replacements: dict):
-
+        def apply_activate_script_replacements(fnames: str, custom_replacements: dict):
+            common_replacements = {
+                "__VENV_BIN_NAME__": "Scripts",
+                "__VENV_PROMPT__": "(python) ",
+            }
+            replacements = {**common_replacements, **custom_replacements}
             for fname in fnames:
                 fpath = app_paths.py_dir / "Scripts" / fname
 
@@ -469,25 +436,16 @@ def get_python(version):
 
                 fpath.write_text(txt, encoding="utf-8")
 
-        script_replacements(
+        apply_activate_script_replacements(
             ["activate"],
             {
-                "__VENV_DIR__": r'$(dirname "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)")',
-                "__VENV_BIN_NAME__": "Scripts",
-                "__VENV_PROMPT__": "(python) ",
+                "__VENV_DIR__": r'$(dirname "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)")'
             },
         )
 
-        script_replacements(
-            [
-                "activate.bat",
-                "deactivate.bat",
-            ],
-            {
-                "__VENV_DIR__": r"%~dp0..",
-                "__VENV_BIN_NAME__": "Scripts",
-                "__VENV_PROMPT__": "(python) ",
-            },
+        apply_activate_script_replacements(
+            ["activate.bat", "deactivate.bat"],
+            {"__VENV_DIR__": r"%~dp0.."},
         )
 
 

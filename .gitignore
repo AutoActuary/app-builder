@@ -34,5 +34,6 @@ MANIFEST
 /bin/python
 /bin/git
 /tools/
-bin/7z.dll
-bin/7z.exe
+/bin/7z.dll
+/bin/7z.exe
+/cli_dev/

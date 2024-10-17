@@ -12,8 +12,7 @@ allow_relative_location_imports(".")
 import misc
 import versioning
 import app_paths
-
-import util
+from file_pattern_7zip import create_7zip_from_include_exclude_and_rename_list
 
 create_dependencies = __import__("create-dependencies")
 
@@ -281,56 +280,56 @@ def create_releases(version=None):
             else []
         )
 
-        util.create_7zip_from_include_exclude_and_rename_list(
+        print("Creating 7zip archive:")
+        create_7zip_from_include_exclude_and_rename_list(
             programzip,
             app_paths.app_dir,
             globs_include,
             globs_exclude,
-            paths_rename,
+            [(i, j) for i, j in paths_rename],
             False,
             False,
             app_paths.sevenz_bin,
         )
 
         # Add system-default things like uninstaller
-        globs_include = []
-        globs_exclude = []
-        paths_rename = []
-        for i, j in [
-            ["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
-            [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"],
-            [f"{config['application']['icon']}", "./bin/icon.ico"],
-        ]:
+        paths_rename = {
+            f"tools/entrypoint/{uninstallout.name}": f"bin/{uninstallout.name}",
+            f"{app_paths.asset_dir}/uninstall.ico": "bin/uninstall.ico",
+            f"{config['application']['icon']}": "bin/icon.ico",
+        }
 
-            globs_include.append(i)
-            paths_rename.append([i, j])
-
-        util.create_7zip_from_include_exclude_and_rename_list(
+        create_7zip_from_include_exclude_and_rename_list(
             programzip,
             app_paths.app_dir,
-            globs_include,
-            globs_exclude,
-            paths_rename,
-            False,
-            True,
-            app_paths.sevenz_bin,
+            include_glob_list=list(paths_rename),
+            rename_list=list(paths_rename.items()),
+            append=True,
+            sevenzip_bin=app_paths.sevenz_bin,
+            show_progress=False
+
         )
 
+
+        exefname = _Path(programzip).basename().stripext().replace(" ", "-")
+        installexe = (
+            _Path(programzip).dirname().joinpath(exefname + "-" + version + ".exe")
+        )
+
+        print(f"Creating 7zip installer: {installexe}")
         installzip = app_paths.tools_dir.joinpath(
             "releases", config["application"]["name"] + "_.7z"
         )
 
-        globs_include = ["./bin/7z.*"]
-        globs_exclude = []
-        paths_rename = []
-        for i, j in [
-            ["./tools/entrypoint/" + installout.name, "./" + installout.name],
-            ["./tools/releases/" + programzip.name, "./" + programzip.name],
-        ]:
-            globs_include.append(i)
-            paths_rename.append([i, j])
+        globs_include = ["bin/7z.*", f"tools/entrypoint/{installout.name}"]
+        paths_rename = [
+            (
+                f"tools/entrypoint/{installout.name}",
+                installout.name,
+            )
+        ]
 
-        # Copy any script named "pre-install.bat/cmd" to installer
+        # Copy any script named "pre-install.bat/cmd" directly to installer
         for scriptsdir in [".", "bin", "src", "scripts"]:
             for ext in ("bat", "cmd"):
                 for script in (
@@ -342,15 +341,25 @@ def create_releases(version=None):
                     relpath = str(script.relative_to(app_paths.app_dir))
                     globs_include.append(relpath)
 
-        util.create_7zip_from_include_exclude_and_rename_list(
+        create_7zip_from_include_exclude_and_rename_list(
             installzip,
             app_paths.app_dir,
-            globs_include,
-            globs_exclude,
-            paths_rename,
-            False,
-            False,
-            app_paths.sevenz_bin,
+            include_glob_list=globs_include,
+            rename_list=paths_rename,
+            copymode=False,
+            append=False,
+            sevenzip_bin=app_paths.sevenz_bin,
+            show_progress=False
+        )
+
+        create_7zip_from_include_exclude_and_rename_list(
+            installzip,
+            app_paths.app_dir / "tools" / "releases",
+            include_glob_list=[programzip.name],
+            copymode=True,
+            append=True,
+            sevenzip_bin=app_paths.sevenz_bin,
+            show_progress=False
         )
 
     with _Path(installzip.parent.resolve()):
@@ -374,11 +383,6 @@ def create_releases(version=None):
                 "--set-icon",
                 app_paths.app_dir.joinpath(config["application"]["icon"]),
             ]
-        )
-
-        exefname = _Path(programzip).basename().stripext().replace(" ", "-")
-        installexe = (
-            _Path(programzip).dirname().joinpath(exefname + "-" + version + ".exe")
         )
 
         with open(installexe, "wb") as fw:

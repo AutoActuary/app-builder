@@ -15,9 +15,8 @@ Application:
       - app_builder
 
     exclude:
-      - bin/*.bat
-      - bin/post-dependencies.cmd
       - bin/pre-build.cmd
+      - bin/python/Scripts
     
 dependencies:
     python:
