@@ -15,11 +15,12 @@ from path import Path as _Path
 allow_relative_location_imports(".")
 import misc
 import app_paths
+from run_and_suppress import run_and_suppress_pip
+
 
 """
 Download/install python and R and other dependencies
 """
-
 config = misc.get_config()
 
 
@@ -111,7 +112,7 @@ def create_all_dependencies():
             requirements_tmp.write_text("\n".join(requirements), encoding="utf-8")
 
             if pip is not None:
-                subprocess.call(
+                run_and_suppress_pip(
                     [
                         app_paths.python_bin,
                         "-E",
@@ -121,11 +122,12 @@ def create_all_dependencies():
                         "--upgrade",
                         f"pip=={pip}",
                         "--no-warn-script-location",
-                    ]
+                        "--disable-pip-version-check",
+                    ],
                 )
 
             if all_requirements_files := [requirements_tmp, *requirements_files]:
-                subprocess.call(
+                run_and_suppress_pip(
                     [
                         app_paths.python_bin,
                         "-E",
@@ -135,7 +137,8 @@ def create_all_dependencies():
                         *chain(*[["-r", f] for f in all_requirements_files]),
                         "--upgrade",
                         "--no-warn-script-location",
-                    ]
+                        "--disable-pip-version-check",
+                    ],
                 )
 
             requirements_tmp.unlink()

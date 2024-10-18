@@ -306,10 +306,8 @@ def create_releases(version=None):
             rename_list=list(paths_rename.items()),
             append=True,
             sevenzip_bin=app_paths.sevenz_bin,
-            show_progress=False
-
+            show_progress=False,
         )
-
 
         exefname = _Path(programzip).basename().stripext().replace(" ", "-")
         installexe = (
@@ -349,7 +347,7 @@ def create_releases(version=None):
             copymode=False,
             append=False,
             sevenzip_bin=app_paths.sevenz_bin,
-            show_progress=False
+            show_progress=False,
         )
 
         create_7zip_from_include_exclude_and_rename_list(
@@ -359,7 +357,7 @@ def create_releases(version=None):
             copymode=True,
             append=True,
             sevenzip_bin=app_paths.sevenz_bin,
-            show_progress=False
+            show_progress=False,
         )
 
     with _Path(installzip.parent.resolve()):

@@ -20,6 +20,8 @@ allow_relative_location_imports(".")
 import app_paths
 import python_and_r_sources as prs
 
+from run_and_suppress import run_and_suppress_pip
+
 
 def nested_update(d, u):
     """
@@ -589,7 +591,7 @@ def juliainstall_dependencies(libdict: dict):
 
 
 def pipinstall(libname):
-    subprocess.call(
+    run_and_suppress_pip(
         [
             app_paths.python_bin,
             "-E",
@@ -598,14 +600,15 @@ def pipinstall(libname):
             "install",
             libname,
             "--no-warn-script-location",
-        ]
+            "--disable-pip-version-check",
+        ],
     )
 
 
 def pipinstall_requirements(liblist):
     reqfile = tempfile.mktemp(suffix=".txt")
     open(reqfile, "w").write("\n".join(liblist))
-    subprocess.call(
+    run_and_suppress_pip(
         [
             app_paths.python_bin,
             "-E",
@@ -615,7 +618,8 @@ def pipinstall_requirements(liblist):
             "-r",
             reqfile,
             "--no-warn-script-location",
-        ]
+            "--disable-pip-version-check",
+        ],
     )
     os.unlink(reqfile)
 
