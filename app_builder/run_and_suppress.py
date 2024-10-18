@@ -97,6 +97,8 @@ def run_and_suppress_7z(command, **kwargs):
 _suppress_re_list_pip = [
     re.compile(r"^Looking in indexes\: .*$"),
     re.compile(r"^Requirement already satisfied\: .*$"),
+    re.compile(r"^Collecting .*$"),
+    re.compile(r"^\s*Using cached .*$"),
 ]
 
 

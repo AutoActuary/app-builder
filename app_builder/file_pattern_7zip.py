@@ -1,8 +1,6 @@
 from util import working_directory
 import tempfile
 from pathlib import Path
-import os
-import glob
 from typing import Optional, List, Tuple, Union
 import shutil
 import os
@@ -39,14 +37,23 @@ def globlist(basedir, *include_exclude_include_exclude_etc: List[str]) -> List[s
     >>> globlist(".", [sys.executable]) #doctest: +ELLIPSIS
     [...python.exe...]
     """
+    basedir = Path(basedir)
 
     with working_directory(basedir):
         fileset = {}
+        dotdir = Path(".")
 
         for i, globs in enumerate(include_exclude_include_exclude_etc):
             for g in globs:
-                for path in glob.glob(g):
-                    for file in expand_to_all_sub_files(Path(path)):
+                # Avoid NotImplementedError: Non-relative patterns are unsupported
+                g_path = Path(g)
+                if g_path.is_absolute():
+                    iterator = Path(g_path.anchor).glob(str(g_path.relative_to(g_path.anchor)))
+                else:
+                    iterator = dotdir.glob(g)
+                
+                for path in iterator:
+                    for file in expand_to_all_sub_files(path):
                         # include
                         if i % 2 == 0:
                             fileset[filename_as_key(file)] = file
@@ -92,7 +99,12 @@ def create_7zip_from_filelist(
         with tempfile.TemporaryDirectory() as tmpdir:
             filelist_txt = Path(tmpdir).joinpath("ziplist.txt")
             filelist_txt.write_text(
-                "\n".join([Path(i).relative_to(basedir).as_posix() for i in filelist]),
+                "\n".join(
+                    [
+                        Path(i).resolve().relative_to(basedir).as_posix()
+                        for i in filelist
+                    ]
+                ),
                 encoding="utf-8",
             )
 
@@ -210,8 +222,6 @@ def create_7zip_from_include_exclude_and_rename_list(
             )
 
             renamed_file_list = [i for i in Path(stage_dir).rglob("*") if i.is_file()]
-            print(renamed_file_list)
-            print(stage_dir)
             if renamed_file_list:
                 create_7zip_from_filelist(
                     outpath,
