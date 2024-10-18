@@ -1,16 +1,11 @@
 from util import working_directory
 import tempfile
 from pathlib import Path
-import subprocess
 import os
 import glob
 from typing import Optional, List, Tuple, Union
 import shutil
-import sys
-import subprocess
-import sys
 import os
-import re
 from run_and_suppress import run_and_suppress_7z
 
 
@@ -96,8 +91,10 @@ def create_7zip_from_filelist(
     with working_directory(basedir):
         with tempfile.TemporaryDirectory() as tmpdir:
             filelist_txt = Path(tmpdir).joinpath("ziplist.txt")
-            with open(filelist_txt, "w") as f:
-                f.write("\n".join([str(i).replace("\\", "/") for i in filelist]))
+            filelist_txt.write_text(
+                "\n".join([Path(i).relative_to(basedir).as_posix() for i in filelist]),
+                encoding="utf-8",
+            )
 
             run_and_suppress_7z(
                 [sevenzip_bin, "a", "-y"]
@@ -181,9 +178,7 @@ def create_7zip_from_include_exclude_and_rename_list(
                     os.makedirs(rename_dst_abs.parent, exist_ok=True)
                     shutil.copy2(rename_src, rename_dst_abs)
 
-                    try:
-                        filedict.pop(filename_as_key(rename_src))
-                    except KeyError:
+                    if filedict.pop(filename_as_key(rename_src), None) is None:
                         raise renerr
 
                 elif os.path.isdir(rename_src):
@@ -201,9 +196,7 @@ def create_7zip_from_include_exclude_and_rename_list(
                             os.makedirs(file_dst_abs.parent, exist_ok=True)
                             shutil.copy2(fpath_key, file_dst_abs)
 
-                            try:
-                                filedict.pop(fpath_key, None)
-                            except KeyError:
+                            if filedict.pop(fpath_key, None) is None:
                                 raise renerr
 
             create_7zip_from_filelist(
@@ -216,12 +209,14 @@ def create_7zip_from_include_exclude_and_rename_list(
                 show_progress=show_progress,
             )
 
-            # If rename list exists
-            if flist := list(Path(stage_dir).rglob("*")):
+            renamed_file_list = [i for i in Path(stage_dir).rglob("*") if i.is_file()]
+            print(renamed_file_list)
+            print(stage_dir)
+            if renamed_file_list:
                 create_7zip_from_filelist(
                     outpath,
                     stage_dir,
-                    flist,
+                    renamed_file_list,
                     copymode=copymode,
                     append=True,
                     sevenzip_bin=sevenzip_bin,
