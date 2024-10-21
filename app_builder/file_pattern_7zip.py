@@ -48,10 +48,12 @@ def globlist(basedir, *include_exclude_include_exclude_etc: List[str]) -> List[s
                 # Avoid NotImplementedError: Non-relative patterns are unsupported
                 g_path = Path(g)
                 if g_path.is_absolute():
-                    iterator = Path(g_path.anchor).glob(str(g_path.relative_to(g_path.anchor)))
+                    iterator = Path(g_path.anchor).glob(
+                        str(g_path.relative_to(g_path.anchor))
+                    )
                 else:
                     iterator = dotdir.glob(g)
-                
+
                 for path in iterator:
                     for file in expand_to_all_sub_files(path):
                         # include

@@ -20,7 +20,7 @@ allow_relative_location_imports(".")
 import app_paths
 import python_and_r_sources as prs
 
-from run_and_suppress import run_and_suppress_pip
+from run_and_suppress import run_and_suppress_pip, run_and_suppress_7z
 
 
 def nested_update(d, u):
@@ -203,7 +203,7 @@ def extract_file(archive, destdir, force=True):
     if force:
         rmtree_exist_ok(destdir)
 
-    subprocess.call(
+    run_and_suppress_7z(
         [
             app_paths.sevenz_bin,
             "x",
@@ -795,12 +795,12 @@ def mapped_zip(zippath, mapping, basedir=".", copymode=False):
                 "-ms=on",
             ]
 
-        subprocess.call(
+        run_and_suppress_7z(
             [app_paths.sevenz_bin, "a", "-y"] + mode + [zip_out, f"@{flist_local}"]
         )
 
         with _Path(tmp_out):
-            subprocess.call(
+            run_and_suppress_7z(
                 [app_paths.sevenz_bin, "a", "-y"] + mode + [zip_out, r".\*"]
             )
 
