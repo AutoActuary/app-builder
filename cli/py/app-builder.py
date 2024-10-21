@@ -1,15 +1,13 @@
 import os
 import shutil
-import subprocess
+from subprocess import run, call
 import tempfile
 from pathlib import Path
 import fnmatch
 import re
 from textwrap import dedent
 import time
-
 import sys
-
 from locate import allow_relative_location_imports
 
 allow_relative_location_imports("../..")
@@ -19,6 +17,7 @@ from app_builder import paths
 from app_builder.exec_py import exec_py
 from app_builder.shell import copy
 from app_builder.util import help, init, rmtree
+from app_builder.run_and_suppress import run_and_suppress_pip
 
 
 class ApplicationYamlError(Exception):
@@ -78,12 +77,69 @@ def get_app_version():
     return version
 
 
+# Move this code to py/src so that anyone can make a autory-based venv at will
+def create_app_builder_based_venv(
+    venv_path: Path,
+) -> Path:
+
+    base_python_exe = (
+        Path(__file__).resolve().parent.parent.parent
+        / "bin"
+        / "python"
+        / "python"
+        / "python.exe"
+    )
+
+    run(
+        [
+            str(base_python_exe),
+            "-m",
+            "venv",
+            str(venv_path),
+            "--without-pip",
+        ],
+        check=True,
+    )
+
+    # Define the source directory to copy files from
+    src_base = base_python_exe.parent.parent
+
+    # Ignore files in original that will cause overwrites
+    exclude_relpath_lower_strings = {
+        "scripts",
+        "python",
+        "python.exe",
+        "pyvenv.cfg",
+        "lib",
+    }
+
+    def copy_included_files(src: Path = src_base):
+        relpath = src.resolve().relative_to(src_base)
+        if relpath.as_posix().lower() not in exclude_relpath_lower_strings:
+            if src.is_dir():
+                for f in src.glob("*"):
+                    copy_included_files(f)
+            else:
+                dest = venv_path / relpath
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+
+    copy_included_files()
+
+    # Load original autory's site packages in order for the venv to have access to them
+    (venv_path / "Lib" / "site-packages" / "base_site_packages.pth").write_text(
+        f"import site; site.addsitedir({repr((src_base / 'Lib/site-packages').as_posix())})"
+    )
+
+    return venv_path / "Scripts" / "python.exe"
+
+
 def ensure_app_version():
     rev = get_app_version()
     path_rev = paths.versions.joinpath(rev)
 
     # Maybe no work needed
-    if not path_rev.joinpath("run.py").is_file():
+    if not path_rev.joinpath("run.cmd").is_file():
 
         print(f"Requested version '{rev}' in application.yaml")
         print(f"Initiate app-builder '{rev}' dependencies")
@@ -96,24 +152,25 @@ def ensure_app_version():
             tdir = Path(tdir)
 
             tmp_rev_repo = tdir.joinpath("repo")
-            tmp_site = tdir.joinpath("site-packages")
             os.makedirs(tmp_rev_repo, exist_ok=True)
-            os.makedirs(tmp_site, exist_ok=True)
 
             for i in paths.live_repo.glob("*"):
                 if i.name == ".git":
                     continue
                 copy(i, tmp_rev_repo.joinpath(i.name))
 
-            assert 0 == subprocess.call(
+            create_app_builder_based_venv(tdir / "venv")
+
+            run_and_suppress_pip(
                 [
-                    sys.executable,
+                    tdir / "venv" / "Scripts" / "python.exe",
                     "-m",
                     "pip",
                     "install",
                     "-r",
                     tmp_rev_repo.joinpath("requirements.txt"),
                     "--no-warn-script-location",
+                    "--disable-pip-version-check",
                 ]
             )
 
@@ -123,49 +180,6 @@ def ensure_app_version():
 
         print(f"App-builder version '{rev}' successful")
         print()
-
-    # Inject launcher - note that launcher may change with the app-builder version driving this, so keep it volatile
-    with open(path_rev.joinpath("run.py"), "w") as fw:
-        fw.write(
-            dedent(
-                r"""
-                from pathlib import Path
-                import subprocess
-                import sys
-                import os
-                from textwrap import dedent
-
-                this_dir = Path(__file__).resolve().parent
-                site_dir = this_dir.joinpath('site-packages')
-                script = this_dir.joinpath("repo", "app_builder", "main.py")
-                
-                def repr_str(x):
-                    return repr(str(x))
-                
-                sys.exit(
-                    subprocess.call(
-                        [
-                            sys.executable,
-                            "-c",
-                            dedent(f'''
-                                import sys;
-                                sys.argv = sys.argv[0:1]+{repr(sys.argv[1:])};
-                                sys.path.insert(0, {repr_str(site_dir)});
-                                script = f{repr_str(script)};
-                                globs = globals();
-                                globs["__file__"] = script;
-                                globs["__name__"] = "__main__";
-                                file = open(script, 'rb');
-                                script_txt = file.read();
-                                file.close();
-                                exec(compile(script_txt, script, 'exec'), globs);
-                            '''),
-                        ]
-                    )
-                )
-                """
-            )
-        )
 
     return rev
 
@@ -218,15 +232,25 @@ def run_versioned_main():
 
     rev_path = paths.versions.joinpath(rev)
 
-    # run
-    exec_py(rev_path.joinpath("run.py"))
+    rev_path.joinpath("run.cmd").write_text(
+        r'@call "%~dp0\venv\Scripts\python.exe" "%~dp0repo\app_builder\main.py" %*'
+    )
+
+    # Run directly
+    exit_code = call(
+        [
+            rev_path / "venv" / "Scripts" / "python.exe",
+            rev_path / "repo" / "app_builder" / "main.py",
+            *sys.argv[1:],
+        ],
+    )
 
     # Leave trail
-    with open(rev_path.joinpath("run.log"), "w") as fw:
-        pass
+    rev_path.joinpath("run.log").write_text("")
 
-    # Clean up some old versions
     version_cleanup()
+
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
