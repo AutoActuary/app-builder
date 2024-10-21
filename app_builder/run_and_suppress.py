@@ -87,6 +87,14 @@ _suppress_re_list_7z = [
     re.compile(r"^Archive size\: .*$"),
     re.compile(r"^Everything is Ok.*$"),
     re.compile(r"^  0\%.*$"),
+    re.compile(r"^Extract .*$"),
+    re.compile(r"^Scanning the drive for archives\:.*$"),
+    re.compile(r"^Extracting archive\:.*$"),
+    re.compile(r"^Offset\s+=\s+\d+$"),
+    re.compile(r"^Folders\:\s+\d+"),
+    re.compile(r"^Files\:\s+\d+"),
+    re.compile(r"^Size\:\s+\d+"),
+    re.compile(r"^Compressed\:\s+\d+"),
 ]
 
 
@@ -99,6 +107,13 @@ _suppress_re_list_pip = [
     re.compile(r"^Requirement already satisfied\: .*$"),
     re.compile(r"^Collecting .*$"),
     re.compile(r"^\s*Using cached .*$"),
+    re.compile(r"^Installing collected packages\:.*"),
+    re.compile(r"^\s*Attempting uninstall\:.*"),
+    re.compile(r"^\s*Found existing installation\:.*"),
+    re.compile(r"^\s*Uninstalling .*"),
+    re.compile(r"^\s*Successfully uninstalled.*"),
+    re.compile(r"^Successfully installed.*"),
+    re.compile(r"^Installing collected packages\:.*"),
 ]
 
 

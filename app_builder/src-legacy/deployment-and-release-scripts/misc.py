@@ -206,6 +206,7 @@ def extract_file(archive, destdir, force=True):
     run_and_suppress_7z(
         [
             app_paths.sevenz_bin,
+            "-bsp1",
             "x",
             "-y",
             f"-o{_Path(destdir).abspath()}",
@@ -796,12 +797,14 @@ def mapped_zip(zippath, mapping, basedir=".", copymode=False):
             ]
 
         run_and_suppress_7z(
-            [app_paths.sevenz_bin, "a", "-y"] + mode + [zip_out, f"@{flist_local}"]
+            [app_paths.sevenz_bin, "-bsp1", "a", "-y"]
+            + mode
+            + [zip_out, f"@{flist_local}"]
         )
 
         with _Path(tmp_out):
             run_and_suppress_7z(
-                [app_paths.sevenz_bin, "a", "-y"] + mode + [zip_out, r".\*"]
+                [app_paths.sevenz_bin, "-bsp1", "a", "-y"] + mode + [zip_out, r".\*"]
             )
 
     rmpath(tmp_out)
