@@ -309,12 +309,7 @@ def create_releases(version=None):
             show_progress=False,
         )
 
-        exefname = _Path(programzip).basename().stripext().replace(" ", "-")
-        installexe = (
-            _Path(programzip).dirname().joinpath(exefname + "-" + version + ".exe")
-        )
-
-        print(f"Creating 7zip installer: {installexe}")
+        print(f"Creating 7zip installer for version {version}:")
         installzip = app_paths.tools_dir.joinpath(
             "releases", config["application"]["name"] + "_.7z"
         )
@@ -361,6 +356,7 @@ def create_releases(version=None):
         )
 
     with _Path(installzip.parent.resolve()):
+
         open("config.txt", "wb").write(
             textwrap.dedent(
                 f"""
@@ -381,6 +377,11 @@ def create_releases(version=None):
                 "--set-icon",
                 app_paths.app_dir.joinpath(config["application"]["icon"]),
             ]
+        )
+
+        exefname = _Path(programzip).basename().stripext().replace(" ", "-")
+        installexe = (
+            _Path(programzip).dirname().joinpath(exefname + "-" + version + ".exe")
         )
 
         with open(installexe, "wb") as fw:
