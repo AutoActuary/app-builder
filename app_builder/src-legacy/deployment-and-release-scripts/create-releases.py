@@ -257,7 +257,7 @@ def create_releases(version=None):
                     .glob(f"pre-install.{ext}")
                 ):
                     relpath = (
-                        ("./" + str(script.relative_to(app_builder__paths.app_dir)))
+                        ("./" + str(script.relative_to(app_builder__paths.app_dir.resolve())))
                         .replace("\\", "/")
                         .replace("//", "/")
                     )
@@ -334,7 +334,7 @@ def create_releases(version=None):
                     .resolve()
                     .glob(f"pre-install.{ext}")
                 ):
-                    relpath = str(script.relative_to(app_builder__paths.app_dir))
+                    relpath = str(script.relative_to(app_builder__paths.app_dir.resolve()))
                     globs_include.append(relpath)
 
         create_7zip_from_include_exclude_and_rename_list(

@@ -114,7 +114,7 @@ def create_app_builder_based_venv(
     }
 
     def copy_included_files(src: Path = src_base):
-        relpath = src.resolve().relative_to(src_base)
+        relpath = src.resolve().relative_to(src_base.resolve())
         if relpath.as_posix().lower() not in exclude_relpath_lower_strings:
             if src.is_dir():
                 for f in src.glob("*"):
