@@ -7,23 +7,24 @@ from pathlib import Path
 import sys
 from locate import allow_relative_location_imports
 from path import Path as _Path
+from itertools import chain
 
 allow_relative_location_imports(".")
-import misc
-import versioning
-import app_paths
+import app_builder__misc
+import app_builder__versioning
+import app_builder__paths
 from file_pattern_7zip import create_7zip_from_include_exclude_and_rename_list
 
 create_dependencies = __import__("create-dependencies")
 
 
 def create_releases(version=None):
-    config = misc.get_config()
+    config = app_builder__misc.get_config()
 
     name = config["application"]["name"]
 
     if version is None:
-        version = versioning.get_gitversion()
+        version = app_builder__versioning.get_gitversion()
 
     # **********************************************
     # Make 100% sure all .bat files have \r\n endings
@@ -36,8 +37,8 @@ def create_releases(version=None):
             txt = b"\r\n".join(txt.split(b"\n"))
             filename.open("wb").write(txt)
 
-    for path in app_paths.app_dir.rglob("*"):
-        if not path.is_dir() and os.path.splitext(str(path))[-1].lower() == ".bat":
+    for path in chain(app_builder__paths.app_dir.rglob("*.bat"), app_builder__paths.app_dir.rglob("*.cmd")):
+        if not path.is_dir():
             make_bat_lrln(path)
 
     # **********************************************
@@ -49,10 +50,10 @@ def create_releases(version=None):
     # Create application entry points with correct icons
     # Deprecated (want to move to more explicit launchers)
     # **********************************************
-    entrypointpath = app_paths.tools_dir.joinpath("entrypoint")
+    entrypointpath = app_builder__paths.tools_dir.joinpath("entrypoint")
     os.makedirs(entrypointpath, exist_ok=True)
     if "entrypoint" in config["application"]:
-        entrytxt = app_paths.template_dir.joinpath("entrypoint.bat").open().read()
+        entrytxt = app_builder__paths.template_dir.joinpath("entrypoint.bat").open().read()
         entrytxt = entrytxt.replace(
             "__entrypoint__", config["application"]["entrypoint"]
         )
@@ -66,17 +67,17 @@ def create_releases(version=None):
         entrybat.open("w").write(entrytxt)
 
         entryexe = entrypointpath.joinpath(config["application"]["name"] + ".exe")
-        misc.make_launcher(
-            app_paths.app_dir.joinpath(config["application"]["launcher"]),
+        app_builder__misc.make_launcher(
+            app_builder__paths.app_dir.joinpath(config["application"]["launcher"]),
             entryexe,
-            app_paths.app_dir.joinpath(config["application"]["icon"]),
+            app_builder__paths.app_dir.joinpath(config["application"]["icon"]),
         )
 
     # **********************************************
     # Create installer / uninstaller bat
     # **********************************************
     asciibanner = open(
-        app_paths.app_dir.joinpath(config["application"]["asciibanner"])
+        app_builder__paths.app_dir.joinpath(config["application"]["asciibanner"])
     ).read()
     asciibanner_lines = []
     for line in [""] + asciibanner.split("\n"):
@@ -87,7 +88,7 @@ def create_releases(version=None):
     asciibanner = "\n".join(asciibanner_lines)
 
     for xstall in ["Uninstall", "Install"]:
-        xnstalltxt = app_paths.template_dir.joinpath(f"{xstall}er.bat").open().read()
+        xnstalltxt = app_builder__paths.template_dir.joinpath(f"{xstall}er.bat").open().read()
         xnstalltxt = xnstalltxt.replace("__name__", name)
         xnstalltxt = xnstalltxt.replace(
             "__installdir__", config["application"]["installdir"]
@@ -120,7 +121,7 @@ def create_releases(version=None):
         .read()
         .replace(
             "::__githuburl__",
-            f'call :CREATE-SHORTCUT "%SYSTEMROOT%\\explorer.exe" "%installdir%\\GitHub commit {version}.lnk" "{versioning.get_githuburl()}" ""',
+            f'call :CREATE-SHORTCUT "%SYSTEMROOT%\\explorer.exe" "%installdir%\\GitHub commit {version}.lnk" "{app_builder__versioning.get_githuburl()}" ""',
         )
     )
     with installout.open("w") as f:
@@ -181,7 +182,7 @@ def create_releases(version=None):
             run_external_script = sys.argv[i + 1 :]
 
     if run_external_script:
-        with _Path(app_paths.app_dir):
+        with _Path(app_builder__paths.app_dir):
             run_external_script[0] = Path(run_external_script[0]).resolve()
         subprocess.call(run_external_script)
 
@@ -190,11 +191,11 @@ def create_releases(version=None):
     for scriptsdir in [".", "bin", "src", "scripts"]:
         for ext in ("bat", "cmd"):
             for script in (
-                Path(app_paths.app_dir).joinpath(scriptsdir).glob(f"pre-build.{ext}")
+                Path(app_builder__paths.app_dir).joinpath(scriptsdir).glob(f"pre-build.{ext}")
             ):
                 subprocess.call(script)
             for script in (
-                Path(app_paths.app_dir).joinpath(scriptsdir).glob(f"pre-release.{ext}")
+                Path(app_builder__paths.app_dir).joinpath(scriptsdir).glob(f"pre-release.{ext}")
             ):
                 subprocess.call(script)
 
@@ -207,7 +208,7 @@ def create_releases(version=None):
             f"Unknown compression type: {zipext[1:]}; required to be either 'zip' or '7z'"
         )
 
-    programzip = app_paths.tools_dir.joinpath(
+    programzip = app_builder__paths.tools_dir.joinpath(
         "releases", config["application"]["name"] + zipext
     )
 
@@ -228,13 +229,13 @@ def create_releases(version=None):
     if data_fields == {"programdata"}:
         mapping = config["application"]["programdata"] + [
             ["./tools/entrypoint/" + uninstallout.name, "./bin/" + uninstallout.name],
-            [f"{app_paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"],
+            [f"{app_builder__paths.asset_dir}/uninstall.ico", "./bin/uninstall.ico"],
             [f"{config['application']['icon']}", "./bin/icon.ico"],
         ]
 
-        misc.mapped_zip(programzip, mapping, basedir=app_paths.app_dir)
+        app_builder__misc.mapped_zip(programzip, mapping, basedir=app_builder__paths.app_dir)
 
-        installzip = app_paths.tools_dir.joinpath(
+        installzip = app_builder__paths.tools_dir.joinpath(
             "releases", config["application"]["name"] + "_.7z"
         )
 
@@ -248,19 +249,19 @@ def create_releases(version=None):
         for scriptsdir in [".", "bin", "src", "scripts"]:
             for ext in ("bat", "cmd"):
                 for script in (
-                    Path(app_paths.app_dir)
+                    Path(app_builder__paths.app_dir)
                     .joinpath(scriptsdir)
                     .resolve()
                     .glob(f"pre-install.{ext}")
                 ):
                     relpath = (
-                        ("./" + str(script.relative_to(app_paths.app_dir)))
+                        ("./" + str(script.relative_to(app_builder__paths.app_dir)))
                         .replace("\\", "/")
                         .replace("//", "/")
                     )
                     mapping.append([relpath, relpath])
 
-        misc.mapped_zip(installzip, mapping, basedir=app_paths.app_dir, copymode=True)
+        app_builder__misc.mapped_zip(installzip, mapping, basedir=app_builder__paths.app_dir, copymode=True)
 
     if data_fields == {"data"}:
         # Add user-defined input
@@ -283,34 +284,34 @@ def create_releases(version=None):
         print("Creating 7zip archive:")
         create_7zip_from_include_exclude_and_rename_list(
             programzip,
-            app_paths.app_dir,
+            app_builder__paths.app_dir,
             globs_include,
             globs_exclude,
             [(i, j) for i, j in paths_rename],
             False,
             False,
-            app_paths.sevenz_bin,
+            app_builder__paths.sevenz_bin,
         )
 
         # Add system-default things like uninstaller
         paths_rename = {
             f"tools/entrypoint/{uninstallout.name}": f"bin/{uninstallout.name}",
-            f"{app_paths.asset_dir}/uninstall.ico": "bin/uninstall.ico",
+            f"{app_builder__paths.asset_dir}/uninstall.ico": "bin/uninstall.ico",
             f"{config['application']['icon']}": "bin/icon.ico",
         }
 
         create_7zip_from_include_exclude_and_rename_list(
             programzip,
-            app_paths.app_dir,
+            app_builder__paths.app_dir,
             include_glob_list=list(paths_rename),
             rename_list=list(paths_rename.items()),
             append=True,
-            sevenzip_bin=app_paths.sevenz_bin,
+            sevenzip_bin=app_builder__paths.sevenz_bin,
             show_progress=False,
         )
 
         print(f"Creating 7zip installer for version {version}:")
-        installzip = app_paths.tools_dir.joinpath(
+        installzip = app_builder__paths.tools_dir.joinpath(
             "releases", config["application"]["name"] + "_.7z"
         )
 
@@ -326,32 +327,32 @@ def create_releases(version=None):
         for scriptsdir in [".", "bin", "src", "scripts"]:
             for ext in ("bat", "cmd"):
                 for script in (
-                    Path(app_paths.app_dir)
+                    Path(app_builder__paths.app_dir)
                     .joinpath(scriptsdir)
                     .resolve()
                     .glob(f"pre-install.{ext}")
                 ):
-                    relpath = str(script.relative_to(app_paths.app_dir))
+                    relpath = str(script.relative_to(app_builder__paths.app_dir))
                     globs_include.append(relpath)
 
         create_7zip_from_include_exclude_and_rename_list(
             installzip,
-            app_paths.app_dir,
+            app_builder__paths.app_dir,
             include_glob_list=globs_include,
             rename_list=paths_rename,
             copymode=False,
             append=False,
-            sevenzip_bin=app_paths.sevenz_bin,
+            sevenzip_bin=app_builder__paths.sevenz_bin,
             show_progress=False,
         )
 
         create_7zip_from_include_exclude_and_rename_list(
             installzip,
-            app_paths.app_dir / "tools" / "releases",
+            app_builder__paths.app_dir / "tools" / "releases",
             include_glob_list=[programzip.name],
             copymode=True,
             append=True,
-            sevenzip_bin=app_paths.sevenz_bin,
+            sevenzip_bin=app_builder__paths.sevenz_bin,
             show_progress=False,
         )
 
@@ -369,13 +370,13 @@ def create_releases(version=None):
             .encode("utf-8")
         )
 
-        shutil.copy(Path(app_paths.sevenz_bin.parent, "7zSD.sfx"), "7zSD.sfx")
+        shutil.copy(Path(app_builder__paths.sevenz_bin.parent, "7zSD.sfx"), "7zSD.sfx")
         subprocess.call(
             [
-                app_paths.rcedit_bin,
+                app_builder__paths.rcedit_bin,
                 "7zSD.sfx",
                 "--set-icon",
-                app_paths.app_dir.joinpath(config["application"]["icon"]),
+                app_builder__paths.app_dir.joinpath(config["application"]["icon"]),
             ]
         )
 
@@ -389,22 +390,22 @@ def create_releases(version=None):
             shutil.copyfileobj(open("config.txt", "rb"), fw)
             shutil.copyfileobj(open(installzip, "rb"), fw)
 
-        misc.rmpath("config.txt")
-        misc.rmpath("7zSD.sfx")
+        app_builder__misc.rmpath("config.txt")
+        app_builder__misc.rmpath("7zSD.sfx")
 
-    misc.rmpath(installzip)
+    app_builder__misc.rmpath(installzip)
 
     # **********************************************
     # implicitely run any script named "post-build.bat" or "post-build.cmd" in dedicated locations
     for scriptsdir in [".", "bin", "src", "scripts"]:
         for ext in ("bat", "cmd"):
             for script in (
-                Path(app_paths.app_dir).joinpath(scriptsdir).glob(f"post-build.{ext}")
+                Path(app_builder__paths.app_dir).joinpath(scriptsdir).glob(f"post-build.{ext}")
             ):
                 subprocess.call(script)
 
             for script in (
-                Path(app_paths.app_dir).joinpath(scriptsdir).glob(f"post-release.{ext}")
+                Path(app_builder__paths.app_dir).joinpath(scriptsdir).glob(f"post-release.{ext}")
             ):
                 subprocess.call(script)
 

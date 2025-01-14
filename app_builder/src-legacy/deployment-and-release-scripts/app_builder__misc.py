@@ -17,7 +17,7 @@ from path import Path as _Path
 from pathlib import Path
 
 allow_relative_location_imports(".")
-import app_paths
+import app_builder__paths
 import python_and_r_sources as prs
 
 from run_and_suppress import run_and_suppress_pip, run_and_suppress_7z
@@ -75,7 +75,7 @@ def last_seen_git_tag_only_on_this_branch(branch):
 
 def get_config():
     config = yaml.load(
-        app_paths.app_dir.joinpath("Application.yaml").open().read(),
+        app_builder__paths.app_dir.joinpath("Application.yaml").open().read(),
         Loader=yaml.FullLoader,
     )
 
@@ -205,7 +205,7 @@ def extract_file(archive, destdir, force=True):
 
     run_and_suppress_7z(
         [
-            app_paths.sevenz_bin,
+            app_builder__paths.sevenz_bin,
             "-bsp1",
             "x",
             "-y",
@@ -243,7 +243,7 @@ def download(dlurl, dest):
 
         if (
             subprocess.call(
-                [app_paths.ps_bin, "-Command", "gcm Invoke-WebRequest"],
+                [app_builder__paths.ps_bin, "-Command", "gcm Invoke-WebRequest"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -253,7 +253,7 @@ def download(dlurl, dest):
             # New Powershell method is available
             subprocess.call(
                 [
-                    app_paths.ps_bin,
+                    app_builder__paths.ps_bin,
                     "-Command",
                     f"Invoke-WebRequest '{dlurl}' -OutFile '{tmploc}'",
                 ]
@@ -263,7 +263,7 @@ def download(dlurl, dest):
             # Only old Powershell method is available
             subprocess.call(
                 [
-                    app_paths.ps_bin,
+                    app_builder__paths.ps_bin,
                     "-Command",
                     f"(New-Object Net.WebClient).DownloadFile('{dlurl}', '{tmploc}')",
                 ]
@@ -308,7 +308,7 @@ def get_program(
     # Get download url
     # ************************************************
     url = download_page
-    dump = app_paths.temp_dir.joinpath(slugify(url))
+    dump = app_builder__paths.temp_dir.joinpath(slugify(url))
 
     # maybe we already have this information
     if dump.is_file():
@@ -335,9 +335,9 @@ def get_program(
     # Download program
     # ************************************************
     prevdl = True
-    if filename not in os.listdir(app_paths.temp_dir):
+    if filename not in os.listdir(app_builder__paths.temp_dir):
         prevdl = False
-        download(dlurl, app_paths.temp_dir.joinpath(filename))
+        download(dlurl, app_builder__paths.temp_dir.joinpath(filename))
     else:
         print(f"All good, file {filename} already downloaded")
 
@@ -347,7 +347,7 @@ def get_program(
     # os.makedirs(outdir, exist_ok=True)
     if not prevdl or not extract_tester():
         extractor(
-            app_paths.temp_dir.joinpath(filename).resolve(), _Path(outdir).abspath()
+            app_builder__paths.temp_dir.joinpath(filename).resolve(), _Path(outdir).abspath()
         )
 
 
@@ -355,9 +355,9 @@ def get_pandoc():
     get_program(
         "https://github.com/jgm/pandoc/releases/",
         "https://github.com/",
-        app_paths.app_dir.joinpath("bin", "pandoc"),
+        app_builder__paths.app_dir.joinpath("bin", "pandoc"),
         link_tester=lambda x: "/pandoc-" in x and x.endswith("86_64.zip"),
-        extract_tester=lambda: app_paths.app_dir.joinpath(
+        extract_tester=lambda: app_builder__paths.app_dir.joinpath(
             "bin", "pandoc", "pandoc.exe"
         ).is_file(),
     )
@@ -366,17 +366,17 @@ def get_pandoc():
 def get_python(version):
 
     if (
-        app_paths.python_bin.exists()
+        app_builder__paths.python_bin.exists()
         and prs.test_version_of_python_exe_using_subprocess(
-            app_paths.python_bin, version
+            app_builder__paths.python_bin, version
         )
     ):
         return
 
-    rmtree_exist_ok(app_paths.py_dir)
+    rmtree_exist_ok(app_builder__paths.py_dir)
     url = prs.get_winpython_version_link(version)
     filename = Path(url).name
-    dlpath = app_paths.temp_dir.joinpath(filename)
+    dlpath = app_builder__paths.temp_dir.joinpath(filename)
     if not dlpath.exists():
         download(url, dlpath)
 
@@ -385,29 +385,29 @@ def get_python(version):
         pydir = next(Path(tdir).glob("*/python-*"))
 
         # We want the following directory structure:
-        (app_paths.py_dir / "Lib").mkdir(parents=True, exist_ok=True)
+        (app_builder__paths.py_dir / "Lib").mkdir(parents=True, exist_ok=True)
 
         shutil.move(
-            pydir / "Lib" / "site-packages", app_paths.py_dir / "Lib" / "site-packages"
+            pydir / "Lib" / "site-packages", app_builder__paths.py_dir / "Lib" / "site-packages"
         )
-        shutil.move(pydir / "Scripts", app_paths.py_dir / "Scripts")
-        shutil.move(pydir, app_paths.py_dir / "python")
-        (app_paths.py_dir / "pyvenv.cfg").write_text(
+        shutil.move(pydir / "Scripts", app_builder__paths.py_dir / "Scripts")
+        shutil.move(pydir, app_builder__paths.py_dir / "python")
+        (app_builder__paths.py_dir / "pyvenv.cfg").write_text(
             "include-system-site-packages = false"
         )
 
         # Add the app-builder thin wrappers and the Lib/venv activate scripts to Scripts
         py_venv_exe = (
-            app_paths.asset_dir
+            app_builder__paths.asset_dir
             / "python-venv-exe-wrapper"
             / "python-venv-exe-wrapper.exe"
         )
         pyw_venv_exe = (
-            app_paths.asset_dir
+            app_builder__paths.asset_dir
             / "python-venv-exe-wrapper"
             / "pythonw-venv-exe-wrapper.exe"
         )
-        venv_scripts_dir = app_paths.py_dir / "python" / "Lib" / "venv" / "scripts"
+        venv_scripts_dir = app_builder__paths.py_dir / "python" / "Lib" / "venv" / "scripts"
         activate_venv_scripts = [
             *(venv_scripts_dir / "nt").glob("*activate*"),
             *(venv_scripts_dir / "common").glob("*activate*"),
@@ -421,7 +421,7 @@ def get_python(version):
         ]:
             shutil.copy(
                 src,
-                app_paths.py_dir / dst,
+                app_builder__paths.py_dir / dst,
             )
 
         def apply_activate_script_replacements(fnames: str, custom_replacements: dict):
@@ -431,7 +431,7 @@ def get_python(version):
             }
             replacements = {**common_replacements, **custom_replacements}
             for fname in fnames:
-                fpath = app_paths.py_dir / "Scripts" / fname
+                fpath = app_builder__paths.py_dir / "Scripts" / fname
 
                 txt = fpath.read_text(encoding="utf-8")
                 for frm, to in replacements.items():
@@ -454,17 +454,17 @@ def get_python(version):
 
 def get_julia():
     # Escape automatic installation
-    if not app_paths.app_dir.joinpath(
+    if not app_builder__paths.app_dir.joinpath(
         "bin", "julia", "app-builder-dont-overwrite-julia.txt"
     ).is_file():
 
         get_program(
             "https://julialang.org/downloads",
             "",
-            app_paths.app_dir.joinpath("bin", "julia", "julia"),
+            app_builder__paths.app_dir.joinpath("bin", "julia", "julia"),
             link_tester=lambda x: "bin/winnt/x64/" in x and x.endswith("-win64.zip"),
             extract_tester=lambda: (
-                app_paths.app_dir.joinpath(
+                app_builder__paths.app_dir.joinpath(
                     "bin", "julia", "julia", "bin", "julia.exe"
                 ).is_file()
             ),
@@ -472,10 +472,10 @@ def get_julia():
 
         # Add our personalised launcher wrapper to the mix
         shutil.copy2(
-            app_paths.asset_dir.joinpath("launcher-julia.exe"), app_paths.julia_bin
+            app_builder__paths.asset_dir.joinpath("launcher-julia.exe"), app_builder__paths.julia_bin
         )
 
-        julia_env = app_paths.app_dir.joinpath(
+        julia_env = app_builder__paths.app_dir.joinpath(
             "bin", "julia", "activate-julia-environment.cmd"
         )
 
@@ -528,7 +528,7 @@ def get_julia():
             )
         )
 
-        startup = app_paths.app_dir.joinpath(
+        startup = app_builder__paths.app_dir.joinpath(
             "bin", "julia", "localdepot", "config", "startup.jl"
         )
         os.makedirs(startup.parent, exist_ok=True)
@@ -574,7 +574,7 @@ def get_julia():
 
 def juliainstall_dependencies(libdict: dict):
 
-    envs = app_paths.julia_dir.joinpath("localdepot", "environments")
+    envs = app_builder__paths.julia_dir.joinpath("localdepot", "environments")
 
     for path in envs.glob("v*.*/Project.toml"):
         reqs = toml.load(path)
@@ -584,7 +584,7 @@ def juliainstall_dependencies(libdict: dict):
 
     subprocess.call(
         [
-            app_paths.julia_bin,
+            app_builder__paths.julia_bin,
             "-e",
             "using Pkg; Pkg.update(); Pkg.resolve(); Pkg.instantiate()",
         ]
@@ -594,7 +594,7 @@ def juliainstall_dependencies(libdict: dict):
 def pipinstall(libname):
     run_and_suppress_pip(
         [
-            app_paths.python_bin,
+            app_builder__paths.python_bin,
             "-E",
             "-m",
             "pip",
@@ -611,7 +611,7 @@ def pipinstall_requirements(liblist):
     open(reqfile, "w").write("\n".join(liblist))
     run_and_suppress_pip(
         [
-            app_paths.python_bin,
+            app_builder__paths.python_bin,
             "-E",
             "-m",
             "pip",
@@ -628,7 +628,7 @@ def pipinstall_requirements(liblist):
 def is_pip(pname):
     try:
         pipanswer = subprocess.check_output(
-            [app_paths.py_dir.joinpath(r"scripts\pip"), "show", pname]
+            [app_builder__paths.py_dir.joinpath(r"scripts\pip"), "show", pname]
         ).decode("utf-8")
     except:
         return False
@@ -641,15 +641,15 @@ def is_pip(pname):
 
 def get_r(version):
 
-    if app_paths.r_bin.exists() and prs.test_version_of_r_exe_using_subprocess(
-        app_paths.r_bin, version
+    if app_builder__paths.r_bin.exists() and prs.test_version_of_r_exe_using_subprocess(
+        app_builder__paths.r_bin, version
     ):
         return
 
-    rmtree_exist_ok(app_paths.r_dir)
+    rmtree_exist_ok(app_builder__paths.r_dir)
     url = prs.get_r_version_link(version)
     filename = Path(url).name
-    dlpath = app_paths.temp_dir.joinpath(filename)
+    dlpath = app_builder__paths.temp_dir.joinpath(filename)
     if not dlpath.exists():
         download(url, dlpath)
 
@@ -659,7 +659,7 @@ def get_r(version):
             "/SUPPRESSMSGBOXES",
             "/SP-",
             "/VERYSILENT",
-            f"/DIR={app_paths.r_dir}",
+            f"/DIR={app_builder__paths.r_dir}",
             "/COMPONENTS=main,x64",
             "/NOICONS",
         ]
@@ -703,7 +703,7 @@ def get_mintty(icon: Union[_Path, None] = None):
         srcdir.joinpath("cygwin-console-helper.exe"),
     ]
 
-    mintty_path = app_paths.app_dir.joinpath("bin", "mintty", "usr", "bin")
+    mintty_path = app_builder__paths.app_dir.joinpath("bin", "mintty", "usr", "bin")
     os.makedirs(mintty_path, exist_ok=True)
 
     with mintty_path.parent.parent.joinpath("readme.txt").open("w") as fw:
@@ -719,7 +719,7 @@ def get_mintty(icon: Union[_Path, None] = None):
     if icon is not None:
         subprocess.call(
             [
-                app_paths.rcedit_bin,
+                app_builder__paths.rcedit_bin,
                 str(mintty_path.joinpath("mintty.exe")),
                 "--set-icon",
                 str(_Path(icon).abspath()),
@@ -730,7 +730,7 @@ def get_mintty(icon: Union[_Path, None] = None):
 def rinstall(libname):
     subprocess.call(
         [
-            app_paths.r_bin,
+            app_builder__paths.r_bin,
             "-e",
             f"if(! '{libname}' %in% installed.packages()){{ install.packages('{libname}', repos='http://cran.us.r-project.org') }}",
         ]
@@ -797,14 +797,14 @@ def mapped_zip(zippath, mapping, basedir=".", copymode=False):
             ]
 
         run_and_suppress_7z(
-            [app_paths.sevenz_bin, "-bsp1", "a", "-y"]
+            [app_builder__paths.sevenz_bin, "-bsp1", "a", "-y"]
             + mode
             + [zip_out, f"@{flist_local}"]
         )
 
         with _Path(tmp_out):
             run_and_suppress_7z(
-                [app_paths.sevenz_bin, "-bsp1", "a", "-y"] + mode + [zip_out, r".\*"]
+                [app_builder__paths.sevenz_bin, "-bsp1", "a", "-y"] + mode + [zip_out, r".\*"]
             )
 
     rmpath(tmp_out)
@@ -812,4 +812,4 @@ def mapped_zip(zippath, mapping, basedir=".", copymode=False):
 
 def make_launcher(template, dest, icon):
     shutil.copy(template, dest)
-    subprocess.call([app_paths.rcedit_bin, dest, "--set-icon", icon])
+    subprocess.call([app_builder__paths.rcedit_bin, dest, "--set-icon", icon])

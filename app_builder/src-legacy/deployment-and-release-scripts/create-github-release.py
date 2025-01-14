@@ -16,8 +16,8 @@ from app_builder import exec_py
 from locate import allow_relative_location_imports
 
 allow_relative_location_imports(".")
-import misc
-import app_paths
+import app_builder__misc
+import app_builder__paths
 
 create_releases = __import__("create-releases")
 
@@ -26,7 +26,7 @@ strdate = date.today().strftime("%Y-%m-%d")
 try:
     # Works both with https and ssh GitHub urls
     name_repo = "/".join(
-        misc.sh("git config --get remote.origin.url")
+        app_builder__misc.sh("git config --get remote.origin.url")
         .split(".git")[0]
         .split(":")[-1]
         .split("/")[-2:]
@@ -72,7 +72,7 @@ Github.com and follow from step (1):
 
 no_msg = no_msg.encode("utf-8", "ignore").decode("utf-8")
 
-tokenpath = app_paths.tools_dir.joinpath(".github_token")
+tokenpath = app_builder__paths.tools_dir.joinpath(".github_token")
 
 
 def create_token():
@@ -101,16 +101,16 @@ except Exception as e:
 # *********************************
 # After token is sorted out
 # *********************************
-with _Path(app_paths.app_dir):  # run git commands from chdir basedir
+with _Path(app_builder__paths.app_dir):  # run git commands from chdir basedir
 
     # *************************************
     # Ensure that the environment is as expected
     # ************************************
-    config = misc.get_config()
+    config = app_builder__misc.get_config()
 
-    current_branch = misc.sh("git branch --show-current")
+    current_branch = app_builder__misc.sh("git branch --show-current")
     try:
-        main_branch = misc.sh("git symbolic-ref refs/remotes/origin/HEAD", True).split(
+        main_branch = app_builder__misc.sh("git symbolic-ref refs/remotes/origin/HEAD", True).split(
             "/"
         )[-1]
     except subprocess.CalledProcessError as e:
@@ -134,10 +134,10 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
         sys.exit()
 
     print("Downloading GitHub tag information...")
-    misc.sh("git fetch origin")
-    misc.sh("git fetch --tags")
+    app_builder__misc.sh("git fetch origin")
+    app_builder__misc.sh("git fetch --tags")
 
-    if "Your branch is up to date with" not in misc.sh("git status -uno"):
+    if "Your branch is up to date with" not in app_builder__misc.sh("git status -uno"):
         print(
             f"You need to be in sync with Github and on the latest commit of your branch:"
         )
@@ -145,7 +145,7 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
         print(f"git push origin {current_branch}")
         sys.exit()
 
-    target_commitish = misc.sh("git rev-parse HEAD")
+    target_commitish = app_builder__misc.sh("git rev-parse HEAD")
 
     # *************************************
     # Get all the tag information
@@ -153,8 +153,8 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     recent_tag = None
     current_tag = None
     try:
-        recent_tag = misc.last_seen_git_tag_only_on_this_branch(current_branch)
-        current_tag = misc.sh(f"git describe --tags")
+        recent_tag = app_builder__misc.last_seen_git_tag_only_on_this_branch(current_branch)
+        current_tag = app_builder__misc.sh(f"git describe --tags")
     except:
         pass
 
@@ -198,7 +198,7 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
     # *************************************
     # Build the exe from scratch (to contain correct git info)
     # ************************************
-    misc.sh(f"git fetch --tags")
+    app_builder__misc.sh(f"git fetch --tags")
     create_releases.create_releases(tagname)
 
 # **********************************************
@@ -206,7 +206,7 @@ with _Path(app_paths.app_dir):  # run git commands from chdir basedir
 for scriptsdir in [".", "bin", "src", "scripts"]:
     for ext in ("bat", "cmd"):
         for script in (
-            Path(app_paths.app_dir)
+            Path(app_builder__paths.app_dir)
             .joinpath(scriptsdir)
             .glob(f"pre-github-upload.{ext}")
         ):
@@ -218,10 +218,10 @@ for scriptsdir in [".", "bin", "src", "scripts"]:
 print()
 print(f"Uploading to GitHub tag {tagname}, this may take a while...")
 github_release.gh_asset_upload(
-    name_repo, tagname, rf"{app_paths.tools_dir}\releases\*{tagname}*.exe"
+    name_repo, tagname, rf"{app_builder__paths.tools_dir}\releases\*{tagname}*.exe"
 )
 github_release.gh_asset_upload(
-    name_repo, tagname, rf"{app_paths.tools_dir}\releases\*{tagname}*.zip"
+    name_repo, tagname, rf"{app_builder__paths.tools_dir}\releases\*{tagname}*.zip"
 )
 
 
@@ -230,7 +230,7 @@ github_release.gh_asset_upload(
 for scriptsdir in [".", "bin", "src", "scripts"]:
     for ext in ("bat", "cmd"):
         for script in (
-            Path(app_paths.app_dir)
+            Path(app_builder__paths.app_dir)
             .joinpath(scriptsdir)
             .glob(f"post-github-upload.{ext}")
         ):
