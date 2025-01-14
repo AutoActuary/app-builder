@@ -103,7 +103,7 @@ def create_7zip_from_filelist(
             filelist_txt.write_text(
                 "\n".join(
                     [
-                        Path(i).resolve().relative_to(basedir).as_posix()
+                        Path(i).resolve().relative_to(basedir.resolve()).as_posix()
                         for i in filelist
                     ]
                 ),

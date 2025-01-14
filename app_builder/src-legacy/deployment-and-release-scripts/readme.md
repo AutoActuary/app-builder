@@ -6,8 +6,7 @@ This directory is in dire need of refactoring. It started with script-like pytho
 like-mutation of interconnected functions and routines.
 
 The main interface for using these scripts is the "application.bat" file includes in copy-pasties. It acts as both a
-wrapper for these scripts and as a method to get this all up and running as a submodule. It's a mess, but for now at
-least a working mess! I'm still proud of it, though :P
+wrapper for these scripts and as a method to get this all up and running as a submodule. It's a mess.
 
 ### Dolf, 2021/01/28:
 

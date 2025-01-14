@@ -7,21 +7,23 @@ from contextlib import suppress
 import uuid
 import tempfile
 from itertools import chain
-from app_builder import git_revision
 
 from locate import allow_relative_location_imports
 from path import Path as _Path
 
 allow_relative_location_imports(".")
-import misc
-import app_paths
-from run_and_suppress import run_and_suppress_pip
+import app_builder__misc
+import app_builder__paths
+
+allow_relative_location_imports("../../..")
+from app_builder import git_revision
+from app_builder.run_and_suppress import run_and_suppress_pip
 
 
 """
 Download/install python and R and other dependencies
 """
-config = misc.get_config()
+config = app_builder__misc.get_config()
 
 
 def split_prog_version(s: str):
@@ -43,42 +45,42 @@ def create_all_dependencies():
     for scriptsdir in [".", "bin", "src", "scripts"]:
         for ext in ("bat", "cmd"):
             for script in (
-                _Path(app_paths.app_dir)
+                _Path(app_builder__paths.app_dir)
                 .joinpath(scriptsdir)
                 .glob(f"pre-dependencies.{ext}")
             ):
                 subprocess.call(script)
 
-    os.makedirs(app_paths.app_dir.joinpath("bin"), exist_ok=True)
+    os.makedirs(app_builder__paths.app_dir.joinpath("bin"), exist_ok=True)
     shutil.copy(
-        app_paths.deployment_and_release_scripts_dir.joinpath("..", "bin", "7z.exe"),
-        app_paths.app_dir.joinpath("bin", "7z.exe"),
+        app_builder__paths.deployment_and_release_scripts_dir.joinpath("..", "bin", "7z.exe"),
+        app_builder__paths.app_dir.joinpath("bin", "7z.exe"),
     )
     shutil.copy(
-        app_paths.deployment_and_release_scripts_dir.joinpath("..", "bin", "7z.dll"),
-        app_paths.app_dir.joinpath("bin", "7z.dll"),
+        app_builder__paths.deployment_and_release_scripts_dir.joinpath("..", "bin", "7z.dll"),
+        app_builder__paths.app_dir.joinpath("bin", "7z.dll"),
     )
 
     def python_post_process():
         # Added some pip logging information
-        pipversionfile = app_paths.temp_dir.joinpath("..\\pipfreeze.txt")
+        pipversionfile = app_builder__paths.temp_dir.joinpath("..\\pipfreeze.txt")
         with pipversionfile.open("w") as f:
             try:
-                pyversion = misc.sh(f'"{app_paths.python_bin}" --version')
+                pyversion = app_builder__misc.sh(f'"{app_builder__paths.python_bin}" --version')
                 f.write(pyversion + "\n\n")
             except Exception as e:
                 print(e)
             try:
-                pipfreeze = misc.sh(f'"{app_paths.python_bin}" -m pip freeze')
+                pipfreeze = app_builder__misc.sh(f'"{app_builder__paths.python_bin}" -m pip freeze')
                 f.write(pipfreeze + "\n")
             except Exception as e:
                 print(e)
 
         # Delete all __pycache__ from python (+/- 40mb)
         print("Purge __pycache__ files")
-        for file in app_paths.py_dir.rglob("*"):
+        for file in app_builder__paths.py_dir.rglob("*"):
             if file.name == "__pycache__" and file.is_dir():
-                misc.rmtree(file)
+                app_builder__misc.rmtree(file)
 
     for key, value in config.get("dependencies", {}).items():
 
@@ -101,11 +103,11 @@ def create_all_dependencies():
                 pip = str(pip)
 
             requirements = value.get("requirements", [])
-            misc.get_python(version)
+            app_builder__misc.get_python(version)
 
             # Relative to app_dir
             requirements_files = [
-                Path(app_paths.app_dir, i) for i in value.get("requirements_files", [])
+                Path(app_builder__paths.app_dir, i) for i in value.get("requirements_files", [])
             ]
 
             requirements_tmp = Path(tempfile.gettempdir()) / f"{uuid.uuid4()}.txt"
@@ -114,7 +116,7 @@ def create_all_dependencies():
             if pip is not None:
                 run_and_suppress_pip(
                     [
-                        app_paths.python_bin,
+                        app_builder__paths.python_bin,
                         "-E",
                         "-m",
                         "pip",
@@ -129,7 +131,7 @@ def create_all_dependencies():
             if all_requirements_files := [requirements_tmp, *requirements_files]:
                 run_and_suppress_pip(
                     [
-                        app_paths.python_bin,
+                        app_builder__paths.python_bin,
                         "-E",
                         "-m",
                         "pip",
@@ -147,9 +149,9 @@ def create_all_dependencies():
         # Legacy way
         elif is_prog(key, "python"):
             _, version = split_prog_version(key)
-            misc.get_python(version)
+            app_builder__misc.get_python(version)
 
-            if misc.islistlike(value):
+            if app_builder__misc.islistlike(value):
                 pip = None
                 value_ = []
                 for v in value:
@@ -162,7 +164,7 @@ def create_all_dependencies():
                 if pip is not None:
                     subprocess.call(
                         [
-                            app_paths.python_bin,
+                            app_builder__paths.python_bin,
                             "-E",
                             "-m",
                             "pip",
@@ -173,57 +175,57 @@ def create_all_dependencies():
                         ]
                     )
 
-                misc.pipinstall_requirements(value)
+                app_builder__misc.pipinstall_requirements(value)
             python_post_process()
 
         # install R (if used)
         elif is_prog(key, "r"):
             _, version = split_prog_version(key)
-            misc.get_r(version)
-            if misc.islistlike(value):
+            app_builder__misc.get_r(version)
+            if app_builder__misc.islistlike(value):
                 for dep in value:
-                    misc.rinstall(dep)
+                    app_builder__misc.rinstall(dep)
 
             print("Purge any R docs and i386 files")
-            if app_paths.r_dir.joinpath("unins000.dat").is_file():
-                os.remove(app_paths.r_dir.joinpath("unins000.dat"))
+            if app_builder__paths.r_dir.joinpath("unins000.dat").is_file():
+                os.remove(app_builder__paths.r_dir.joinpath("unins000.dat"))
 
-            if app_paths.r_dir.joinpath("unins000.exe").is_file():
-                os.remove(app_paths.r_dir.joinpath("unins000.exe"))
+            if app_builder__paths.r_dir.joinpath("unins000.exe").is_file():
+                os.remove(app_builder__paths.r_dir.joinpath("unins000.exe"))
 
-            misc.rmtree(app_paths.r_dir.joinpath("bin/i386"), ignore_errors=True)
-            misc.rmtree(app_paths.r_dir.joinpath("doc"), ignore_errors=True)
+            app_builder__misc.rmtree(app_builder__paths.r_dir.joinpath("bin/i386"), ignore_errors=True)
+            app_builder__misc.rmtree(app_builder__paths.r_dir.joinpath("doc"), ignore_errors=True)
 
-            for libdir in app_paths.r_dir.joinpath("library").glob("*"):
-                misc.rmtree(libdir.joinpath("libs/i386"), ignore_errors=True)
-                misc.rmtree(libdir.joinpath("doc"), ignore_errors=True)
+            for libdir in app_builder__paths.r_dir.joinpath("library").glob("*"):
+                app_builder__misc.rmtree(libdir.joinpath("libs/i386"), ignore_errors=True)
+                app_builder__misc.rmtree(libdir.joinpath("doc"), ignore_errors=True)
 
         elif key.lower() == "pandoc" and value:
-            misc.get_pandoc()
+            app_builder__misc.get_pandoc()
 
             # Delete unnecessary file
-            if app_paths.app_dir.joinpath(
+            if app_builder__paths.app_dir.joinpath(
                 "bin", "pandoc", "pandoc-citeproc.exe"
             ).is_file():
                 os.remove(
-                    app_paths.app_dir.joinpath("bin", "pandoc", "pandoc-citeproc.exe")
+                    app_builder__paths.app_dir.joinpath("bin", "pandoc", "pandoc-citeproc.exe")
                 )
 
         elif key.lower() == "julia" and (value or value == {}):
-            misc.get_julia()
+            app_builder__misc.get_julia()
             if isinstance(value, dict):
-                misc.juliainstall_dependencies(value)
+                app_builder__misc.juliainstall_dependencies(value)
 
         elif key.lower() == "mintty" and value:
             icon = None
             if isinstance(value, str):
-                icon = _Path(Path(app_paths.app_dir, value))
-            misc.get_mintty(icon)
+                icon = _Path(Path(app_builder__paths.app_dir, value))
+            app_builder__misc.get_mintty(icon)
 
         elif key.lower() == "deploy-scripts":
             git_revision.git_download(
                 "git@github.com:AutoActuary/deploy-scripts.git",
-                app_paths.app_dir.joinpath("tools", "deploy-scripts"),
+                app_builder__paths.app_dir.joinpath("tools", "deploy-scripts"),
                 str(value),
             )
 
@@ -235,7 +237,7 @@ def create_all_dependencies():
             if "github.com" in repo:
                 reponame = repo.split("/")[-1].split(".git")[0]
                 checkout = value[1]
-                repopath = app_paths.tools_dir.joinpath(reponame)
+                repopath = app_builder__paths.tools_dir.joinpath(reponame)
 
                 git_revision.git_download(repo, repopath, checkout)
 
@@ -243,7 +245,7 @@ def create_all_dependencies():
     for scriptsdir in [".", "bin", "src", "scripts"]:
         for ext in ("bat", "cmd"):
             for script in (
-                _Path(app_paths.app_dir)
+                _Path(app_builder__paths.app_dir)
                 .joinpath(scriptsdir)
                 .glob(f"post-dependencies.{ext}")
             ):

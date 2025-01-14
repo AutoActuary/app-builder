@@ -1,17 +1,15 @@
-from locate import this_dir
-import subprocess
 import sys
 from pathlib import Path
-from locate import allow_relative_location_imports
 
-allow_relative_location_imports("..")
+this_dir = Path(__file__).resolve().parent
+sys.path.insert(0, this_dir.parent.as_posix())  # parent dir
 from app_builder import exec_py
 
 
 def caller_version_tuple():
     """
-    This a a hack to get the version of the caller cli if app-builder is not called directly, but rather from the cli
-    (which is wrapper for app-builder and is also responsible for maintaining different versions of this app).
+    This is a workaround to get the version of the caller cli if app-builder is not called directly (but from the cli).
+    Note: the cli also acts as a wrapper and puppeteer for maintaining different versions of this app and dispatching to the correct one.
     """
 
     py_caller = Path(sys.executable).resolve()
@@ -51,7 +49,8 @@ if __name__ == "__main__":
 
     if vertup is None or vertup >= (0, 1, 0):
         exec_py.exec_py(
-            this_dir().joinpath("src-legacy", "tools", "application.py"), globals()
+            this_dir.joinpath("src-legacy", "tools", "application.py"),
+            globals(),
         )
 
     else:
