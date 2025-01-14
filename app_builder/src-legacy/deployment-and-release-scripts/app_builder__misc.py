@@ -11,16 +11,17 @@ import collections.abc
 import toml
 
 import yaml
-from locate import allow_relative_location_imports
-import locate
 from path import Path as _Path
 from pathlib import Path
 
+from locate import allow_relative_location_imports
+
 allow_relative_location_imports(".")
 import app_builder__paths
-import python_and_r_sources as prs
+import app_builder__python_and_r_sources as prs
 
-from run_and_suppress import run_and_suppress_pip, run_and_suppress_7z
+allow_relative_location_imports("../../..")
+from app_builder.run_and_suppress import run_and_suppress_pip, run_and_suppress_7z
 
 
 def nested_update(d, u):

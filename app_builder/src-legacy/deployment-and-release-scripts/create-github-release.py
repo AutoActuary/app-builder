@@ -11,13 +11,13 @@ import sys
 
 from requests import HTTPError
 
-from app_builder import exec_py
 
 from locate import allow_relative_location_imports
 
 allow_relative_location_imports(".")
 import app_builder__misc
 import app_builder__paths
+
 
 create_releases = __import__("create-releases")
 

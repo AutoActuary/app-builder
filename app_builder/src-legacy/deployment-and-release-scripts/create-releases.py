@@ -13,7 +13,9 @@ allow_relative_location_imports(".")
 import app_builder__misc
 import app_builder__versioning
 import app_builder__paths
-from file_pattern_7zip import create_7zip_from_include_exclude_and_rename_list
+
+allow_relative_location_imports("../../..")
+from app_builder.file_pattern_7zip import create_7zip_from_include_exclude_and_rename_list
 
 create_dependencies = __import__("create-dependencies")
 

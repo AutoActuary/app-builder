@@ -7,7 +7,6 @@ from contextlib import suppress
 import uuid
 import tempfile
 from itertools import chain
-from app_builder import git_revision
 
 from locate import allow_relative_location_imports
 from path import Path as _Path
@@ -15,7 +14,10 @@ from path import Path as _Path
 allow_relative_location_imports(".")
 import app_builder__misc
 import app_builder__paths
-from run_and_suppress import run_and_suppress_pip
+
+allow_relative_location_imports("../../..")
+from app_builder import git_revision
+from app_builder.run_and_suppress import run_and_suppress_pip
 
 
 """
