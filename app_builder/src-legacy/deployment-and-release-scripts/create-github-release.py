@@ -92,11 +92,15 @@ try:
     github_release.get_releases(name_repo)
 except Exception as e:
     errstr = str(e).lower()
-    if "401 client error" in errstr and "unauthorized for url" in errstr:
+    if ("401 client error" in errstr) or ("404 client error" in errstr):
         os.unlink(tokenpath)
         create_token()
     else:
-        raise
+        e.add_note(
+            "Connectivity errors can occur when 'tools/ .github_token' became invalid. "
+            "You can delete the file and try again to reset the token."
+        )
+        raise e
 
 # *********************************
 # After token is sorted out
@@ -110,9 +114,9 @@ with _Path(app_builder__paths.app_dir):  # run git commands from chdir basedir
 
     current_branch = app_builder__misc.sh("git branch --show-current")
     try:
-        main_branch = app_builder__misc.sh("git symbolic-ref refs/remotes/origin/HEAD", True).split(
-            "/"
-        )[-1]
+        main_branch = app_builder__misc.sh(
+            "git symbolic-ref refs/remotes/origin/HEAD", True
+        ).split("/")[-1]
     except subprocess.CalledProcessError as e:
         # HEAD branch not set yet
         if "exit status 128" in str(e):
@@ -153,7 +157,9 @@ with _Path(app_builder__paths.app_dir):  # run git commands from chdir basedir
     recent_tag = None
     current_tag = None
     try:
-        recent_tag = app_builder__misc.last_seen_git_tag_only_on_this_branch(current_branch)
+        recent_tag = app_builder__misc.last_seen_git_tag_only_on_this_branch(
+            current_branch
+        )
         current_tag = app_builder__misc.sh(f"git describe --tags")
     except:
         pass
