@@ -97,7 +97,7 @@ except Exception as e:
         create_token()
     else:
         e.add_note(
-            "Connectivity errors can occur when 'tools/ .github_token' became invalid. "
+            "Connectivity errors can occur when 'tools/.github_token' became invalid. "
             "You can delete the file and try again to reset the token."
         )
         raise e
