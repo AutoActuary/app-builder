@@ -22,7 +22,9 @@ def filename_as_key(fname):
     return str(Path(fname).resolve()).lower()
 
 
-def globlist(basedir, *include_exclude_include_exclude_etc: List[str]) -> List[str]:
+def globlist(
+    basedir, *include_exclude_include_exclude_etc: List[Union[str, Path]]
+) -> List[Path]:
     r"""
     Build a list of files from a sequence of include and exclude glob lists. These glob lists work in sequential order
     (i.e. where the next list of glob filters takes preference over the previous ones).
@@ -52,7 +54,7 @@ def globlist(basedir, *include_exclude_include_exclude_etc: List[str]) -> List[s
                         str(g_path.relative_to(g_path.anchor))
                     )
                 else:
-                    iterator = dotdir.glob(g)
+                    iterator = dotdir.glob(str(g))
 
                 for path in iterator:
                     for file in expand_to_all_sub_files(path):
@@ -61,9 +63,9 @@ def globlist(basedir, *include_exclude_include_exclude_etc: List[str]) -> List[s
                             fileset[filename_as_key(file)] = file
                         # exclude
                         else:
-                            fileset.pop(filename_as_key(file), None)
+                            fileset.pop(filename_as_key(file))
 
-    return list(fileset.values())
+    return [Path(i) for i in fileset.values()]
 
 
 def create_7zip_from_filelist(
@@ -124,7 +126,7 @@ def create_7zip_from_include_exclude_and_rename_list(
     outpath: Path,
     basedir: Path,
     include_glob_list: List[Union[str, Path]],
-    exclude_glob_list: List[Union[str, Path]] = None,
+    exclude_glob_list: Optional[List[Union[str, Path]]] = None,
     rename_list: Optional[List[Tuple[str, str]]] = None,
     copymode: bool = False,
     append: bool = False,
@@ -147,7 +149,7 @@ def create_7zip_from_include_exclude_and_rename_list(
     ...             Path(__file__).resolve().parent.joinpath("src-legacy", "bin", "7z.exe")
     ...         )
     """
-    outpath = os.path.abspath(outpath)
+    outpath = Path(os.path.abspath(outpath))
 
     exclude_glob_list = exclude_glob_list or []
     rename_list = rename_list or []
@@ -180,7 +182,7 @@ def create_7zip_from_include_exclude_and_rename_list(
                 if not matches:
                     raise RuntimeError(
                         "Although absolute filepaths may be given in the 'include' list, it needs to"
-                        f" be renamed to a relative path using a 'rename' entry: '{fpath}'"
+                        f" be renamed to a relative path using a 'rename' entry: '{str(fpath)}'"
                     )
 
             # Copy "renamed" files into a temp location for 7zip to engage with seperately
@@ -229,7 +231,7 @@ def create_7zip_from_include_exclude_and_rename_list(
             if renamed_file_list:
                 create_7zip_from_filelist(
                     outpath,
-                    stage_dir,
+                    Path(stage_dir),
                     renamed_file_list,
                     copymode=copymode,
                     append=True,
