@@ -8,7 +8,7 @@ installed_dir = (
     Path(os.environ["LOCALAPPDATA"]).joinpath("autoactuary", "app-builder").resolve()
 )
 base_dir = this_dir().parent
-temp_dir = Path(tempfile.gettempdir()).joinpath(f"app-builder-7dfd13678769")
+temp_dir = Path(tempfile.gettempdir(), f"app-builder-7dfd13678769").resolve()
 
 
 def set_from_base(dirname):

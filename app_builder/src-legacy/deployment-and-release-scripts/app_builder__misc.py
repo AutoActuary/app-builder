@@ -235,7 +235,8 @@ def download(dlurl, dest):
     dest = Path(dest)
     print(f"Download {dlurl} to {dest}")
 
-    tdir_base = Path(tempfile.gettempdir(), "app-builder-downloads")
+    tdir_base = Path(tempfile.gettempdir(), "app-builder-downloads").resolve()
+    
     os.makedirs(tdir_base, exist_ok=True)
     os.makedirs(dest.parent, exist_ok=True)
 

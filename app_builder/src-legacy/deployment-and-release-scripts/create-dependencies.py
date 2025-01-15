@@ -110,7 +110,7 @@ def create_all_dependencies():
                 Path(app_builder__paths.app_dir, i) for i in value.get("requirements_files", [])
             ]
 
-            requirements_tmp = Path(tempfile.gettempdir()) / f"{uuid.uuid4()}.txt"
+            requirements_tmp = Path(tempfile.gettempdir(), f"app-builder-requirements-{uuid.uuid4()}.txt").resolve()
             requirements_tmp.write_text("\n".join(requirements), encoding="utf-8")
 
             if pip is not None:

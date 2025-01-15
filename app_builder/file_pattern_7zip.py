@@ -79,6 +79,8 @@ def create_7zip_from_filelist(
     Use 7zip to create an archive from a list of files
     """
 
+    basedir = Path(basedir)
+
     # Lastly, zip everything from 1:1 mapping, then from the copied non-1:1 mapping
     # https://stackoverflow.com/a/28474846
     if copymode:
