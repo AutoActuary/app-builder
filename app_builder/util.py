@@ -17,11 +17,12 @@ def help():
             """
         Usage: app-builder [Options]
         Options:
-          -h, --help             Print these options
-          -d, --get-dependencies Ensure all the dependencies are set up properly
-          -l, --local-release    Create a local release
-          -g, --github-release   Create a release and upload it to GitHub
-          -i, --init             Initiate current git repo as an app-builder project             
+          -h, --help                   Print these options
+          -d, --get-dependencies       Ensure all the dependencies are set up properly
+          -l, --local-release          Create a local release
+          -g, --github-release         Create a release and upload it to GitHub
+          -i, --init                   Initiate current git repo as an app-builder project             
+          --install-version <version>  Add and install app-builder version to the preinstall cache
         """
         )
     )

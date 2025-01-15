@@ -5,16 +5,15 @@ import tempfile
 from pathlib import Path
 import fnmatch
 import re
-from textwrap import dedent
 import time
 import sys
+
 from locate import allow_relative_location_imports
 
 allow_relative_location_imports("../..")
 
 from app_builder import git_revision
 from app_builder import paths
-from app_builder.exec_py import exec_py
 from app_builder.shell import copy
 from app_builder.util import help, init, rmtree
 from app_builder.run_and_suppress import run_and_suppress_pip
@@ -77,7 +76,6 @@ def get_app_version():
     return version
 
 
-# Move this code to py/src so that anyone can make a autory-based venv at will
 def create_app_builder_based_venv(
     venv_path: Path,
 ) -> Path:
@@ -134,17 +132,16 @@ def create_app_builder_based_venv(
     return venv_path / "Scripts" / "python.exe"
 
 
-def ensure_app_version():
-    rev = get_app_version()
-    path_rev = paths.versions.joinpath(rev)
+def ensure_app_version(version):
+    path_rev = paths.versions.joinpath(version)
 
     # Maybe no work needed
     if not path_rev.joinpath("run.cmd").is_file():
 
-        print(f"Requested version '{rev}' in application.yaml")
-        print(f"Initiate app-builder '{rev}' dependencies")
+        print(f"Requires app-builder version '{version}'")
+        print(f"Git-clone and pip-install additional requirements")
         git_revision.git_download(
-            "https://github.com/AutoActuary/app-builder.git", paths.live_repo, rev
+            "https://github.com/AutoActuary/app-builder.git", paths.live_repo, version
         )
 
         # Use temp directory so that we can't accidently end up half way
@@ -178,10 +175,10 @@ def ensure_app_version():
             os.makedirs(path_rev.parent, exist_ok=True)
             shutil.copytree(tdir, path_rev)
 
-        print(f"App-builder version '{rev}' successful")
+        print(f"App-builder version '{version}' packaged at '{str(path_rev)}'")
         print()
 
-    return rev
+    return version
 
 
 def version_cleanup():
@@ -195,46 +192,51 @@ def version_cleanup():
         if run_log.is_file():
             vdict[os.path.getmtime(run_log)] = i
 
-    # Sort from oldest to newest and allow versions older than the last 10 used versions to be discarded
-    maybe_discard = sorted(list(vdict.keys()))[:-10]
-
-    # Try to an extra 40 more versions
-    discard = set(maybe_discard).difference(maybe_discard[-40:])
-
-    # But don't keep any of those 40 versions if they haven't been used within the last 30 days
-    discard = discard.union(
-        [i for i in maybe_discard if time.time() - i > 60 * 60 * 24 * 30]
-    )
+    # Keep the last used 50 versions
+    discard = sorted(list(vdict.keys()))[:-50]
 
     for i in discard:
         rmtree(vdict[i])
 
 
+def main_arg_in(options):
+    return len(sys.argv) >= 2 and sys.argv[1].lower() in options
+
+
 def run_versioned_main():
 
     try:
-        rev = ensure_app_version()
+        if main_arg_in(["--install-version"]):
+            version = sys.argv[2]
+            ensure_app_version(version)
+        else:
+            version = get_app_version()
+            ensure_app_version(version)
 
     # If something is wrong with application.yaml rather print help menu
     except ApplicationYamlError:
-        if len(sys.argv) < 2 or (
-            len(sys.argv) >= 2 and sys.argv[1].lower() in ["-h", "--help"]
-        ):
+        if len(sys.argv) < 2 or main_arg_in(["-h", "--help"]):
             help()
+            sys.exit(255)
 
-        elif len(sys.argv) >= 2 and sys.argv[1].lower() in ["-i", "--init"]:
+        elif main_arg_in(["-i", "--init"]):
             init()
+            sys.exit(0)
 
         else:
             raise
 
-        sys.exit()
+    # Leave trail
+    rev_path = paths.versions.joinpath(version)
 
-    rev_path = paths.versions.joinpath(rev)
-
-    rev_path.joinpath("run.cmd").write_text(
+    rev_path.joinpath("app-builder.cmd").write_text(
         r'@call "%~dp0\venv\Scripts\python.exe" "%~dp0repo\app_builder\main.py" %*'
     )
+
+    rev_path.joinpath("run.log").write_text("")
+
+    if main_arg_in(["--install-version"]):
+        sys.exit(0)
 
     # Run directly
     exit_code = call(
@@ -244,9 +246,6 @@ def run_versioned_main():
             *sys.argv[1:],
         ],
     )
-
-    # Leave trail
-    rev_path.joinpath("run.log").write_text("")
 
     version_cleanup()
 
