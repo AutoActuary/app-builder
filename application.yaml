@@ -23,4 +23,4 @@ dependencies:
       version: 3.11.6
       pip: 23.2.1
       requirements_files:
-        - "requireme*.txt"
+        - "requirements.txt"

@@ -5,6 +5,8 @@ from typing import Optional, List, Tuple, Union
 import shutil
 import os
 from run_and_suppress import run_and_suppress_7z
+from win32 import win32file
+import win32con
 
 
 def expand_to_all_sub_files(path: Path) -> List[Path]:
@@ -63,7 +65,7 @@ def globlist(
                             fileset[filename_as_key(file)] = file
                         # exclude
                         else:
-                            fileset.pop(filename_as_key(file))
+                            fileset.pop(filename_as_key(file), None)
 
     return [Path(i) for i in fileset.values()]
 
@@ -120,6 +122,28 @@ def create_7zip_from_filelist(
                 + mode
                 + [str(outpath), f"@{filelist_txt}"]
             )
+
+
+def can_7z_read_file(filepath):
+    """
+    Returns True if the file cannot be opened for both read and write with
+    zero sharing (exclusive access).
+    """
+    dwDesiredAccess = win32con.GENERIC_READ | win32con.GENERIC_WRITE
+    dwShareMode = 0  # no sharing; request exclusive
+    dwCreationDisposition = win32con.OPEN_EXISTING
+
+    try:
+        handle = win32file.CreateFile(
+            filepath, dwDesiredAccess, dwShareMode, None, dwCreationDisposition, 0, None
+        )
+        # If we get here, we could open the file exclusively.
+        win32file.CloseHandle(handle)
+        return True
+    except Exception:
+        # If CreateFile fails with a sharing-violation error,
+        # it typically means the file is locked.
+        return False
 
 
 def create_7zip_from_include_exclude_and_rename_list(
@@ -216,6 +240,17 @@ def create_7zip_from_include_exclude_and_rename_list(
 
                             if filedict.pop(fpath_key, None) is None:
                                 raise renerr
+
+            # Also use renaming trick on any file that is locked for 7zip to read
+            for fpath_key, fpath in list(filedict.items()):
+                if not can_7z_read_file(fpath):
+                    filedict.pop(fpath_key)
+
+                    file_dst_abs = Path(
+                        stage_dir, fpath.resolve().relative_to(basedir.resolve())
+                    )
+                    os.makedirs(file_dst_abs.parent, exist_ok=True)
+                    shutil.copy2(fpath, file_dst_abs)
 
             create_7zip_from_filelist(
                 outpath,
