@@ -136,7 +136,7 @@ def ensure_app_version(version):
     path_rev = paths.versions.joinpath(version)
 
     # Maybe no work needed
-    if not path_rev.joinpath("run.cmd").is_file():
+    if not path_rev.joinpath("app-builder.cmd").is_file():
 
         print(f"Requires app-builder version '{version}'")
         print(f"Git-clone and pip-install additional requirements")
@@ -145,8 +145,14 @@ def ensure_app_version(version):
         )
 
         # Use temp directory so that we can't accidently end up half way
-        with tempfile.TemporaryDirectory() as tdir:
-            tdir = Path(tdir)
+        with tempfile.TemporaryDirectory() as tdir_str:
+            tdir = Path(tdir_str)
+
+            tdir.joinpath("app-builder.cmd").write_text(
+                r'@call "%~dp0\venv\Scripts\python.exe" "%~dp0repo\app_builder\main.py" %*'
+            )
+
+            tdir.joinpath("run.log").write_text("")
 
             tmp_rev_repo = tdir.joinpath("repo")
             os.makedirs(tmp_rev_repo, exist_ok=True)
@@ -178,8 +184,6 @@ def ensure_app_version(version):
         print(f"App-builder version '{version}' packaged at '{str(path_rev)}'")
         print()
 
-    return version
-
 
 def version_cleanup():
     """
@@ -204,11 +208,17 @@ def main_arg_in(options):
 
 
 def run_versioned_main():
-
     try:
         if main_arg_in(["--install-version"]):
+            if len(sys.argv) < 3:
+                help()
+                sys.exit(255)
+
             version = sys.argv[2]
+            print(f"Install version '{version}'")
             ensure_app_version(version)
+            sys.exit(0)
+
         else:
             version = get_app_version()
             ensure_app_version(version)
@@ -229,14 +239,7 @@ def run_versioned_main():
     # Leave trail
     rev_path = paths.versions.joinpath(version)
 
-    rev_path.joinpath("app-builder.cmd").write_text(
-        r'@call "%~dp0\venv\Scripts\python.exe" "%~dp0repo\app_builder\main.py" %*'
-    )
-
     rev_path.joinpath("run.log").write_text("")
-
-    if main_arg_in(["--install-version"]):
-        sys.exit(0)
 
     # Run directly
     exit_code = call(
