@@ -15,7 +15,9 @@ import app_builder__versioning
 import app_builder__paths
 
 allow_relative_location_imports("../../..")
-from app_builder.file_pattern_7zip import create_7zip_from_include_exclude_and_rename_list
+from app_builder.file_pattern_7zip import (
+    create_7zip_from_include_exclude_and_rename_list,
+)
 
 create_dependencies = __import__("create-dependencies")
 
@@ -39,7 +41,10 @@ def create_releases(version=None):
             txt = b"\r\n".join(txt.split(b"\n"))
             filename.open("wb").write(txt)
 
-    for path in chain(app_builder__paths.app_dir.rglob("*.bat"), app_builder__paths.app_dir.rglob("*.cmd")):
+    for path in chain(
+        app_builder__paths.app_dir.rglob("*.bat"),
+        app_builder__paths.app_dir.rglob("*.cmd"),
+    ):
         if not path.is_dir():
             make_bat_lrln(path)
 
@@ -55,7 +60,9 @@ def create_releases(version=None):
     entrypointpath = app_builder__paths.tools_dir.joinpath("entrypoint")
     os.makedirs(entrypointpath, exist_ok=True)
     if "entrypoint" in config["application"]:
-        entrytxt = app_builder__paths.template_dir.joinpath("entrypoint.bat").open().read()
+        entrytxt = (
+            app_builder__paths.template_dir.joinpath("entrypoint.bat").open().read()
+        )
         entrytxt = entrytxt.replace(
             "__entrypoint__", config["application"]["entrypoint"]
         )
@@ -90,7 +97,9 @@ def create_releases(version=None):
     asciibanner = "\n".join(asciibanner_lines)
 
     for xstall in ["Uninstall", "Install"]:
-        xnstalltxt = app_builder__paths.template_dir.joinpath(f"{xstall}er.bat").open().read()
+        xnstalltxt = (
+            app_builder__paths.template_dir.joinpath(f"{xstall}er.bat").open().read()
+        )
         xnstalltxt = xnstalltxt.replace("__name__", name)
         xnstalltxt = xnstalltxt.replace(
             "__installdir__", config["application"]["installdir"]
@@ -193,13 +202,30 @@ def create_releases(version=None):
     for scriptsdir in [".", "bin", "src", "scripts"]:
         for ext in ("bat", "cmd"):
             for script in (
-                Path(app_builder__paths.app_dir).joinpath(scriptsdir).glob(f"pre-build.{ext}")
+                Path(app_builder__paths.app_dir)
+                .joinpath(scriptsdir)
+                .glob(f"pre-build.{ext}")
             ):
-                subprocess.call(script)
+                returncode = subprocess.call(script)
+                if returncode:
+                    print(
+                        f"Error: '{script}' exited with error code {returncode}",
+                        file=sys.stderr,
+                    )
+                    sys.exit(returncode)
+
             for script in (
-                Path(app_builder__paths.app_dir).joinpath(scriptsdir).glob(f"pre-release.{ext}")
+                Path(app_builder__paths.app_dir)
+                .joinpath(scriptsdir)
+                .glob(f"pre-release.{ext}")
             ):
-                subprocess.call(script)
+                returncode = subprocess.call(script)
+                if returncode:
+                    print(
+                        f"Error: '{script}' exited with error code {returncode}",
+                        file=sys.stderr,
+                    )
+                    sys.exit(returncode)
 
     # **********************************************
     # Zip all the application files as one thing
@@ -235,7 +261,9 @@ def create_releases(version=None):
             [f"{config['application']['icon']}", "./bin/icon.ico"],
         ]
 
-        app_builder__misc.mapped_zip(programzip, mapping, basedir=app_builder__paths.app_dir)
+        app_builder__misc.mapped_zip(
+            programzip, mapping, basedir=app_builder__paths.app_dir
+        )
 
         installzip = app_builder__paths.tools_dir.joinpath(
             "releases", config["application"]["name"] + "_.7z"
@@ -257,13 +285,20 @@ def create_releases(version=None):
                     .glob(f"pre-install.{ext}")
                 ):
                     relpath = (
-                        ("./" + str(script.relative_to(app_builder__paths.app_dir.resolve())))
+                        (
+                            "./"
+                            + str(
+                                script.relative_to(app_builder__paths.app_dir.resolve())
+                            )
+                        )
                         .replace("\\", "/")
                         .replace("//", "/")
                     )
                     mapping.append([relpath, relpath])
 
-        app_builder__misc.mapped_zip(installzip, mapping, basedir=app_builder__paths.app_dir, copymode=True)
+        app_builder__misc.mapped_zip(
+            installzip, mapping, basedir=app_builder__paths.app_dir, copymode=True
+        )
 
     if data_fields == {"data"}:
         # Add user-defined input
@@ -334,7 +369,9 @@ def create_releases(version=None):
                     .resolve()
                     .glob(f"pre-install.{ext}")
                 ):
-                    relpath = str(script.relative_to(app_builder__paths.app_dir.resolve()))
+                    relpath = str(
+                        script.relative_to(app_builder__paths.app_dir.resolve())
+                    )
                     globs_include.append(relpath)
 
         create_7zip_from_include_exclude_and_rename_list(
@@ -402,14 +439,30 @@ def create_releases(version=None):
     for scriptsdir in [".", "bin", "src", "scripts"]:
         for ext in ("bat", "cmd"):
             for script in (
-                Path(app_builder__paths.app_dir).joinpath(scriptsdir).glob(f"post-build.{ext}")
+                Path(app_builder__paths.app_dir)
+                .joinpath(scriptsdir)
+                .glob(f"post-build.{ext}")
             ):
-                subprocess.call(script)
+                returncode = subprocess.call(script)
+                if returncode:
+                    print(
+                        f"Error: '{script}' exited with error code {returncode}",
+                        file=sys.stderr,
+                    )
+                    sys.exit(returncode)
 
             for script in (
-                Path(app_builder__paths.app_dir).joinpath(scriptsdir).glob(f"post-release.{ext}")
+                Path(app_builder__paths.app_dir)
+                .joinpath(scriptsdir)
+                .glob(f"post-release.{ext}")
             ):
-                subprocess.call(script)
+                returncode = subprocess.call(script)
+                if returncode:
+                    print(
+                        f"Error: '{script}' exited with error code {returncode}",
+                        file=sys.stderr,
+                    )
+                    sys.exit(returncode)
 
 
 if __name__ == "__main__":

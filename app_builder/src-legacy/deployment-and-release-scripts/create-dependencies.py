@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 import subprocess
 from pathlib import Path
@@ -49,7 +50,13 @@ def create_all_dependencies():
                 .joinpath(scriptsdir)
                 .glob(f"pre-dependencies.{ext}")
             ):
-                subprocess.call(script)
+                returncode = subprocess.call(script)
+                if returncode:
+                    print(
+                        f"Error: '{script}' exited with error code {returncode}",
+                        file=sys.stderr,
+                    )
+                    sys.exit(returncode)
 
     os.makedirs(app_builder__paths.app_dir.joinpath("bin"), exist_ok=True)
     shutil.copy(
@@ -280,7 +287,13 @@ def create_all_dependencies():
                 .joinpath(scriptsdir)
                 .glob(f"post-dependencies.{ext}")
             ):
-                subprocess.call(script)
+                returncode = subprocess.call(script)
+                if returncode:
+                    print(
+                        f"Error: '{script}' exited with error code {returncode}",
+                        file=sys.stderr,
+                    )
+                    sys.exit(returncode)
 
 
 # **********************************************

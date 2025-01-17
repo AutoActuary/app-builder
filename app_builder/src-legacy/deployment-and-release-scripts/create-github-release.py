@@ -216,7 +216,13 @@ for scriptsdir in [".", "bin", "src", "scripts"]:
             .joinpath(scriptsdir)
             .glob(f"pre-github-upload.{ext}")
         ):
-            subprocess.call(script)
+            returncode = subprocess.call(script)
+            print(
+                f"Error: '{script}' exited with error code {returncode}",
+                file=sys.stderr,
+            )
+            if returncode:
+                sys.exit(returncode)
 
 # *************************************
 # Upload exe to github
@@ -240,4 +246,10 @@ for scriptsdir in [".", "bin", "src", "scripts"]:
             .joinpath(scriptsdir)
             .glob(f"post-github-upload.{ext}")
         ):
-            subprocess.call(script)
+            returncode = subprocess.call(script)
+            if returncode:
+                print(
+                    f"Error: '{script}' exited with error code {returncode}",
+                    file=sys.stderr,
+                )
+                sys.exit(returncode)
