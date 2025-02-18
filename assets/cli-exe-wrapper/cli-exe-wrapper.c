@@ -117,7 +117,7 @@
     // Find python.exe path ...\bin\python\python.exe
     // ******************************************
     TCHAR* pythonPath;
-    TCHAR* subPythonPath  = L"\\bin\\python\\python.exe";
+    TCHAR* subPythonPath  = L"\\bin\\python\\python\\python.exe";
     
     pythonPath[0] = '\0';
     pythonPath[1] = '\0';
@@ -192,7 +192,7 @@
     }
 
     // *******************************************
-    // Get into this form: "c:\path\...\python\python.exe" "c:\path\...\python\Scripts\<name>.exe" arg1 ...
+    // Get into this form: "c:\path\...\python\python.exe" "<progFile>" arg1 ...
     // *******************************************
     TCHAR* cmdLine1  = L"\"";
     TCHAR* cmdLine2  = pythonPath;
