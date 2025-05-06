@@ -13,7 +13,7 @@ import toml
 import yaml
 from path import Path as _Path
 from pathlib import Path
-
+from itertools import chain
 from locate import allow_relative_location_imports
 
 allow_relative_location_imports(".")
@@ -384,7 +384,7 @@ def get_python(version):
 
     with tempfile.TemporaryDirectory() as tdir:
         extract_file(dlpath, tdir)
-        pydir = next(Path(tdir).glob("*/python-*"))
+        pydir = next(chain(Path(tdir).glob("*/python-*"), Path(tdir).glob("*/python")))
 
         # We want the following directory structure:
         (app_builder__paths.py_dir / "Lib").mkdir(parents=True, exist_ok=True)
