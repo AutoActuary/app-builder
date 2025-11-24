@@ -1,5 +1,6 @@
 @echo off
 setlocal
+chcp 65001 >nul
 
 :: Templated parameters
 set "progname=__name__"

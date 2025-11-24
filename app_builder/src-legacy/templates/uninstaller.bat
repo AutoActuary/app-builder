@@ -1,5 +1,6 @@
 @echo off
 setlocal
+chcp 65001 >nul
 
 set "progname=__name__"
 set "installdir=__installdir__"
