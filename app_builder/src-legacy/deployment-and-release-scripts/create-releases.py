@@ -59,10 +59,10 @@ def create_shortcut_cmd_code(command, link_output=None, icon=None):
         link_output = Path("%menudir%", Path(progname).with_suffix("").name + ".lnk")
 
     def args2cmdarg(args):
-        return list2cmdline([" ".join(list2cmdline([arg]) for arg in args)])
+        return list2cmdline([" ".join([list2cmdline([arg]) for arg in args])])
 
     def shortcut_code(progpath, iconpath):
-        return f"call :CREATE-SHORTCUT {list2cmdline(progpath)} {list2cmdline([link_output])} {args2cmdarg(args)} {list2cmdline([iconpath])}"
+        return f"call :CREATE-SHORTCUT {list2cmdline([progpath])} {list2cmdline([link_output])} {args2cmdarg(args)} {list2cmdline([iconpath])}"
 
     progpath_installpath = Path("%installdir%", progname)
     iconpath_installpath = Path("%installdir%", icon)
