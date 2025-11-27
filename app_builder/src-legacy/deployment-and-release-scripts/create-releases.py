@@ -59,7 +59,7 @@ def create_shortcut_cmd_code(command, link_output=None, icon=None):
         link_output = Path("%menudir%", Path(program).with_suffix("").name + ".lnk")
 
     def cmdstr(s):
-        wrap = list2cmdline(s)
+        wrap = list2cmdline([s])
         if (wrap[0] + wrap[-1]) != '""':
             wrap = f'"{wrap}"'
         return wrap
