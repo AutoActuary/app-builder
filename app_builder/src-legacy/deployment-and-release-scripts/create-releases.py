@@ -25,26 +25,26 @@ create_dependencies = __import__("create-dependencies")
 
 
 _create_shortcut_code_template_with_icon = r"""
-if exist __progpath_installpath__ (
+if exist __prog_installpath__ (
     if exist __icon_installpath__ (
-        __shortcut_installpath_icon_installpath__
+        __program_installpath_icon_installpath__
     ) else (
-        __shortcut_installpath_icon_abspath__
+        __program_installpath_icon_name__
     )
 ) else (
     if exist __icon_installpath__ (
-        __shortcut_abspath_icon_installpath__
+        __program_name_icon_installpath__
     ) else (
-        __shortcut_abspath_icon_abspath__
+        __program_name_icon_name__
     )
 )
 """
 
 _create_shortcut_code_template_without_icon = r"""
-if exist __progpath_installpath__ (
-    __shortcut_installpath_icon_abspath__
+if exist __prog_installpath__ (
+    __program_installpath_icon_name__
 ) else (
-    __shortcut_abspath_icon_abspath__
+    __program_name_icon_name__
 )
 """
 
@@ -53,37 +53,44 @@ def create_shortcut_cmd_code(command, link_output=None, icon=None):
     if icon is None:
         icon = ""
 
-    progname, *args = split_dos(command)
+    program, *args = split_dos(command)
 
     if link_output is None:
-        link_output = Path("%menudir%", Path(progname).with_suffix("").name + ".lnk")
+        link_output = Path("%menudir%", Path(program).with_suffix("").name + ".lnk")
 
-    def args2cmdarg(args):
-        return list2cmdline([" ".join([list2cmdline([arg]) for arg in args])])
+    def cmdstr(s):
+        wrap = list2cmdline(s)
+        if (wrap[0] + wrap[-1]) != '""':
+            wrap = f'"{wrap}"'
+        return wrap
+
+    def cmdargs(args):
+        return cmdstr(" ".join([cmdstr(arg) for arg in args]))
 
     def shortcut_code(progpath, iconpath):
-        return f"call :CREATE-SHORTCUT {list2cmdline([progpath])} {list2cmdline([link_output])} {args2cmdarg(args)} {list2cmdline([iconpath])}"
+        return f"call :CREATE-SHORTCUT {cmdstr(progpath)} {cmdstr(link_output)} {cmdargs(args)} {cmdstr(iconpath)}"
 
-    progpath_installpath = Path("%installdir%", progname)
-    iconpath_installpath = Path("%installdir%", icon)
+    program_installpath = Path("%installdir%", program)
+    icon_installpath = Path("%installdir%", icon)
 
     replace_dict = {
-        "__progname_installpath__": progpath_installpath,
-        "__shortcut_installpath_icon_abspath__": shortcut_code(
-            progpath_installpath,
+        "__prog_installpath__": program_installpath,
+        "__icon_installpath__": icon_installpath,
+        "__program_installpath_icon_name__": shortcut_code(
+            program_installpath,
             icon,
         ),
-        "__shortcut_abspath_icon_abspath__": shortcut_code(
-            progname,
+        "__program_name_icon_name__": shortcut_code(
+            program,
             icon,
         ),
-        "__shortcut_installpath_icon_installpath__": shortcut_code(
-            progpath_installpath,
-            iconpath_installpath,
+        "__program_installpath_icon_installpath__": shortcut_code(
+            program_installpath,
+            icon_installpath,
         ),
-        "__shortcut_abspath_icon_installpath__": shortcut_code(
-            progname,
-            iconpath_installpath,
+        "__program_name_icon_installpath__": shortcut_code(
+            program,
+            icon_installpath,
         ),
     }
 
