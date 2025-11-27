@@ -100,9 +100,9 @@ def create_shortcut_cmd_code(command, link_output=None, icon=None):
         return s
         
     if icon:
-        return replace(_create_shortcut_code_template_with_icon, replace_dict)
+        return replace(_create_shortcut_code_template_with_icon, replace_dict).replace(r'\"', '""')
     else:
-        return replace(_create_shortcut_code_template_without_icon, replace_dict)
+        return replace(_create_shortcut_code_template_without_icon, replace_dict).replace(r'\"', '""')
 
 
 def create_releases(version=None):
