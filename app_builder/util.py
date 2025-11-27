@@ -156,3 +156,85 @@ def rmtree(
                 raise
 
     return shutil.rmtree(path, False, _onerror)
+
+
+def split_dos(command_line: str) -> List[str]:
+    """
+    Parse a command line string into individual arguments, handling whitespace, quotes,
+    and escaped characters according to Windows command line parsing rules.
+
+    This function interprets the command line string based on a subset of Windows' parsing conventions
+    for executable arguments, managing cases with whitespace, escape sequences, and double quotes.
+
+    Args:
+        command_line (str): The full command line string to parse.
+
+    Returns:
+        list: A list of parsed arguments as individual strings.
+
+    Adapted from:
+        - https://web.archive.org/web/20220626225925/http://www.windowsinspired.com/how-a-windows-programs-splits-its-command-line-into-individual-arguments/
+        - https://chatgpt.com/share/6731f38b-8e00-8006-8610-d9019d2e59a1
+    """
+
+    args = []
+    length = len(command_line)
+    i = 0
+
+    while i < length:
+        # Skip any leading whitespace
+        while i < length and command_line[i] in (" ", "\t"):
+            i += 1
+        if i >= length:
+            break
+
+        arg = ""
+        treat_special_chars = True
+
+        while i < length:
+            num_backslashes = 0
+
+            # Count consecutive backslashes
+            while i < length and command_line[i] == "\\":
+                num_backslashes += 1
+                i += 1
+
+            if i < length and command_line[i] == '"':
+                # Handle double quotes
+                if num_backslashes % 2 == 0:
+                    # Even number of backslashes before double quote
+                    arg += "\\" * (num_backslashes // 2)
+                    i += 1  # Skip the double quote
+
+                    # Check for consecutive double quotes in IgnoreSpecialChars state
+                    if (
+                        not treat_special_chars
+                        and i < length
+                        and command_line[i] == '"'
+                    ):
+                        arg += '"'
+                        i += 1  # Skip the second double quote
+                    else:
+                        # Toggle parser state
+                        treat_special_chars = not treat_special_chars
+                else:
+                    # Odd number of backslashes before double quote
+                    arg += "\\" * (num_backslashes // 2)
+                    arg += '"'  # Escaped double quote
+                    i += 1
+            else:
+                # Handle characters other than double quotes
+                arg += "\\" * num_backslashes
+                if i >= length:
+                    break
+                if command_line[i] in (" ", "\t") and treat_special_chars:
+                    # Whitespace ends the argument in InterpretSpecialChars state
+                    i += 1
+                    break
+                else:
+                    arg += command_line[i]
+                    i += 1
+
+        args.append(arg)
+
+    return args
