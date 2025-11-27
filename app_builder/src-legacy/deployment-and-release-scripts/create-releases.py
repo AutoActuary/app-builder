@@ -60,7 +60,7 @@ def create_shortcut_cmd_code(command, link_output=None, icon=None):
 
     def cmdstr(s):
         wrap = list2cmdline([s])
-        if (wrap[0] + wrap[-1]) != '""':
+        if (wrap[0] + wrap[-1]) != '""' and "%" in wrap:
             wrap = f'"{wrap}"'
         return wrap
 
@@ -98,11 +98,14 @@ def create_shortcut_cmd_code(command, link_output=None, icon=None):
         for key, val in d.items():
             s = s.replace(key, str(val))
         return s
-        
+
     if icon:
-        return replace(_create_shortcut_code_template_with_icon, replace_dict).replace(r'\"', '""')
+        code = replace(_create_shortcut_code_template_with_icon, replace_dict)
     else:
-        return replace(_create_shortcut_code_template_without_icon, replace_dict).replace(r'\"', '""')
+        code = replace(_create_shortcut_code_template_without_icon, replace_dict)
+
+    # :CREATE-SHORTCUT requires an additional indirection \" -> \""
+    return code.replace(r"\"", r'\""')
 
 
 def create_releases(version=None):
