@@ -89,7 +89,7 @@ def create_shortcut_cmd_code(command, link_output=None, icon=None):
 
     def replace(s, d):
         for key, val in d.items():
-            s = s.replace(key, val)
+            s = s.replace(key, str(val))
         return s
         
     if icon:
