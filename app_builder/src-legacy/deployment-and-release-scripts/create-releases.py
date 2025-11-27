@@ -87,10 +87,15 @@ def create_shortcut_cmd_code(command, link_output=None, icon=None):
         ),
     }
 
+    def replace(s, d):
+        for key, val in d.items():
+            s = s.replace(key, val)
+        return s
+        
     if icon:
-        return _create_shortcut_code_template_with_icon.replace(replace_dict)
+        return replace(_create_shortcut_code_template_with_icon, replace_dict)
     else:
-        return _create_shortcut_code_template_without_icon.replace(replace_dict)
+        return replace(_create_shortcut_code_template_without_icon, replace_dict)
 
 
 def create_releases(version=None):
