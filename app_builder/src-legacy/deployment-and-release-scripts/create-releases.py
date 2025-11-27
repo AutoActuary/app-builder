@@ -8,6 +8,7 @@ import sys
 from locate import allow_relative_location_imports
 from path import Path as _Path
 from itertools import chain
+from subprocess import list2cmdline
 
 allow_relative_location_imports(".")
 import app_builder__misc
@@ -15,9 +16,81 @@ import app_builder__versioning
 import app_builder__paths
 
 allow_relative_location_imports("../../..")
-from app_builder.file_pattern_7zip import create_7zip_from_include_exclude_and_rename_list
+from app_builder.file_pattern_7zip import (
+    create_7zip_from_include_exclude_and_rename_list,
+)
+from app_builder.util import split_dos
 
 create_dependencies = __import__("create-dependencies")
+
+
+_create_shortcut_code_template_with_icon = r"""
+if exist __progpath_installpath__ (
+    if exist __icon_installpath__ (
+        __shortcut_installpath_icon_installpath__
+    ) else (
+        __shortcut_installpath_icon_abspath__
+    )
+) else (
+    if exist __icon_installpath__ (
+        __shortcut_abspath_icon_installpath__
+    ) else (
+        __shortcut_abspath_icon_abspath__
+    )
+)
+"""
+
+_create_shortcut_code_template_without_icon = r"""
+if exist __progpath_installpath__ (
+    __shortcut_installpath_icon_abspath__
+) else (
+    __shortcut_abspath_icon_abspath__
+)
+"""
+
+
+def create_shortcut_cmd_code(command, link_output=None, icon=None):
+    if icon is None:
+        icon = ""
+
+    progname, *args = split_dos(command)
+
+    if link_output is None:
+        link_output = Path("%menudir%", Path(progname).with_suffix("").name + ".lnk")
+
+    def args2cmdarg(args):
+        return list2cmdline([" ".join(list2cmdline([arg]) for arg in args)])
+
+    def shortcut_code(progpath, iconpath):
+        return f"call :CREATE-SHORTCUT {list2cmdline(progpath)} {list2cmdline([link_output])} {args2cmdarg(args)} {list2cmdline([iconpath])}"
+
+    progpath_installpath = Path("%installdir%", progname)
+    iconpath_installpath = Path("%installdir%", icon)
+
+    replace_dict = {
+        "__progname_installpath__": progpath_installpath,
+        "__shortcut_installpath_icon_abspath__": shortcut_code(
+            progpath_installpath,
+            icon,
+        ),
+        "__shortcut_abspath_icon_abspath__": shortcut_code(
+            progname,
+            icon,
+        ),
+        "__shortcut_installpath_icon_installpath__": shortcut_code(
+            progpath_installpath,
+            iconpath_installpath,
+        ),
+        "__shortcut_abspath_icon_installpath__": shortcut_code(
+            progname,
+            iconpath_installpath,
+        ),
+    }
+
+    if icon:
+        return _create_shortcut_code_template_with_icon.replace(replace_dict)
+    else:
+        return _create_shortcut_code_template_without_icon.replace(replace_dict)
 
 
 def create_releases(version=None):
@@ -39,7 +112,10 @@ def create_releases(version=None):
             txt = b"\r\n".join(txt.split(b"\n"))
             filename.open("wb").write(txt)
 
-    for path in chain(app_builder__paths.app_dir.rglob("*.bat"), app_builder__paths.app_dir.rglob("*.cmd")):
+    for path in chain(
+        app_builder__paths.app_dir.rglob("*.bat"),
+        app_builder__paths.app_dir.rglob("*.cmd"),
+    ):
         if not path.is_dir():
             make_bat_lrln(path)
 
@@ -55,7 +131,9 @@ def create_releases(version=None):
     entrypointpath = app_builder__paths.tools_dir.joinpath("entrypoint")
     os.makedirs(entrypointpath, exist_ok=True)
     if "entrypoint" in config["application"]:
-        entrytxt = app_builder__paths.template_dir.joinpath("entrypoint.bat").open().read()
+        entrytxt = (
+            app_builder__paths.template_dir.joinpath("entrypoint.bat").open().read()
+        )
         entrytxt = entrytxt.replace(
             "__entrypoint__", config["application"]["entrypoint"]
         )
@@ -90,7 +168,9 @@ def create_releases(version=None):
     asciibanner = "\n".join(asciibanner_lines)
 
     for xstall in ["Uninstall", "Install"]:
-        xnstalltxt = app_builder__paths.template_dir.joinpath(f"{xstall}er.bat").open().read()
+        xnstalltxt = (
+            app_builder__paths.template_dir.joinpath(f"{xstall}er.bat").open().read()
+        )
         xnstalltxt = xnstalltxt.replace("__name__", name)
         xnstalltxt = xnstalltxt.replace(
             "__installdir__", config["application"]["installdir"]
@@ -136,35 +216,22 @@ def create_releases(version=None):
         cmds = []
         for file in config["application"]["startmenu"]:
             if isinstance(file, str):
-                if not Path(file).expanduser().is_absolute():
-                    file = Path("%installdir%", file)
-
-                link = Path("%menudir%", os.path.splitext(file.name)[0] + ".lnk")
-
-                cmd = f'call :CREATE-SHORTCUT "{file}" "{link}"'
+                create_shortcut_cmd_code(file)
 
             elif isinstance(file, list) and len(file) in (2, 3):
-                file_ = Path(file[0])
+                cmd = file[0]
                 link = Path(
                     file[1] if file[1].lower().endswith(".lnk") else file[1] + ".lnk"
                 )
-                icon = Path(file_ if len(file) == 2 else file[2])
-
-                if not file_.expanduser().is_absolute():
-                    file_ = Path("%installdir%", file_)
-
                 if not link.expanduser().is_absolute():
                     link = Path("%menudir%", link)
-
-                if not icon.expanduser().is_absolute():
-                    icon = Path("%installdir%", icon)
-
-                cmd = f'call :CREATE-SHORTCUT "{file_}" "{link}" "" "{icon}"'
+                icon = None if len(file) == 2 else file[2]
+                cmd = create_shortcut_cmd_code(cmd, link, icon)
 
             else:
                 err = (
                     f"application.yaml shortcuts must either be a single string entry or a list of 2 or 3 entries, "
-                    f"[<source>, <dest>, <optional icon>], got: {file}"
+                    f"[<command>, <dest>, <optional icon>], got: {file}"
                 )
                 raise RuntimeError(err)
 
@@ -193,11 +260,15 @@ def create_releases(version=None):
     for scriptsdir in [".", "bin", "src", "scripts"]:
         for ext in ("bat", "cmd"):
             for script in (
-                Path(app_builder__paths.app_dir).joinpath(scriptsdir).glob(f"pre-build.{ext}")
+                Path(app_builder__paths.app_dir)
+                .joinpath(scriptsdir)
+                .glob(f"pre-build.{ext}")
             ):
                 subprocess.call(script)
             for script in (
-                Path(app_builder__paths.app_dir).joinpath(scriptsdir).glob(f"pre-release.{ext}")
+                Path(app_builder__paths.app_dir)
+                .joinpath(scriptsdir)
+                .glob(f"pre-release.{ext}")
             ):
                 subprocess.call(script)
 
@@ -235,7 +306,9 @@ def create_releases(version=None):
             [f"{config['application']['icon']}", "./bin/icon.ico"],
         ]
 
-        app_builder__misc.mapped_zip(programzip, mapping, basedir=app_builder__paths.app_dir)
+        app_builder__misc.mapped_zip(
+            programzip, mapping, basedir=app_builder__paths.app_dir
+        )
 
         installzip = app_builder__paths.tools_dir.joinpath(
             "releases", config["application"]["name"] + "_.7z"
@@ -257,13 +330,20 @@ def create_releases(version=None):
                     .glob(f"pre-install.{ext}")
                 ):
                     relpath = (
-                        ("./" + str(script.relative_to(app_builder__paths.app_dir.resolve())))
+                        (
+                            "./"
+                            + str(
+                                script.relative_to(app_builder__paths.app_dir.resolve())
+                            )
+                        )
                         .replace("\\", "/")
                         .replace("//", "/")
                     )
                     mapping.append([relpath, relpath])
 
-        app_builder__misc.mapped_zip(installzip, mapping, basedir=app_builder__paths.app_dir, copymode=True)
+        app_builder__misc.mapped_zip(
+            installzip, mapping, basedir=app_builder__paths.app_dir, copymode=True
+        )
 
     if data_fields == {"data"}:
         # Add user-defined input
@@ -334,7 +414,9 @@ def create_releases(version=None):
                     .resolve()
                     .glob(f"pre-install.{ext}")
                 ):
-                    relpath = str(script.relative_to(app_builder__paths.app_dir.resolve()))
+                    relpath = str(
+                        script.relative_to(app_builder__paths.app_dir.resolve())
+                    )
                     globs_include.append(relpath)
 
         create_7zip_from_include_exclude_and_rename_list(
@@ -402,12 +484,16 @@ def create_releases(version=None):
     for scriptsdir in [".", "bin", "src", "scripts"]:
         for ext in ("bat", "cmd"):
             for script in (
-                Path(app_builder__paths.app_dir).joinpath(scriptsdir).glob(f"post-build.{ext}")
+                Path(app_builder__paths.app_dir)
+                .joinpath(scriptsdir)
+                .glob(f"post-build.{ext}")
             ):
                 subprocess.call(script)
 
             for script in (
-                Path(app_builder__paths.app_dir).joinpath(scriptsdir).glob(f"post-release.{ext}")
+                Path(app_builder__paths.app_dir)
+                .joinpath(scriptsdir)
+                .glob(f"post-release.{ext}")
             ):
                 subprocess.call(script)
 
