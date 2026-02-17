@@ -1,28 +1,6 @@
-import os
 import shutil
 import subprocess
-from contextlib import contextmanager
 from pathlib import Path
-
-
-@contextmanager
-def working_directory(path):
-    """
-    A context manager which changes the working directory to the given
-    path, and then changes it back to its previous value on exit.
-    Usage:
-    > # Do something in original directory
-    > with working_directory('/my/new/path'):
-    >     # Do something in new directory
-    > # Back to old directory
-    """
-
-    prev_cwd = os.getcwd()
-    os.chdir(path)
-    try:
-        yield
-    finally:
-        os.chdir(prev_cwd)
 
 
 def sh_lines(command, **kwargs):
