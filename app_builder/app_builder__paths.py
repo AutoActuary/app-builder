@@ -7,8 +7,6 @@ import sys
 from functools import cache
 from pathlib import Path
 
-import locate
-
 
 def iglob(p, pattern):
     rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
@@ -43,8 +41,9 @@ julia_dir = Path(app_dir, "bin", "julia")
 r_dir = app_dir.joinpath("bin", "r")
 
 # deploy-tools directories
-template_dir = Path(locate.this_dir(), "src-legacy", "templates").resolve()
-asset_dir = Path(locate.this_dir(), "src-legacy", "assets").resolve()
+legacy_dir = Path(__file__).resolve().parent / "src-legacy"
+template_dir = legacy_dir / "templates"
+asset_dir = legacy_dir / "assets"
 
 # Binaries
 ps_bin = (
@@ -58,9 +57,9 @@ ps_bin = (
     if sys.platform == "win32"
     else Path("/usr/bin/powershell")
 )
-sevenz_bin = Path(locate.this_dir(), "src-legacy", "bin", "7z.exe").resolve()
-sevenz_dll = Path(locate.this_dir(), "src-legacy", "bin", "7z.dll").resolve()
-rcedit_bin = Path(locate.this_dir(), "src-legacy", "bin", "rcedit.exe").resolve()
+sevenz_bin = legacy_dir / "bin" / "7z.exe"
+sevenz_dll = legacy_dir / "bin" / "7z.dll"
+rcedit_bin = legacy_dir / "bin" / "rcedit.exe"
 python_bin = Path(py_dir, "python", "python.exe")
 julia_bin = Path(julia_dir, "julia.exe")
 r_bin = r_dir.joinpath("bin", "Rscript.exe")
