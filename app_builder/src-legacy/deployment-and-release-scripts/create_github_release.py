@@ -232,7 +232,3 @@ def create_github_release() -> None:
         names=["post-github-upload"],
     ):
         subprocess.run(args=script, check=True)
-
-
-if __name__ == "__main__":
-    create_github_release()

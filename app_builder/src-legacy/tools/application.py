@@ -32,12 +32,9 @@ def main() -> None:
         create_releases()
 
     elif command in ("-g", "--github-release"):
-        exec_py.exec_py(
-            this_dir().joinpath(
-                "..", "deployment-and-release-scripts", "create-github-release.py"
-            ),
-            globals(),
-        )
+        with append_sys_path("../deployment-and-release-scripts"):
+            from create_github_release import create_github_release
+        create_github_release()
 
     else:
         print("Error: wrong commandline arguments")
