@@ -3,18 +3,16 @@ import sys
 import tempfile
 from pathlib import Path
 
-from locate import this_dir
-
 installed_dir = Path(
     os.environ["LOCALAPPDATA"] if sys.platform == "win32" else "/opt",
     "autoactuary",
     "app-builder",
 ).resolve()
-base_dir = this_dir().parent
+base_dir = Path(__file__).resolve().parent
 temp_dir = Path(tempfile.gettempdir(), f"app-builder-7dfd13678769").resolve()
 
 
-def set_from_base(dirname):
+def set_from_base(dirname: str | Path) -> Path:
     if base_dir != installed_dir:
         return temp_dir.joinpath(dirname)
     else:

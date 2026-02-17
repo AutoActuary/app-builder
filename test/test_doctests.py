@@ -29,9 +29,3 @@ def find_modules_with_doctests() -> List[str]:
         module = module[:-3]
         modules.append(module)
     return modules
-
-
-if __name__ == "__main__":
-    unittest.main(
-        failfast=True,
-    )

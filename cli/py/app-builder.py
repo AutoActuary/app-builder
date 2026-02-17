@@ -1,34 +1,33 @@
+import fnmatch
 import os
+import re
 import shutil
-from subprocess import run, call
+import sys
 import tempfile
 from pathlib import Path
-import fnmatch
-import re
-import time
-import sys
+from subprocess import run, call
+from typing import Collection, List
 
-from locate import allow_relative_location_imports
+from locate import append_sys_path
 
-allow_relative_location_imports("../..")
-
-from app_builder import git_revision
-from app_builder import paths
-from app_builder.shell import copy
-from app_builder.util import help, init, rmtree
-from app_builder.run_and_suppress import run_and_suppress_pip
+with append_sys_path("../.."):
+    from app_builder import git_revision
+    from app_builder import paths
+    from app_builder.shell import copy
+    from app_builder.util import help, init, rmtree
+    from app_builder.run_and_suppress import run_and_suppress_pip
 
 
 class ApplicationYamlError(Exception):
     pass
 
 
-def iglob(p, pattern):
+def iglob(p: str | Path, pattern: str) -> List[Path]:
     rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
     return [f for f in Path(p).glob("*") if rule.match(f.name)]
 
 
-def get_app_base_directory(start_dir) -> Path:
+def get_app_base_directory(start_dir: Path) -> Path:
     """
     Travel up from the starting directory to find the application's base directory, pattern contains 'Application.yaml'.
     """
@@ -49,7 +48,7 @@ def get_app_base_directory(start_dir) -> Path:
     raise err
 
 
-def get_app_version():
+def get_app_version() -> str:
     base = get_app_base_directory(Path(".").resolve())
     version = None
     with open(base.joinpath("application.yaml"), "r") as f:
@@ -73,6 +72,7 @@ def get_app_version():
                 assert version != ""
                 break
 
+    assert version is not None
     return version
 
 
@@ -111,7 +111,7 @@ def create_app_builder_based_venv(
         "lib",
     }
 
-    def copy_included_files(src: Path = src_base):
+    def copy_included_files(src: Path = src_base) -> None:
         relpath = src.resolve().relative_to(src_base.resolve())
         if relpath.as_posix().lower() not in exclude_relpath_lower_strings:
             if src.is_dir():
@@ -132,7 +132,7 @@ def create_app_builder_based_venv(
     return venv_path / "Scripts" / "python.exe"
 
 
-def ensure_app_version(version):
+def ensure_app_version(version: str) -> None:
     path_rev = paths.versions.joinpath(version)
 
     # Maybe no work needed
@@ -185,29 +185,29 @@ def ensure_app_version(version):
         print()
 
 
-def version_cleanup():
+def version_cleanup() -> None:
     """
     Use arbitrary filter choices to not let the version directory blow up in size
     """
     vdict = {}
-    for i in paths.versions.glob("*"):
-        run_log = i.joinpath("run.log")
+    for p in paths.versions.glob("*"):
+        run_log = p.joinpath("run.log")
 
         if run_log.is_file():
-            vdict[os.path.getmtime(run_log)] = i
+            vdict[os.path.getmtime(run_log)] = p
 
     # Keep the last used 50 versions
     discard = sorted(list(vdict.keys()))[:-50]
 
-    for i in discard:
-        rmtree(vdict[i])
+    for d in discard:
+        rmtree(vdict[d])
 
 
-def main_arg_in(options):
+def main_arg_in(options: Collection[str]) -> bool:
     return len(sys.argv) >= 2 and sys.argv[1].lower() in options
 
 
-def run_versioned_main():
+def run_versioned_main() -> None:
     try:
         if main_arg_in(["--install-version"]):
             if len(sys.argv) < 3:

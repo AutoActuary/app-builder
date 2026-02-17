@@ -67,7 +67,7 @@ def create_7zip_from_filelist(
     filelist: List[Path],
     copymode: bool = False,
     append: bool = False,
-    sevenzip_bin: str = "7z",
+    sevenzip_bin: str | Path = "7z",
     show_progress: bool = True,
 ) -> None:
     """
@@ -158,7 +158,7 @@ def create_7zip_from_include_exclude_and_rename_list(
     rename_list: Optional[List[Tuple[str, str]]] = None,
     copymode: bool = False,
     append: bool = False,
-    sevenzip_bin: str = "7z",
+    sevenzip_bin: str | Path = "7z",
     show_progress: bool = True,
 ) -> None:
     outpath = Path(os.path.abspath(outpath))

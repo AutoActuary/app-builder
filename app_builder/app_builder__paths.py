@@ -1,20 +1,20 @@
-import os
-import sys
-from pathlib import Path
-import fnmatch
-import re
-import locate
-import subprocess
-from functools import cache
 import ast
+import fnmatch
+import os
+import re
+import subprocess
+import sys
+from functools import cache
+from pathlib import Path
+from typing import List
 
 
-def iglob(p, pattern):
+def iglob(p: str | Path, pattern: str) -> List[Path]:
     rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
     return [f for f in Path(p).glob("*") if rule.match(f.name)]
 
 
-def find_application_base_directory(start_dir) -> Path:
+def find_application_base_directory(start_dir: Path) -> Path:
     """
     Travel up from the starting directory to find the application's base directory, pattern contains 'Application.yaml'.
     """
@@ -34,11 +34,7 @@ def find_application_base_directory(start_dir) -> Path:
 
 
 # App directories
-deployment_and_release_scripts_dir = (
-    locate.this_dir().joinpath("..", "deployment-and-release-scripts").resolve()
-)
-
-app_dir = find_application_base_directory(Path(".").resolve())
+app_dir = Path(__file__).resolve().parent.parent
 tools_dir = Path(app_dir, "tools")
 temp_dir = Path(tools_dir, "temp", "package-downloads")
 py_dir = Path(app_dir, "bin", "python")
@@ -46,8 +42,9 @@ julia_dir = Path(app_dir, "bin", "julia")
 r_dir = app_dir.joinpath("bin", "r")
 
 # deploy-tools directories
-template_dir = Path(locate.this_dir(), "..", "templates").resolve()
-asset_dir = Path(locate.this_dir(), "..", "assets").resolve()
+legacy_dir = Path(__file__).resolve().parent / "src-legacy"
+template_dir = legacy_dir / "templates"
+asset_dir = legacy_dir / "assets"
 
 # Binaries
 ps_bin = (
@@ -61,8 +58,9 @@ ps_bin = (
     if sys.platform == "win32"
     else Path("/usr/bin/powershell")
 )
-sevenz_bin = Path(locate.this_dir(), "..", "bin", "7z.exe").resolve()
-rcedit_bin = Path(locate.this_dir(), "..", "bin", "rcedit.exe").resolve()
+sevenz_bin = legacy_dir / "bin" / "7z.exe"
+sevenz_dll = legacy_dir / "bin" / "7z.dll"
+rcedit_bin = legacy_dir / "bin" / "rcedit.exe"
 python_bin = Path(py_dir, "python", "python.exe")
 julia_bin = Path(julia_dir, "julia.exe")
 r_bin = r_dir.joinpath("bin", "Rscript.exe")
@@ -70,7 +68,7 @@ r_bin = r_dir.joinpath("bin", "Rscript.exe")
 
 @cache
 def python_real_bin() -> Path:
-    command = [
+    command: List[str | Path] = [
         python_bin,
         "-S",
         "-c",
@@ -78,7 +76,9 @@ def python_real_bin() -> Path:
     ]
 
     try:
-        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
+        result = subprocess.run(
+            args=command, check=True, stdout=subprocess.PIPE, text=True
+        )
         path = Path(ast.literal_eval(result.stdout))
         return path
 
@@ -91,7 +91,7 @@ def python_real_bin() -> Path:
 
 @cache
 def python_lib() -> Path:
-    command = [
+    command: List[str | Path] = [
         python_bin,
         "-S",
         "-c",
@@ -99,7 +99,9 @@ def python_lib() -> Path:
     ]
 
     try:
-        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
+        result = subprocess.run(
+            args=command, check=True, stdout=subprocess.PIPE, text=True
+        )
         return Path(ast.literal_eval(result.stdout))
 
     except subprocess.CalledProcessError as e:
@@ -111,14 +113,16 @@ def python_lib() -> Path:
 
 @cache
 def python_site_packages() -> Path:
-    command = [
+    command: List[str | Path] = [
         python_bin,
         "-c",
         "import sys; print(repr(sys.path))",
     ]
 
     try:
-        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
+        result = subprocess.run(
+            args=command, check=True, stdout=subprocess.PIPE, text=True
+        )
         last_line = result.stdout.strip().split("\n")[-1]
         paths = ast.literal_eval(last_line)
 

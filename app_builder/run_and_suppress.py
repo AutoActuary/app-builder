@@ -1,11 +1,12 @@
 import subprocess
 import re
+from pathlib import Path
 from typing import List, Sequence, Any
 import sys
 
 
 def run_and_suppress(
-    command: Sequence[str],
+    command: Sequence[str | Path],
     line_suppress_regex: List[re.Pattern[str]],
     check: bool = True,
     **kwargs: Any,
@@ -101,7 +102,7 @@ _suppress_re_list_7z = [
 ]
 
 
-def run_and_suppress_7z(command: Sequence[str], **kwargs: Any) -> None:
+def run_and_suppress_7z(command: Sequence[str | Path], **kwargs: Any) -> None:
     return run_and_suppress(command, _suppress_re_list_7z, **kwargs)
 
 
@@ -120,5 +121,5 @@ _suppress_re_list_pip = [
 ]
 
 
-def run_and_suppress_pip(command: Sequence[str], **kwargs: Any) -> None:
+def run_and_suppress_pip(command: Sequence[str | Path], **kwargs: Any) -> None:
     return run_and_suppress(command, _suppress_re_list_pip, **kwargs)

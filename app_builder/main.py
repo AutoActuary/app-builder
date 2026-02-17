@@ -1,12 +1,14 @@
 import sys
 from pathlib import Path
+from typing import Any
 
-this_dir = Path(__file__).resolve().parent
-sys.path.insert(0, this_dir.parent.as_posix())  # parent dir
-from app_builder import exec_py
+from .create_github_release import create_github_release
+from .create_releases import create_releases
+from .get_dependencies import get_dependencies
+from .util import help, init
 
 
-def caller_version_tuple():
+def caller_version_tuple() -> tuple[int, ...] | None:
     """
     This is a workaround to get the version of the caller cli if app-builder is not called directly (but from the cli).
     Note: the cli also acts as a wrapper and puppeteer for maintaining different versions of this app and dispatching to the correct one.
@@ -17,43 +19,35 @@ def caller_version_tuple():
     if app_dir.name != "app-builder":
         return None
 
-    version_link = list(app_dir.glob("GitHub commit *.lnk"))
-    if len(version_link) != 1:
+    version_links = list(app_dir.glob("GitHub commit *.lnk"))
+    if len(version_links) != 1:
         return None
-    version_link = version_link[0]
+    version_link = version_links[0]
 
-    version = version_link.name.split("GitHub commit v", 1)[-1].split(".lnk", 1)[0]
-    version = version.split("-")[0]
-    version = tuple(version.split("."))
+    version_str = version_link.name.split("GitHub commit v", 1)[-1].split(".lnk", 1)[0]
+    version_str = version_str.split("-")[0]
+    version_str_tuple = tuple(version_str.split("."))
 
-    if not len(version) == 3:
+    if not len(version_str_tuple) == 3:
         return None
 
-    def int_able(x):
+    def int_able(x: Any) -> bool:
         try:
             int(x)
             return True
         except:
             return False
 
-    version = tuple(int(i) for i in version if int_able(i))
+    version = tuple(int(i) for i in version_str_tuple if int_able(i))
     if not len(version) == 3:
         return None
 
     return version
 
 
-if __name__ == "__main__":
-
-    vertup = caller_version_tuple()
-
-    if vertup is None or vertup >= (0, 1, 0):
-        exec_py.exec_py(
-            this_dir.joinpath("src-legacy", "tools", "application.py"),
-            globals(),
-        )
-
-    else:
+def main() -> None:
+    version = caller_version_tuple()
+    if version is not None and version < (0, 1, 0):
         print()
         print(
             "Error: this version requires an installation of App-Builder-v0.1.0.exe or higher"
@@ -62,3 +56,30 @@ if __name__ == "__main__":
             "Please Download and install here: https://github.com/AutoActuary/app-builder/releases"
         )
         sys.exit(-1)
+
+    # Reshuffle args in order to call future scripts
+    command = "-h" if len(sys.argv) < 2 else sys.argv[1].lower()
+    sys.argv = sys.argv[0:1] + sys.argv[2:]
+
+    if command in ("-h", "--help"):
+        help()
+
+    elif command in ("-i", "--init"):
+        init()
+
+    elif command in ("-d", "--get-dependencies"):
+        get_dependencies()
+
+    elif command in ("-l", "--local-release"):
+        create_releases()
+
+    elif command in ("-g", "--github-release"):
+        create_github_release()
+
+    else:
+        print("Error: wrong commandline arguments")
+        help()
+
+
+if __name__ == "__main__":
+    main()

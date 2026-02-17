@@ -7,14 +7,16 @@ from json import loads
 from pathlib import Path
 from urllib.request import urlopen
 
-from locate import this_dir
-
-from . import paths, util
+from .app_builder__paths import sevenz_bin
+from .paths import temp_dir
+from .util import rmtree
 from .shell import sh_lines, sh_quiet
 from .util import working_directory
 
+repo_dir = Path(__file__).resolve().parent.parent
 
-def ensure_git():
+
+def ensure_git() -> str:
     """
     Do some wild gymnastics to ensure git is in the PATH. If not, then download
     portable version from github and put that into temporary path.
@@ -22,11 +24,11 @@ def ensure_git():
     git = "git.exe"
 
     # Make sure bundled git is in path as a fallback (end of path)
-    bindir = this_dir().parent.joinpath("bin")
-    if not bindir.joinpath("python", "python.exe").is_file():
-        bindir = paths.temp_dir.joinpath("bin")
+    bin_dir = repo_dir / "bin"
+    if not bin_dir.joinpath("python", "python.exe").is_file():
+        bin_dir = temp_dir.joinpath("bin")
 
-    git_bundled = bindir.joinpath("git", "bin", "git.exe")
+    git_bundled = bin_dir.joinpath("git", "bin", "git.exe")
     git_bundled_dir = git_bundled.parent.parent
     if f";{git_bundled_dir.joinpath('bin')};" not in f";{os.environ['PATH']};":
         os.environ["PATH"] = f"{os.environ['PATH']};{git_bundled_dir.joinpath('bin')}"
@@ -59,7 +61,7 @@ def ensure_git():
                 os.makedirs(git_bundled_dir, exist_ok=True)
                 subprocess.call(
                     [
-                        str(this_dir().joinpath("src-legacy", "bin", "7z.exe")),
+                        sevenz_bin,
                         "x",
                         str(dlpath),
                         f"-o{git_bundled_dir}",
@@ -68,7 +70,7 @@ def ensure_git():
                     stdout=subprocess.DEVNULL,
                 )
 
-        e = None
+        e: BaseException | None = None
         try:
             sh_lines([git, "--version"], stderr=subprocess.DEVNULL)
         except (subprocess.CalledProcessError, FileNotFoundError):
@@ -86,7 +88,11 @@ def ensure_git():
     return git
 
 
-def git_download(git_source, dest, revision=None):
+def git_download(
+    git_source: str,
+    dest: str | Path,
+    revision: str | None = None,
+) -> None:
     os.makedirs(dest, exist_ok=True)
 
     with working_directory(dest):
@@ -96,7 +102,7 @@ def git_download(git_source, dest, revision=None):
         git = ensure_git()
 
         # Test if we are currently tracking the ref
-        def is_on_ref(revision):
+        def is_on_ref(revision: str | None) -> bool:
             if revision is None:
                 return False
             try:
@@ -127,7 +133,7 @@ def git_download(git_source, dest, revision=None):
                 if i.is_file():
                     os.remove(i)
                 else:
-                    util.rmtree(i)
+                    rmtree(i)
 
             subprocess.call([git, "clone", git_source, str(Path(".").resolve())])
             if not Path("./.git").is_dir():
