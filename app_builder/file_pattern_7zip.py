@@ -212,7 +212,9 @@ def create_7zip_from_include_exclude_and_rename_list(
                         raise renerr
 
                 elif os.path.isdir(rename_src):
-                    rename_src_key_slash = filename_as_key(rename_src) + "/"
+                    rename_src_key_slash = filename_as_key(rename_src) + (
+                        "\\" if sys.platform == "win32" else "/"
+                    )
 
                     for fpath_key, fpath in list(filedict.items()):
 
