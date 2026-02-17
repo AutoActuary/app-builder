@@ -122,7 +122,7 @@ def create_release(
     name = config["application"]["name"]
 
     if version is None:
-        version = git_describe()
+        version = git_describe() or "unknown"
 
     # **********************************************
     # Make 100% sure all .bat files have \r\n endings

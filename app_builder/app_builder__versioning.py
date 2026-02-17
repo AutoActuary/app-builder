@@ -45,10 +45,10 @@ def get_githuburl() -> str | None:
     return giturl
 
 
-def git_describe() -> str:
+def git_describe() -> str | None:
     """
     Get the output of `git describe --tags` which is normally useful as a version string.
-    Return an empty string if the command fails (e.g. not a git repository, no tags, etc.)
+    Returns None if the command fails (e.g. not a git repository, no tags, etc.)
     """
     try:
         return (
@@ -59,5 +59,5 @@ def git_describe() -> str:
             .decode("utf-8")
             .strip()
         )
-    except subprocess.CalledProcessError:
-        return ""
+    except subprocess.CalledProcessError as e:
+        return None
