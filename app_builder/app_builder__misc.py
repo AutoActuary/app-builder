@@ -572,21 +572,6 @@ def juliainstall_dependencies(libdict: Dict[str, str]) -> None:
     )
 
 
-def pipinstall(libname: str) -> None:
-    run_and_suppress_pip(
-        [
-            python_bin,
-            "-E",
-            "-m",
-            "pip",
-            "install",
-            libname,
-            "--no-warn-script-location",
-            "--disable-pip-version-check",
-        ],
-    )
-
-
 def pipinstall_requirements(liblist: Iterable[str]) -> None:
     reqfile = tempfile.mktemp(suffix=".txt")
     open(reqfile, "w").write("\n".join(liblist))
@@ -604,20 +589,6 @@ def pipinstall_requirements(liblist: Iterable[str]) -> None:
         ],
     )
     os.unlink(reqfile)
-
-
-def is_pip(pname: str) -> bool:
-    try:
-        pipanswer = subprocess.check_output(
-            [py_dir.joinpath(r"scripts\pip"), "show", pname]
-        ).decode("utf-8")
-    except:
-        return False
-
-    if "WARNING: Package(s) not found:" in pipanswer:
-        return False
-
-    return True
 
 
 def get_r(version: str | None) -> None:

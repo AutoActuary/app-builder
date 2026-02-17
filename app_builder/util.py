@@ -102,13 +102,6 @@ def working_directory(path: Path | str) -> Generator[None, None, None]:
         os.chdir(prev_cwd)
 
 
-def force_file_path(path: Path | str) -> None:
-    os.makedirs(Path(path).parent, exist_ok=True)
-    if not Path(path).exists():
-        with Path(path).open("w") as f:
-            f.write("")
-
-
 def rmtree(
     path: Union[str, Path],
     ignore_errors: bool = False,

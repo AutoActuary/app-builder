@@ -14,25 +14,6 @@ def iglob(p: str | Path, pattern: str) -> List[Path]:
     return [f for f in Path(p).glob("*") if rule.match(f.name)]
 
 
-def find_application_base_directory(start_dir: Path) -> Path:
-    """
-    Travel up from the starting directory to find the application's base directory, pattern contains 'Application.yaml'.
-    """
-    d = start_dir.resolve()
-    for i in range(1000):
-        if len(iglob(d, "application.yaml") + iglob(d, ".git")) == 2:
-            return d.resolve()
-
-        parent = d.parent
-        if parent == d:  # like "c:" == "c:"
-            raise FileNotFoundError(
-                "Expected git repository with `application.yaml` at base!"
-            )
-        d = parent
-
-    raise FileNotFoundError("Expected git repository with `application.yaml` at base!")
-
-
 # App directories
 app_dir = Path(__file__).resolve().parent.parent
 tools_dir = Path(app_dir, "tools")
@@ -64,78 +45,3 @@ rcedit_bin = legacy_dir / "bin" / "rcedit.exe"
 python_bin = Path(py_dir, "python", "python.exe")
 julia_bin = Path(julia_dir, "julia.exe")
 r_bin = r_dir.joinpath("bin", "Rscript.exe")
-
-
-@cache
-def python_real_bin() -> Path:
-    command: List[str | Path] = [
-        python_bin,
-        "-S",
-        "-c",
-        "import sys; print(repr(sys.executable))",
-    ]
-
-    try:
-        result = subprocess.run(
-            args=command, check=True, stdout=subprocess.PIPE, text=True
-        )
-        path = Path(ast.literal_eval(result.stdout))
-        return path
-
-    except subprocess.CalledProcessError as e:
-        cmd_str = " ".join([f'"{i}"' for i in command])
-        raise RuntimeError(
-            f"Could not find `site-packages` directory from command `{cmd_str}`"
-        ) from e
-
-
-@cache
-def python_lib() -> Path:
-    command: List[str | Path] = [
-        python_bin,
-        "-S",
-        "-c",
-        "import pathlib; print(repr(str(pathlib.Path(pathlib.__file__).parent)))",
-    ]
-
-    try:
-        result = subprocess.run(
-            args=command, check=True, stdout=subprocess.PIPE, text=True
-        )
-        return Path(ast.literal_eval(result.stdout))
-
-    except subprocess.CalledProcessError as e:
-        cmd_str = " ".join([f'"{i}"' for i in command])
-        raise RuntimeError(
-            f"Could not find `Lib` directory from command `{cmd_str}`"
-        ) from e
-
-
-@cache
-def python_site_packages() -> Path:
-    command: List[str | Path] = [
-        python_bin,
-        "-c",
-        "import sys; print(repr(sys.path))",
-    ]
-
-    try:
-        result = subprocess.run(
-            args=command, check=True, stdout=subprocess.PIPE, text=True
-        )
-        last_line = result.stdout.strip().split("\n")[-1]
-        paths = ast.literal_eval(last_line)
-
-        # return the first site-packages instance
-        path = [
-            i
-            for i in paths
-            if i.replace("\\", "/").lower().endswith("/lib/site-packages")
-        ][0]
-        return Path(path)
-
-    except subprocess.CalledProcessError as e:
-        cmd_str = " ".join([f'"{i}"' for i in command])
-        raise RuntimeError(
-            f"Could not find `site-packages` directory from command `{cmd_str}`"
-        ) from e
