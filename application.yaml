@@ -17,6 +17,9 @@ Application:
     exclude:
       - bin/pre-build.cmd
       - bin/python/Scripts
+      - '**/__pycache__/*'
+      - '**/.mypy_cache/*'
+      - '**/*.log'
     
 dependencies:
     python:
