@@ -192,7 +192,7 @@ def create_github_release() -> None:
         # Build the exe from scratch (to contain correct git info)
         # ************************************
         sh(f"git fetch --tags")
-        create_release(tagname)
+        create_release(version=tagname)
 
     # Find and run scripts named "pre-github-upload.bat/.cmd"
     for script in iter_scripts(
