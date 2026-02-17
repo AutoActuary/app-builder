@@ -37,3 +37,4 @@ MANIFEST
 /bin/7z.dll
 /bin/7z.exe
 /cli_dev/
+/venv/
