@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from shutil import which
 from subprocess import run
 from tempfile import TemporaryDirectory
 
@@ -11,7 +12,11 @@ from app_builder.file_pattern_7zip import (
 from app_builder.util import working_directory
 
 repo_dir = Path(__file__).resolve().parent.parent
-seven_zip = repo_dir / "app_builder/src-legacy/bin/7z.exe"
+seven_zip = (
+    (repo_dir / "app_builder/src-legacy/bin/7z.exe")
+    if sys.platform == "win32"
+    else Path(which("7z") or "7z")
+)
 
 
 class TestCreate7zipFromIncludeExcludeAndRenameList(unittest.TestCase):
