@@ -65,6 +65,8 @@ def create_all_dependencies():
     )
 
     def python_post_process():
+        app_builder__paths.temp_dir.mkdir(parents=True, exist_ok=True)
+
         # Added some pip logging information
         pipversionfile = app_builder__paths.temp_dir.joinpath("..\\pipfreeze.txt")
         with pipversionfile.open("w") as f:

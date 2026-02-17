@@ -58,9 +58,6 @@ python_bin = Path(py_dir, "python", "python.exe")
 julia_bin = Path(julia_dir, "julia.exe")
 r_bin = r_dir.joinpath("bin", "Rscript.exe")
 
-# FIXME: This is an import side effect, and should be moved to a function that we call only when really needed.
-temp_dir.mkdir(parents=True, exist_ok=True)
-
 
 @cache
 def python_real_bin() -> Path:

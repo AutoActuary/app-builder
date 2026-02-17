@@ -306,6 +306,8 @@ def get_program(
     extract_tester=lambda: True,
     extractor=lambda x, y: flatextract_file(x, y),
 ):
+    app_builder__paths.temp_dir.mkdir(parents=True, exist_ok=True)
+
     # ************************************************
     # Get download url
     # ************************************************
@@ -367,6 +369,7 @@ def get_pandoc():
 
 
 def get_python(version):
+    app_builder__paths.temp_dir.mkdir(parents=True, exist_ok=True)
 
     if (
         app_builder__paths.python_bin.exists()
@@ -639,6 +642,7 @@ def is_pip(pname):
 
 
 def get_r(version):
+    app_builder__paths.temp_dir.mkdir(parents=True, exist_ok=True)
 
     if app_builder__paths.r_bin.exists() and prs.test_version_of_r_exe_using_subprocess(
         app_builder__paths.r_bin, version
