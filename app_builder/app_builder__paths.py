@@ -48,29 +48,6 @@ r_bin = r_dir.joinpath("bin", "Rscript.exe")
 
 
 @cache
-def python_real_bin() -> Path:
-    command: List[str | Path] = [
-        python_bin,
-        "-S",
-        "-c",
-        "import sys; print(repr(sys.executable))",
-    ]
-
-    try:
-        result = subprocess.run(
-            args=command, check=True, stdout=subprocess.PIPE, text=True
-        )
-        path = Path(ast.literal_eval(result.stdout))
-        return path
-
-    except subprocess.CalledProcessError as e:
-        cmd_str = " ".join([f'"{i}"' for i in command])
-        raise RuntimeError(
-            f"Could not find `site-packages` directory from command `{cmd_str}`"
-        ) from e
-
-
-@cache
 def python_site_packages() -> Path:
     command: List[str | Path] = [
         python_bin,
