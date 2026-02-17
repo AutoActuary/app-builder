@@ -46,12 +46,15 @@ def get_githuburl() -> str | None:
 
 
 def get_gitversion() -> str:
-    with _Path(app_dir):
-        try:
-            return (
-                subprocess.check_output("git describe --tags", shell=True)
-                .decode("utf-8")
-                .strip()
+    try:
+        return (
+            subprocess.check_output(
+                "git describe --tags",
+                shell=True,
+                cwd=app_dir,
             )
-        except subprocess.CalledProcessError:
-            return ""
+            .decode("utf-8")
+            .strip()
+        )
+    except subprocess.CalledProcessError:
+        return ""
