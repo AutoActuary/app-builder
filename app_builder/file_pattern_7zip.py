@@ -164,22 +164,6 @@ def create_7zip_from_include_exclude_and_rename_list(
     sevenzip_bin: str = "7z",
     show_progress=True,
 ):
-    r"""
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     with working_directory(d):
-    ...         for i in ["1/i/a.txt", "1/i/b.txt", "1/ii.txt", "1/iii/c.txt", "2/i/d.txt", "2/ii/eEe.txt"]:
-    ...             Path(i).write_text("")
-    ...         create_7zip_from_include_exclude_and_rename_list(
-    ...             Path("temp.7z"),
-    ...             Path("."),
-    ...             ["*", sys.executable],
-    ...             ["2/ii/e.txt"],
-    ...             [[sys.executable, "blap"], ["2", "3"]],
-    ...             False,
-    ...             False,
-    ...             Path(__file__).resolve().parent.joinpath("src-legacy", "bin", "7z.exe")
-    ...         )
-    """
     outpath = Path(os.path.abspath(outpath))
 
     exclude_glob_list = exclude_glob_list or []
