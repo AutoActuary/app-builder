@@ -49,7 +49,21 @@ def get_app_base_directory(start_dir: Path) -> Path:
     raise err
 
 
-def get_app_version() -> str:
+def get_current_version() -> str:
+    """
+    Get the current version of `app-builder` from the `version.txt` file that is injected during the build process.
+    If `version.txt` does not exist, return "dev" to indicate that this is a development version of app-builder.
+    """
+    try:
+        return paths.version_txt_path.read_text().strip()
+    except FileNotFoundError:
+        return "dev"
+
+
+def get_desired_version() -> str:
+    """
+    Get the desired version of `app-builder` from `application.yaml`.
+    """
     base = get_app_base_directory(Path(".").resolve())
     with open(base.joinpath("application.yaml"), "r") as f:
         for line in f.readlines():
@@ -210,62 +224,62 @@ def main_arg_in(options: Collection[str]) -> bool:
 
 
 def run_versioned_main() -> int:
-    version: str | None
+    desired_version: str | None
 
     # Allow the user to request a specific version of `app-builder` on the command line.
     if main_arg_in(["--install-version"]):
         try:
-            version = sys.argv[2]
+            desired_version = sys.argv[2]
         except IndexError:
             print("Usage: app-builder --install-version <version>")
             return 255
 
-        print(f"Install version '{version}'")
-        ensure_app_version(version)
+        print(f"Install version '{desired_version}'")
+        ensure_app_version(desired_version)
         return 0
 
     if main_arg_in(["-h", "--help", "help", "-i", "--init", "init"]):
         # It looks like the user is trying to get help or initialize a new project,
         # so just run the current version.
         # Do not install anything, and do not rely on `application.yaml`.
-        version = None
+        desired_version = None
     elif main_arg_in(["--use-version"]):
         try:
-            version = sys.argv[2]
+            desired_version = sys.argv[2]
         except IndexError:
             print("Usage: app-builder --use-version <version>")
             return 255
 
-        print(f"Using `app-builder` version specified on command line: {version}")
-        ensure_app_version(version)
+        ensure_app_version(desired_version)
     else:
         # Ensure that we have the version of `app-builder` that is specified in `application.yaml` before continuing.
         try:
-            version = get_app_version()
+            desired_version = get_desired_version()
         except FileNotFoundError:
             # `application.yaml` was not found, which means the user has not yet run `init`.
             # Continue with the current version of `app-builder`.
-            version = None
+            desired_version = None
         except ApplicationYamlError as e:
             # `application.yaml` was found, but we could not discern the version number.
             print(e)
             return 1
         else:
-            ensure_app_version(version)
+            ensure_app_version(desired_version)
 
-    if version is None:
+    if desired_version is None:
         # Use the current version.
+        print(f"Using `app-builder` version: {get_current_version()}")
         interpreter = Path(sys.executable)
         log_path = paths.base_dir / "run.log"
         interpreter_args = ["-m", "app_builder"]
     else:
-        # Use another installed version.
-        print(f"Using `app-builder` version specified in `application.yaml`: {version}")
-        version_path = paths.versions / version
+        # Use the specified version.
+        print(f"Using `app-builder` version: {desired_version}")
+        version_path = paths.versions / desired_version
         interpreter = version_path / "venv" / "Scripts" / "python.exe"
         log_path = version_path / "run.log"
 
-        if Version(version) <= Version("0.19.0"):
+        if Version(desired_version) <= Version("0.19.0"):
             # These versions need to be invoked using main.py as a script.
             interpreter_args = [version_path / "repo" / "app_builder" / "main.py"]
         else:

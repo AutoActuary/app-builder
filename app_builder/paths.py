@@ -8,8 +8,14 @@ installed_dir = Path(
     "autoactuary",
     "app-builder",
 ).resolve()
+
 base_dir = Path(__file__).resolve().parent
+
+repo_dir = base_dir.parent
+
 temp_dir = Path(tempfile.gettempdir(), f"app-builder-7dfd13678769").resolve()
+
+version_txt_path = repo_dir / "version.txt"
 
 
 def set_from_base(dirname: str | Path) -> Path:
