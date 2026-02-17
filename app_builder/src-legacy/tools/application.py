@@ -19,12 +19,9 @@ def main() -> None:
         util.init()
 
     elif command in ("-d", "--get-dependencies"):
-        exec_py.exec_py(
-            this_dir().joinpath(
-                "..", "deployment-and-release-scripts", "create-dependencies.py"
-            ),
-            globals(),
-        )
+        with append_sys_path("../deployment-and-release-scripts"):
+            from get_dependencies import get_dependencies
+        get_dependencies()
 
     elif command in ("-l", "--local-release"):
         with append_sys_path("../deployment-and-release-scripts"):
