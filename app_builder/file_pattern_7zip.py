@@ -1,12 +1,12 @@
+import os
+import shutil
 import sys
-
-from util import working_directory
 import tempfile
 from pathlib import Path
 from typing import Optional, List, Tuple, Union
-import shutil
-import os
-from run_and_suppress import run_and_suppress_7z
+
+from .run_and_suppress import run_and_suppress_7z
+from .util import working_directory
 
 
 def expand_to_all_sub_files(path: Path) -> List[Path]:
