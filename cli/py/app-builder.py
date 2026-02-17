@@ -1,22 +1,20 @@
+import fnmatch
 import os
+import re
 import shutil
-from subprocess import run, call
+import sys
 import tempfile
 from pathlib import Path
-import fnmatch
-import re
-import time
-import sys
+from subprocess import run, call
 
-from locate import allow_relative_location_imports
+from locate import append_sys_path
 
-allow_relative_location_imports("../..")
-
-from app_builder import git_revision
-from app_builder import paths
-from app_builder.shell import copy
-from app_builder.util import help, init, rmtree
-from app_builder.run_and_suppress import run_and_suppress_pip
+with append_sys_path("../.."):
+    from app_builder import git_revision
+    from app_builder import paths
+    from app_builder.shell import copy
+    from app_builder.util import help, init, rmtree
+    from app_builder.run_and_suppress import run_and_suppress_pip
 
 
 class ApplicationYamlError(Exception):
