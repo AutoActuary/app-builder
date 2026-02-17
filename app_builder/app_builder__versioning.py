@@ -53,8 +53,7 @@ def git_describe() -> str:
     try:
         return (
             subprocess.check_output(
-                "git describe --tags",
-                shell=True,
+                ["git", "describe", "--tags"],
                 cwd=app_dir,
             )
             .decode("utf-8")
