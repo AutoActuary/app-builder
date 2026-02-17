@@ -19,7 +19,7 @@ from .app_builder__paths import (
     app_dir,
     rcedit_bin,
 )
-from .app_builder__versioning import get_gitversion, get_githuburl
+from .app_builder__versioning import git_describe, get_githuburl
 from .file_pattern_7zip import create_7zip_from_include_exclude_and_rename_list
 from .get_dependencies import get_dependencies
 from .scripts import iter_scripts
@@ -122,7 +122,7 @@ def create_release(
     name = config["application"]["name"]
 
     if version is None:
-        version = get_gitversion()
+        version = git_describe()
 
     # **********************************************
     # Make 100% sure all .bat files have \r\n endings

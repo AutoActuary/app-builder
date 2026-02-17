@@ -45,7 +45,7 @@ def get_githuburl() -> str | None:
     return giturl
 
 
-def get_gitversion() -> str:
+def git_describe() -> str:
     try:
         return (
             subprocess.check_output(
