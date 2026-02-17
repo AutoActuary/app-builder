@@ -1,7 +1,7 @@
-pyyaml==6.*
-path==16.*
+beautifulsoup4==4.12.*
 githubrelease==1.5.*
 locate==1.1.1
+path==16.*
+pywin32==311; sys_platform == 'win32'
+pyyaml==6.*
 toml==0.10.*
-beautifulsoup4==4.12.*
-pywin32==311
