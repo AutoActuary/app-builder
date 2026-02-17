@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 import fnmatch
 import re
@@ -49,8 +50,16 @@ template_dir = Path(locate.this_dir(), "..", "templates").resolve()
 asset_dir = Path(locate.this_dir(), "..", "assets").resolve()
 
 # Binaries
-ps_bin = Path(
-    os.environ["SYSTEMROOT"], "System32", "WindowsPowerShell", "v1.0", "powershell.exe"
+ps_bin = (
+    Path(
+        os.environ["SYSTEMROOT"],
+        "System32",
+        "WindowsPowerShell",
+        "v1.0",
+        "powershell.exe",
+    )
+    if sys.platform == "win32"
+    else Path("/usr/bin/powershell")
 )
 sevenz_bin = Path(locate.this_dir(), "..", "bin", "7z.exe").resolve()
 rcedit_bin = Path(locate.this_dir(), "..", "bin", "rcedit.exe").resolve()
