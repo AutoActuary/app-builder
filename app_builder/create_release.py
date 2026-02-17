@@ -1,12 +1,12 @@
 import os
 import shutil
 import subprocess
-import sys
 import textwrap
 from itertools import chain
 from pathlib import Path
 from subprocess import list2cmdline
-from typing import Iterable, Mapping, Any, List, Literal, Sequence
+from tempfile import TemporaryDirectory
+from typing import Iterable, Mapping, Any
 
 from path import Path as _Path
 
@@ -370,6 +370,22 @@ def create_release(
             sevenzip_bin=sevenz_bin,
             show_progress=False,
         )
+
+        # Inject a text file containing the version string.
+        with TemporaryDirectory() as tmp_dir_str:
+            tmp_dir = Path(tmp_dir_str)
+
+            version_txt = tmp_dir / "version.txt"
+            version_txt.open("w").write(version)
+
+            create_7zip_from_include_exclude_and_rename_list(
+                outpath=programzip,
+                basedir=tmp_dir,
+                include_glob_list=["version.txt"],
+                append=True,
+                sevenzip_bin=sevenz_bin,
+                show_progress=False,
+            )
 
         print(f"Creating 7zip installer for version {version}:")
         installzip = tools_dir.joinpath(
