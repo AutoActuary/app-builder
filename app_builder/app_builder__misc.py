@@ -572,21 +572,6 @@ def juliainstall_dependencies(libdict: Dict[str, str]) -> None:
     )
 
 
-def pipinstall(libname: str) -> None:
-    run_and_suppress_pip(
-        [
-            python_bin,
-            "-E",
-            "-m",
-            "pip",
-            "install",
-            libname,
-            "--no-warn-script-location",
-            "--disable-pip-version-check",
-        ],
-    )
-
-
 def pipinstall_requirements(liblist: Iterable[str]) -> None:
     reqfile = tempfile.mktemp(suffix=".txt")
     open(reqfile, "w").write("\n".join(liblist))
