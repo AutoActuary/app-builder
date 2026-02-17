@@ -71,28 +71,6 @@ def python_real_bin() -> Path:
 
 
 @cache
-def python_lib() -> Path:
-    command: List[str | Path] = [
-        python_bin,
-        "-S",
-        "-c",
-        "import pathlib; print(repr(str(pathlib.Path(pathlib.__file__).parent)))",
-    ]
-
-    try:
-        result = subprocess.run(
-            args=command, check=True, stdout=subprocess.PIPE, text=True
-        )
-        return Path(ast.literal_eval(result.stdout))
-
-    except subprocess.CalledProcessError as e:
-        cmd_str = " ".join([f'"{i}"' for i in command])
-        raise RuntimeError(
-            f"Could not find `Lib` directory from command `{cmd_str}`"
-        ) from e
-
-
-@cache
 def python_site_packages() -> Path:
     command: List[str | Path] = [
         python_bin,
