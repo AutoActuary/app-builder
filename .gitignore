@@ -38,3 +38,4 @@ MANIFEST
 /bin/7z.exe
 /cli_dev/
 /venv/
+*.log
