@@ -1,4 +1,4 @@
-app_builder: v0.16.2
+app_builder: v0.19.0
 
 Application:
   name: App Builder
