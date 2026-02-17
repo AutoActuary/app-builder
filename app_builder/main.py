@@ -86,7 +86,13 @@ def caller_version_tuple() -> tuple[int, ...] | None:
     "--install-version",
     "bc_install_version",
     type=str,
-    help="Install a specific version of app-builder.",
+    help="Install a specific version of app-builder and exit.",
+)
+@click.option(
+    "--use-version",
+    "bc_use_version",
+    type=str,
+    help="Use the specified version of app-builder, ignoring the version specified in `application.yaml`.",
 )
 def main(
     *,
@@ -94,7 +100,8 @@ def main(
     bc_d: bool = False,
     bc_l: bool = False,
     bc_g: bool = False,
-    bc_install_version: str | None = None
+    bc_install_version: str | None = None,
+    bc_use_version: str | None = None,
 ) -> None:
     """
     \b
@@ -138,6 +145,10 @@ def main(
 
     elif bc_install_version:
         # This should never happen, since the `--install-version` flag is captured by the CLI wrapper.
+        pass
+
+    elif bc_use_version:
+        # This should never happen, since the `--use-version` flag is captured by the CLI wrapper.
         pass
 
 

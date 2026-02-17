@@ -229,6 +229,15 @@ def run_versioned_main() -> int:
         # so just run the current version.
         # Do not install anything, and do not rely on `application.yaml`.
         version = None
+    elif main_arg_in(["--use-version"]):
+        try:
+            version = sys.argv[2]
+        except IndexError:
+            print("Usage: app-builder --use-version <version>")
+            return 255
+
+        print(f"Using `app-builder` version specified on command line: {version}")
+        ensure_app_version(version)
     else:
         # Ensure that we have the version of `app-builder` that is specified in `application.yaml` before continuing.
         try:
@@ -251,7 +260,7 @@ def run_versioned_main() -> int:
         interpreter_args = ["-m", "app_builder"]
     else:
         # Use another installed version.
-        print(f"Using app-builder version specified in `application.yaml`: {version}")
+        print(f"Using `app-builder` version specified in `application.yaml`: {version}")
         version_path = paths.versions / version
         interpreter = version_path / "venv" / "Scripts" / "python.exe"
         log_path = version_path / "run.log"
