@@ -27,12 +27,9 @@ def main() -> None:
         )
 
     elif command in ("-l", "--local-release"):
-        exec_py.exec_py(
-            this_dir().joinpath(
-                "..", "deployment-and-release-scripts", "create-releases.py"
-            ),
-            globals(),
-        )
+        with append_sys_path("../deployment-and-release-scripts"):
+            from create_releases import create_releases
+        create_releases()
 
     elif command in ("-g", "--github-release"):
         exec_py.exec_py(

@@ -479,7 +479,3 @@ def create_releases(version=None):
         names=["post-build", "post-release"],
     ):
         subprocess.run(args=script, check=True)
-
-
-if __name__ == "__main__":
-    create_releases()

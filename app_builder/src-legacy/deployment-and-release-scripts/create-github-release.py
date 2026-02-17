@@ -10,8 +10,7 @@ from path import Path as _Path
 with append_sys_path("."):
     import app_builder__misc
     import app_builder__paths
-
-    create_releases = __import__("create-releases")
+    import create_releases
 
 with append_sys_path("../../.."):
     from app_builder.scripts import iter_scripts
