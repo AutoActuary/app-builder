@@ -24,7 +24,7 @@ class TestCreate7zipFromIncludeExcludeAndRenameList(unittest.TestCase):
                     "1/ii.txt",
                     "1/iii/c.txt",
                     "2/i/d.txt",
-                    "2/ii/eEe.txt",
+                    "2/ii/eee.txt",
                 ]:
                     dst = Path(d, i)
                     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -71,7 +71,7 @@ class TestCreate7zipFromIncludeExcludeAndRenameList(unittest.TestCase):
                         "1/ii.txt",
                         "1/iii/c.txt",
                         "2/i/d.txt",
-                        "2/ii/eEe.txt",
+                        "2/ii/eee.txt",
                         "blap",
                     ],
                     files,
