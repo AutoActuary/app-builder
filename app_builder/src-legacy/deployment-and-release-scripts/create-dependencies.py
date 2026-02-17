@@ -1,23 +1,23 @@
 import os
 import shutil
 import subprocess
-from pathlib import Path
-from contextlib import suppress
-
-import uuid
 import tempfile
+import uuid
+from contextlib import suppress
 from itertools import chain
+from pathlib import Path
 
-from locate import allow_relative_location_imports
+from locate import append_sys_path
 from path import Path as _Path
 
-allow_relative_location_imports(".")
-import app_builder__misc
-import app_builder__paths
+with append_sys_path("."):
+    import app_builder__misc
+    import app_builder__paths
 
-allow_relative_location_imports("../../..")
-from app_builder import git_revision
-from app_builder.run_and_suppress import run_and_suppress_pip
+with append_sys_path("../../.."):
+    from app_builder import git_revision
+    from app_builder.run_and_suppress import run_and_suppress_pip
+    from app_builder.scripts import iter_scripts
 
 """
 Download/install python and R and other dependencies
@@ -40,15 +40,14 @@ def is_prog(s, progname):
 
 
 def create_all_dependencies():
-    # implicitly run any script named "pre-dependencies.bat" or "pre-dependencies.cmd" in dedicated locations
-    for scriptsdir in [".", "bin", "src", "scripts"]:
-        for ext in ("bat", "cmd"):
-            for script in (
-                _Path(app_builder__paths.app_dir)
-                .joinpath(scriptsdir)
-                .glob(f"pre-dependencies.{ext}")
-            ):
-                subprocess.call(script)
+    # Find and run scripts named "pre-dependencies.bat" or "pre-dependencies.cmd"
+    for script in iter_scripts(
+        base_dir=app_builder__paths.app_dir,
+        sub_dirs=[".", "bin", "src", "scripts"],
+        extensions=["bat", "cmd"],
+        names=["pre-dependencies"],
+    ):
+        subprocess.run(args=script, check=True)
 
     os.makedirs(app_builder__paths.app_dir.joinpath("bin"), exist_ok=True)
     shutil.copy(
@@ -273,15 +272,14 @@ def create_all_dependencies():
 
                 git_revision.git_download(repo, repopath, checkout)
 
-    # implicitly run any script named "post-dependencies.bat" or "post-dependencies.cmd" in dedicated locations
-    for scriptsdir in [".", "bin", "src", "scripts"]:
-        for ext in ("bat", "cmd"):
-            for script in (
-                _Path(app_builder__paths.app_dir)
-                .joinpath(scriptsdir)
-                .glob(f"post-dependencies.{ext}")
-            ):
-                subprocess.call(script)
+    # Find and run scripts named "post-dependencies.bat" or "post-dependencies.cmd"
+    for script in iter_scripts(
+        base_dir=app_builder__paths.app_dir,
+        sub_dirs=[".", "bin", "src", "scripts"],
+        extensions=["bat", "cmd"],
+        names=["post-dependencies"],
+    ):
+        subprocess.run(args=script, check=True)
 
 
 # **********************************************

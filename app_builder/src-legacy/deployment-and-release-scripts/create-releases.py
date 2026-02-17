@@ -1,25 +1,26 @@
 import os
 import shutil
 import subprocess
-import textwrap
-from pathlib import Path
-
 import sys
-from locate import allow_relative_location_imports
-from path import Path as _Path
+import textwrap
 from itertools import chain
+from pathlib import Path
 from subprocess import list2cmdline
 
-allow_relative_location_imports(".")
-import app_builder__misc
-import app_builder__versioning
-import app_builder__paths
+from locate import append_sys_path
+from path import Path as _Path
 
-allow_relative_location_imports("../../..")
-from app_builder.file_pattern_7zip import (
-    create_7zip_from_include_exclude_and_rename_list,
-)
-from app_builder.util import split_dos
+with append_sys_path("."):
+    import app_builder__misc
+    import app_builder__versioning
+    import app_builder__paths
+
+with append_sys_path("../../.."):
+    from app_builder.file_pattern_7zip import (
+        create_7zip_from_include_exclude_and_rename_list,
+    )
+    from app_builder.util import split_dos
+    from app_builder.scripts import iter_scripts
 
 create_dependencies = __import__("create-dependencies")
 
@@ -270,22 +271,14 @@ def create_releases(version=None):
             run_external_script[0] = Path(run_external_script[0]).resolve()
         subprocess.call(run_external_script)
 
-    # **********************************************
-    # implicitely run any script named "pre-build.bat" or "pre-build.cmd" in dedicated locations
-    for scriptsdir in [".", "bin", "src", "scripts"]:
-        for ext in ("bat", "cmd"):
-            for script in (
-                Path(app_builder__paths.app_dir)
-                .joinpath(scriptsdir)
-                .glob(f"pre-build.{ext}")
-            ):
-                subprocess.call(script)
-            for script in (
-                Path(app_builder__paths.app_dir)
-                .joinpath(scriptsdir)
-                .glob(f"pre-release.{ext}")
-            ):
-                subprocess.call(script)
+    # Find and run scripts named "pre-build.bat" or "pre-build.cmd" or "pre-release.bat" or "pre-release.cmd"
+    for script in iter_scripts(
+        base_dir=app_builder__paths.app_dir,
+        sub_dirs=[".", "bin", "src", "scripts"],
+        extensions=["bat", "cmd"],
+        names=["pre-build", "pre-release"],
+    ):
+        subprocess.run(args=script, check=True)
 
     # **********************************************
     # Zip all the application files as one thing
@@ -336,25 +329,18 @@ def create_releases(version=None):
             ["./tools/releases/" + programzip.name, "./" + programzip.name],
         ]
         # Copy any script named "pre-install.bat/cmd" to installer
-        for scriptsdir in [".", "bin", "src", "scripts"]:
-            for ext in ("bat", "cmd"):
-                for script in (
-                    Path(app_builder__paths.app_dir)
-                    .joinpath(scriptsdir)
-                    .resolve()
-                    .glob(f"pre-install.{ext}")
-                ):
-                    relpath = (
-                        (
-                            "./"
-                            + str(
-                                script.relative_to(app_builder__paths.app_dir.resolve())
-                            )
-                        )
-                        .replace("\\", "/")
-                        .replace("//", "/")
-                    )
-                    mapping.append([relpath, relpath])
+        for script in iter_scripts(
+            base_dir=app_builder__paths.app_dir,
+            sub_dirs=[".", "bin", "src", "scripts"],
+            extensions=["bat", "cmd"],
+            names=["pre-install"],
+        ):
+            relpath = (
+                ("./" + str(script.relative_to(app_builder__paths.app_dir.resolve())))
+                .replace("\\", "/")
+                .replace("//", "/")
+            )
+            mapping.append([relpath, relpath])
 
         app_builder__misc.mapped_zip(
             installzip, mapping, basedir=app_builder__paths.app_dir, copymode=True
@@ -421,18 +407,15 @@ def create_releases(version=None):
         ]
 
         # Copy any script named "pre-install.bat/cmd" directly to installer
-        for scriptsdir in [".", "bin", "src", "scripts"]:
-            for ext in ("bat", "cmd"):
-                for script in (
-                    Path(app_builder__paths.app_dir)
-                    .joinpath(scriptsdir)
-                    .resolve()
-                    .glob(f"pre-install.{ext}")
-                ):
-                    relpath = str(
-                        script.relative_to(app_builder__paths.app_dir.resolve())
-                    )
-                    globs_include.append(relpath)
+        for script in iter_scripts(
+            base_dir=app_builder__paths.app_dir,
+            sub_dirs=[".", "bin", "src", "scripts"],
+            extensions=["bat", "cmd"],
+            names=["pre-install"],
+        ):
+            globs_include.append(
+                str(script.relative_to(app_builder__paths.app_dir.resolve()))
+            )
 
         create_7zip_from_include_exclude_and_rename_list(
             installzip,
@@ -488,23 +471,14 @@ def create_releases(version=None):
 
     app_builder__misc.rmpath(installzip)
 
-    # **********************************************
-    # implicitely run any script named "post-build.bat" or "post-build.cmd" in dedicated locations
-    for scriptsdir in [".", "bin", "src", "scripts"]:
-        for ext in ("bat", "cmd"):
-            for script in (
-                Path(app_builder__paths.app_dir)
-                .joinpath(scriptsdir)
-                .glob(f"post-build.{ext}")
-            ):
-                subprocess.call(script)
-
-            for script in (
-                Path(app_builder__paths.app_dir)
-                .joinpath(scriptsdir)
-                .glob(f"post-release.{ext}")
-            ):
-                subprocess.call(script)
+    # Find and run scripts named "post-build.bat" or "post-build.cmd" or "post-release.bat" or "post-release.cmd"
+    for script in iter_scripts(
+        base_dir=app_builder__paths.app_dir,
+        sub_dirs=[".", "bin", "src", "scripts"],
+        extensions=["bat", "cmd"],
+        names=["post-build", "post-release"],
+    ):
+        subprocess.run(args=script, check=True)
 
 
 if __name__ == "__main__":

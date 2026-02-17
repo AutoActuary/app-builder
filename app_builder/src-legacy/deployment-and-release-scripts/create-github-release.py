@@ -2,7 +2,6 @@ import os
 import subprocess
 import sys
 from datetime import date
-from pathlib import Path
 
 import github_release
 from locate import append_sys_path
@@ -13,6 +12,9 @@ with append_sys_path("."):
     import app_builder__paths
 
     create_releases = __import__("create-releases")
+
+with append_sys_path("../../.."):
+    from app_builder.scripts import iter_scripts
 
 
 def create_github_release() -> None:
@@ -201,16 +203,14 @@ def create_github_release() -> None:
         app_builder__misc.sh(f"git fetch --tags")
         create_releases.create_releases(tagname)
 
-    # **********************************************
-    # implicitely run any script named "pre-github-upload.bat/.cmd" in dedicated locations
-    for scriptsdir in [".", "bin", "src", "scripts"]:
-        for ext in ("bat", "cmd"):
-            for script in (
-                Path(app_builder__paths.app_dir)
-                .joinpath(scriptsdir)
-                .glob(f"pre-github-upload.{ext}")
-            ):
-                subprocess.call(script)
+    # Find and run scripts named "pre-github-upload.bat/.cmd"
+    for script in iter_scripts(
+        base_dir=app_builder__paths.app_dir,
+        sub_dirs=[".", "bin", "src", "scripts"],
+        extensions=["bat", "cmd"],
+        names=["pre-github-upload"],
+    ):
+        subprocess.run(args=script, check=True)
 
     # *************************************
     # Upload exe to github
@@ -225,15 +225,14 @@ def create_github_release() -> None:
     )
 
     # **********************************************
-    # implicitely run any script named "post-github-upload.bat/.cmd" in dedicated locations
-    for scriptsdir in [".", "bin", "src", "scripts"]:
-        for ext in ("bat", "cmd"):
-            for script in (
-                Path(app_builder__paths.app_dir)
-                .joinpath(scriptsdir)
-                .glob(f"post-github-upload.{ext}")
-            ):
-                subprocess.call(script)
+    # Find and run scripts named "post-github-upload.bat/.cmd"
+    for script in iter_scripts(
+        base_dir=app_builder__paths.app_dir,
+        sub_dirs=[".", "bin", "src", "scripts"],
+        extensions=["bat", "cmd"],
+        names=["post-github-upload"],
+    ):
+        subprocess.run(args=script, check=True)
 
 
 if __name__ == "__main__":
