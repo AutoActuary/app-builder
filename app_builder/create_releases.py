@@ -6,6 +6,7 @@ import textwrap
 from itertools import chain
 from pathlib import Path
 from subprocess import list2cmdline
+from typing import Iterable, Mapping, Any, List, Literal, Sequence
 
 from path import Path as _Path
 
@@ -49,7 +50,11 @@ if exist __prog_installpath__ (
 """
 
 
-def create_shortcut_cmd_code(command, link_output=None, icon=None):
+def create_shortcut_cmd_code(
+    command: str,
+    link_output: str | Path | None = None,
+    icon: str | None = None,
+) -> str:
     if icon is None:
         icon = ""
 
@@ -58,16 +63,16 @@ def create_shortcut_cmd_code(command, link_output=None, icon=None):
     if link_output is None:
         link_output = Path("%menudir%", Path(program).with_suffix("").name + ".lnk")
 
-    def cmdstr(s):
+    def cmdstr(s: str | Path) -> str:
         wrap = list2cmdline([s])
         if (wrap[0] + wrap[-1]) != '""' and "%" in wrap:
             wrap = f'"{wrap}"'
         return wrap
 
-    def cmdargs(args):
+    def cmdargs(args: Iterable[str | Path]) -> str:
         return cmdstr(" ".join([cmdstr(arg) for arg in args]))
 
-    def shortcut_code(progpath, iconpath):
+    def shortcut_code(progpath: str | Path, iconpath: str | Path) -> str:
         return f"call :CREATE-SHORTCUT {cmdstr(progpath)} {cmdstr(link_output)} {cmdargs(args)} {cmdstr(iconpath)}"
 
     program_installpath = Path("%installdir%", program)
@@ -94,7 +99,7 @@ def create_shortcut_cmd_code(command, link_output=None, icon=None):
         ),
     }
 
-    def replace(s, d):
+    def replace(s: str, d: Mapping[str, Any]) -> str:
         for key, val in d.items():
             s = s.replace(key, str(val))
         return s
@@ -108,7 +113,7 @@ def create_shortcut_cmd_code(command, link_output=None, icon=None):
     return code.replace(r"\"", r'\""')
 
 
-def create_releases(version=None):
+def create_releases(version: str | None = None) -> None:
     config = get_config()
 
     name = config["application"]["name"]
@@ -119,7 +124,7 @@ def create_releases(version=None):
     # **********************************************
     # Make 100% sure all .bat files have \r\n endings
     # **********************************************
-    def make_bat_lrln(filename):
+    def make_bat_lrln(filename: str | Path) -> None:
         filename = Path(filename)
         txt = filename.open("rb").read()
         if b"\n" in txt and not b"\r\n" in txt:
@@ -251,15 +256,15 @@ def create_releases(version=None):
     # If there are any scripts that should be run before
     # compressing everything into an exe, do it now
     # **********************************************
-    run_external_script = False
+    external_script_args: List[str | Path] = []
     for i, arg in enumerate(sys.argv):
         if arg.lower() == "--build-script" or arg.lower() == "-s":
-            run_external_script = sys.argv[i + 1 :]
+            external_script_args = list(sys.argv[i + 1 :])
 
-    if run_external_script:
+    if len(external_script_args):
         with _Path(app_dir):
-            run_external_script[0] = Path(run_external_script[0]).resolve()
-        subprocess.call(run_external_script)
+            external_script_args[0] = Path(external_script_args[0]).resolve()
+        subprocess.call(external_script_args)
 
     # Find and run scripts named "pre-build.bat" or "pre-build.cmd" or "pre-release.bat" or "pre-release.cmd"
     for script in iter_scripts(

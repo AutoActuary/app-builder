@@ -65,7 +65,7 @@ def create_github_release() -> None:
 
     tokenpath = tools_dir.joinpath(".github_token")
 
-    def create_token():
+    def create_token() -> None:
         if not tokenpath.is_file():
             subprocess.Popen(["explorer", "https://github.com/settings/tokens/new"])
             print(no_msg.strip())

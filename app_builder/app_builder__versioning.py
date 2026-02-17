@@ -6,11 +6,11 @@ from path import Path as _Path
 from .app_builder__paths import app_dir
 
 
-def sh(cmd):
+def sh(cmd: str) -> str:
     return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
 
 
-def get_githuburl():
+def get_githuburl() -> str | None:
     with _Path(app_dir):
         commit = None
         with suppress(subprocess.CalledProcessError):
@@ -39,7 +39,7 @@ def get_githuburl():
     return giturl
 
 
-def get_gitversion():
+def get_gitversion() -> str:
     with _Path(app_dir):
         try:
             return sh("git describe --tags")

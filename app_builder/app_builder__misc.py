@@ -8,7 +8,7 @@ import textwrap
 from contextlib import suppress
 from itertools import chain
 from pathlib import Path
-from typing import Union
+from typing import Union, Mapping, Dict, Any, Callable, List, Iterable, Tuple, Sequence
 
 import toml
 import yaml
@@ -38,7 +38,7 @@ from .run_and_suppress import run_and_suppress_pip, run_and_suppress_7z
 from .util import rmtree
 
 
-def nested_update(d, u):
+def nested_update(d: Dict[Any, Any], u: Mapping[Any, Any]) -> Dict[Any, Any]:
     """
     Update a nested dictionary structure with another nested dictionary structure.
     From https://stackoverflow.com/a/3233356/1490584
@@ -57,7 +57,7 @@ def nested_update(d, u):
     return d
 
 
-def sh(cmd, std_err_to_stdout=False):
+def sh(cmd: str, std_err_to_stdout: bool = False) -> str:
     if std_err_to_stdout:
         return (
             subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
@@ -68,7 +68,7 @@ def sh(cmd, std_err_to_stdout=False):
         return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
 
 
-def last_seen_git_tag_only_on_this_branch(branch):
+def last_seen_git_tag_only_on_this_branch(branch: str) -> str | None:
     cmd = [
         "git",
         "log",
@@ -88,7 +88,7 @@ def last_seen_git_tag_only_on_this_branch(branch):
     return None
 
 
-def get_config():
+def get_config() -> Dict[str, Any]:
     glob_kwargs = {"case_sensitive": False} if sys.version_info >= (3, 12) else {}
     config_path = next(iter(app_dir.glob("application.yaml", **glob_kwargs)))
     config = yaml.load(
@@ -107,7 +107,7 @@ def get_config():
     return config
 
 
-def move_tree(source, dest):
+def move_tree(source: str | Path, dest: str | Path) -> None:
     """
     Move a tree from source to destination
     """
@@ -127,7 +127,7 @@ def move_tree(source, dest):
     rmtree(source)
 
 
-def rmtree_exist_ok(dirname):
+def rmtree_exist_ok(dirname: str | Path) -> None:
     """
     Rmtree without exist_ok error
     """
@@ -135,7 +135,7 @@ def rmtree_exist_ok(dirname):
         rmtree(dirname)
 
 
-def rmpath(pathname):
+def rmpath(pathname: str | Path) -> None:
     """
     Like rmtree, but file/tree agnostic
     """
@@ -146,7 +146,7 @@ def rmpath(pathname):
         pass
 
 
-def cppath(srce, dest):
+def cppath(srce: str, dest: str) -> None:
     """
     File/tree agnostic copy
     """
@@ -157,7 +157,7 @@ def cppath(srce, dest):
         shutil.copy(srce, dest)
 
 
-def unnest_dir(dirname):
+def unnest_dir(dirname: str | Path) -> bool:
     r"""
     de-nesting single direcotry paths:
         From:
@@ -169,7 +169,7 @@ def unnest_dir(dirname):
     """
 
     if len(os.listdir(dirname)) == 1:
-        deepdir = dirname + "/" + os.listdir(dirname)[0]
+        deepdir = Path(dirname, os.listdir(dirname)[0])
         if os.path.isdir(dirname):
             move_tree(deepdir, dirname)
             return True
@@ -177,7 +177,11 @@ def unnest_dir(dirname):
     return False
 
 
-def extract_file(archive, destdir, force=True):
+def extract_file(
+    archive: str | Path,
+    destdir: str | Path,
+    force: bool = True,
+) -> None:
     print(f"Extract {archive} to {destdir}")
 
     if force:
@@ -195,7 +199,11 @@ def extract_file(archive, destdir, force=True):
     )
 
 
-def flatextract_file(archive, destdir, force=True):
+def flatextract_file(
+    archive: str | Path,
+    destdir: str | Path,
+    force: bool = True,
+) -> None:
     r"""
     Make sure it didn't extract to a single directory,
     by de-nesting single direcotry paths:
@@ -210,7 +218,7 @@ def flatextract_file(archive, destdir, force=True):
     unnest_dir(destdir)
 
 
-def download(dlurl, dest):
+def download(dlurl: str, dest: str | Path) -> None:
     dest = Path(dest)
     print(f"Download {dlurl} to {dest}")
 
@@ -257,7 +265,7 @@ def download(dlurl, dest):
         shutil.move(tmploc, dest)
 
 
-def islistlike(x):
+def islistlike(x: Any) -> bool | None:
     try:
         "" + x
         return False
@@ -271,20 +279,22 @@ def islistlike(x):
     except:
         return False
 
+    return None
 
-def slugify(url):
+
+def slugify(url: str) -> str:
     return url.replace("/", "-").replace(":", "").replace("?", "-")
 
 
 def get_program(
-    download_page,
-    prefix="",
-    outdir="",
-    link_tester=lambda x: x.startswith("http"),
-    link_chooser=lambda lst: lst[0],
-    extract_tester=lambda: True,
-    extractor=lambda x, y: flatextract_file(x, y),
-):
+    download_page: str,
+    prefix: str = "",
+    outdir: str | Path = "",
+    link_tester: Callable[[str], bool] = lambda x: x.startswith("http"),
+    link_chooser: Callable[[List[str]], str] = lambda lst: lst[0],
+    extract_tester: Callable[[], bool] = lambda: True,
+    extractor: Callable[[Path, Path], None] = lambda x, y: flatextract_file(x, y),
+) -> None:
     temp_dir.mkdir(parents=True, exist_ok=True)
 
     # ************************************************
@@ -331,11 +341,11 @@ def get_program(
     if not prevdl or not extract_tester():
         extractor(
             temp_dir.joinpath(filename).resolve(),
-            _Path(outdir).abspath(),
+            Path(outdir).resolve(),
         )
 
 
-def get_pandoc():
+def get_pandoc() -> None:
     get_program(
         "https://github.com/jgm/pandoc/releases/",
         "https://github.com/",
@@ -347,7 +357,7 @@ def get_pandoc():
     )
 
 
-def get_python(version):
+def get_python(version: str | None) -> None:
     temp_dir.mkdir(parents=True, exist_ok=True)
 
     if python_bin.exists() and test_version_of_python_exe_using_subprocess(
@@ -357,6 +367,10 @@ def get_python(version):
 
     rmtree_exist_ok(py_dir)
     url = get_winpython_version_link(version)
+    if not url:
+        raise RuntimeError(
+            f"Could not find a suitable Python version for pattern {version}"
+        )
     filename = Path(url).name
     dlpath = temp_dir.joinpath(filename)
     if not dlpath.exists():
@@ -401,7 +415,10 @@ def get_python(version):
                 py_dir / dst,
             )
 
-        def apply_activate_script_replacements(fnames: str, custom_replacements: dict):
+        def apply_activate_script_replacements(
+            fnames: Iterable[str],
+            custom_replacements: Dict[str, str],
+        ) -> None:
             common_replacements = {
                 "__VENV_BIN_NAME__": "Scripts",
                 "__VENV_PROMPT__": "(python) ",
@@ -429,7 +446,7 @@ def get_python(version):
         )
 
 
-def get_julia():
+def get_julia() -> None:
     # Escape automatic installation
     if not app_dir.joinpath(
         "bin", "julia", "app-builder-dont-overwrite-julia.txt"
@@ -536,7 +553,7 @@ def get_julia():
             """))
 
 
-def juliainstall_dependencies(libdict: dict):
+def juliainstall_dependencies(libdict: Dict[str, str]) -> None:
 
     envs = julia_dir.joinpath("localdepot", "environments")
 
@@ -555,7 +572,7 @@ def juliainstall_dependencies(libdict: dict):
     )
 
 
-def pipinstall(libname):
+def pipinstall(libname: str) -> None:
     run_and_suppress_pip(
         [
             python_bin,
@@ -570,7 +587,7 @@ def pipinstall(libname):
     )
 
 
-def pipinstall_requirements(liblist):
+def pipinstall_requirements(liblist: Iterable[str]) -> None:
     reqfile = tempfile.mktemp(suffix=".txt")
     open(reqfile, "w").write("\n".join(liblist))
     run_and_suppress_pip(
@@ -589,7 +606,7 @@ def pipinstall_requirements(liblist):
     os.unlink(reqfile)
 
 
-def is_pip(pname):
+def is_pip(pname: str) -> bool:
     try:
         pipanswer = subprocess.check_output(
             [py_dir.joinpath(r"scripts\pip"), "show", pname]
@@ -603,7 +620,7 @@ def is_pip(pname):
     return True
 
 
-def get_r(version):
+def get_r(version: str | None) -> None:
     temp_dir.mkdir(parents=True, exist_ok=True)
 
     if r_bin.exists() and test_version_of_r_exe_using_subprocess(r_bin, version):
@@ -629,7 +646,7 @@ def get_r(version):
     )
 
 
-def get_mintty(icon: Union[_Path, None] = None):
+def get_mintty(icon: Union[_Path, None] = None) -> None:
     try:
         gitpaths = [
             i.strip()
@@ -646,7 +663,7 @@ def get_mintty(icon: Union[_Path, None] = None):
 
     srcdir = gitbase.joinpath("usr", "bin")
 
-    def intable(txt):
+    def intable(txt: str) -> bool:
         with suppress(ValueError):
             int(txt)
             return True
@@ -690,7 +707,7 @@ def get_mintty(icon: Union[_Path, None] = None):
         )
 
 
-def rinstall(libname):
+def rinstall(libname: str) -> None:
     subprocess.call(
         [
             r_bin,
@@ -700,7 +717,12 @@ def rinstall(libname):
     )
 
 
-def mapped_zip(zippath, mapping, basedir=".", copymode=False):
+def mapped_zip(
+    zippath: str | Path,
+    mapping: Sequence[Tuple[str, str]],
+    basedir: str | Path = ".",
+    copymode: bool = False,
+) -> None:
     """
     This ended up being way more complicated that I ever wished it to be.
     """
@@ -744,6 +766,7 @@ def mapped_zip(zippath, mapping, basedir=".", copymode=False):
 
         # Lastly, zip everything from 1:1 mapping, then from the copied non-1:1 mapping
         # https://stackoverflow.com/a/28474846
+        mode: List[str]
         if copymode:
             mode = ["-mx0"]
         elif str(zip_out)[-4:].lower() == ".zip":
@@ -760,17 +783,17 @@ def mapped_zip(zippath, mapping, basedir=".", copymode=False):
             ]
 
         run_and_suppress_7z(
-            [sevenz_bin, "-bsp1", "a", "-y"] + mode + [zip_out, f"@{flist_local}"]
+            command=[sevenz_bin, "-bsp1", "a", "-y", *mode, zip_out, f"@{flist_local}"]
         )
 
         with _Path(tmp_out):
             run_and_suppress_7z(
-                [sevenz_bin, "-bsp1", "a", "-y"] + mode + [zip_out, r".\*"]
+                [sevenz_bin, "-bsp1", "a", "-y", *mode, zip_out, r".\*"]
             )
 
     rmpath(tmp_out)
 
 
-def make_launcher(template, dest, icon):
+def make_launcher(template: Path, dest: Path, icon: Path) -> None:
     shutil.copy(template, dest)
     subprocess.call([rcedit_bin, dest, "--set-icon", icon])

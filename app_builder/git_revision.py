@@ -7,6 +7,7 @@ from json import loads
 from pathlib import Path
 from urllib.request import urlopen
 
+from .app_builder__paths import sevenz_bin
 from .paths import temp_dir
 from .util import rmtree
 from .shell import sh_lines, sh_quiet
@@ -15,7 +16,7 @@ from .util import working_directory
 repo_dir = Path(__file__).resolve().parent.parent
 
 
-def ensure_git():
+def ensure_git() -> str:
     """
     Do some wild gymnastics to ensure git is in the PATH. If not, then download
     portable version from github and put that into temporary path.
@@ -60,7 +61,7 @@ def ensure_git():
                 os.makedirs(git_bundled_dir, exist_ok=True)
                 subprocess.call(
                     [
-                        str(this_dir().joinpath("src-legacy", "bin", "7z.exe")),
+                        sevenz_bin,
                         "x",
                         str(dlpath),
                         f"-o{git_bundled_dir}",
@@ -69,7 +70,7 @@ def ensure_git():
                     stdout=subprocess.DEVNULL,
                 )
 
-        e = None
+        e: BaseException | None = None
         try:
             sh_lines([git, "--version"], stderr=subprocess.DEVNULL)
         except (subprocess.CalledProcessError, FileNotFoundError):
@@ -87,7 +88,11 @@ def ensure_git():
     return git
 
 
-def git_download(git_source, dest, revision=None):
+def git_download(
+    git_source: str,
+    dest: str | Path,
+    revision: str | None = None,
+) -> None:
     os.makedirs(dest, exist_ok=True)
 
     with working_directory(dest):
@@ -97,7 +102,7 @@ def git_download(git_source, dest, revision=None):
         git = ensure_git()
 
         # Test if we are currently tracking the ref
-        def is_on_ref(revision):
+        def is_on_ref(revision: str | None) -> bool:
             if revision is None:
                 return False
             try:

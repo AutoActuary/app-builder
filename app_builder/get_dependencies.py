@@ -6,6 +6,7 @@ import uuid
 from contextlib import suppress
 from itertools import chain
 from pathlib import Path
+from typing import Tuple, List
 
 from path import Path as _Path
 
@@ -38,7 +39,7 @@ from .run_and_suppress import run_and_suppress_pip
 from .scripts import iter_scripts
 
 
-def split_prog_version(s: str):
+def split_prog_version(s: str) -> Tuple[str, str | None]:
     if " " in s:
         splt = s.split(" ")
         if len(splt) != 2:
@@ -48,11 +49,11 @@ def split_prog_version(s: str):
     return s, None
 
 
-def is_prog(s, progname):
+def is_prog(s: str, progname: str) -> bool:
     return s.lower() == progname.lower() or s.lower().startswith(f"{progname.lower()} ")
 
 
-def get_dependencies():
+def get_dependencies() -> None:
     """
     Download/install python and R and other dependencies
     """
@@ -70,7 +71,7 @@ def get_dependencies():
     shutil.copy(sevenz_bin, app_dir.joinpath("bin", "7z.exe"))
     shutil.copy(sevenz_dll, app_dir.joinpath("bin", "7z.dll"))
 
-    def python_post_process():
+    def python_post_process() -> None:
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         # Added some pip logging information
@@ -121,7 +122,7 @@ def get_dependencies():
             requirements_files_globable = [
                 Path(app_dir, i) for i in value.get("requirements_files", [])
             ]
-            requirements_files = []
+            requirements_files: List[Path] = []
             for file_globable in requirements_files_globable:
                 lst = list(
                     Path(file_globable.anchor).glob(
@@ -155,6 +156,10 @@ def get_dependencies():
                 )
 
             if all_requirements_files := [requirements_tmp, *requirements_files]:
+                all_requirements_args: List[str | Path] = []
+                for f in all_requirements_files:
+                    all_requirements_args.extend(["-r", f])
+
                 run_and_suppress_pip(
                     [
                         python_bin,
@@ -162,7 +167,7 @@ def get_dependencies():
                         "-m",
                         "pip",
                         "install",
-                        *chain(*[["-r", f] for f in all_requirements_files]),
+                        *all_requirements_args,
                         "--upgrade",
                         "--no-warn-script-location",
                         "--disable-pip-version-check",

@@ -1,2 +1,5 @@
 mypy==1.19.1
 types-pywin32==311.*
+types-toml==0.10.*
+types-PyYAML==6.*
+types-requests==2.*

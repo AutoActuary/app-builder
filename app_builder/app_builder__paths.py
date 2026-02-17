@@ -6,14 +6,15 @@ import subprocess
 import sys
 from functools import cache
 from pathlib import Path
+from typing import List
 
 
-def iglob(p, pattern):
+def iglob(p: str | Path, pattern: str) -> List[Path]:
     rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
     return [f for f in Path(p).glob("*") if rule.match(f.name)]
 
 
-def find_application_base_directory(start_dir) -> Path:
+def find_application_base_directory(start_dir: Path) -> Path:
     """
     Travel up from the starting directory to find the application's base directory, pattern contains 'Application.yaml'.
     """
@@ -67,7 +68,7 @@ r_bin = r_dir.joinpath("bin", "Rscript.exe")
 
 @cache
 def python_real_bin() -> Path:
-    command = [
+    command: List[str | Path] = [
         python_bin,
         "-S",
         "-c",
@@ -75,7 +76,9 @@ def python_real_bin() -> Path:
     ]
 
     try:
-        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
+        result = subprocess.run(
+            args=command, check=True, stdout=subprocess.PIPE, text=True
+        )
         path = Path(ast.literal_eval(result.stdout))
         return path
 
@@ -88,7 +91,7 @@ def python_real_bin() -> Path:
 
 @cache
 def python_lib() -> Path:
-    command = [
+    command: List[str | Path] = [
         python_bin,
         "-S",
         "-c",
@@ -96,7 +99,9 @@ def python_lib() -> Path:
     ]
 
     try:
-        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
+        result = subprocess.run(
+            args=command, check=True, stdout=subprocess.PIPE, text=True
+        )
         return Path(ast.literal_eval(result.stdout))
 
     except subprocess.CalledProcessError as e:
@@ -108,14 +113,16 @@ def python_lib() -> Path:
 
 @cache
 def python_site_packages() -> Path:
-    command = [
+    command: List[str | Path] = [
         python_bin,
         "-c",
         "import sys; print(repr(sys.path))",
     ]
 
     try:
-        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
+        result = subprocess.run(
+            args=command, check=True, stdout=subprocess.PIPE, text=True
+        )
         last_line = result.stdout.strip().split("\n")[-1]
         paths = ast.literal_eval(last_line)
 

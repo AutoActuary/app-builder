@@ -7,7 +7,7 @@ import requests
 from bs4 import BeautifulSoup
 
 
-def pattern_match_version(pattern, version):
+def pattern_match_version(pattern: str, version: str) -> bool:
     version_no_prerelease = re.compile(r"\d+(\.\d+)*$")
 
     if version_no_prerelease.match(version):
@@ -15,7 +15,7 @@ def pattern_match_version(pattern, version):
     return False
 
 
-def get_winpython_version_link(version):
+def get_winpython_version_link(version: str | None) -> str | None:
     """
     >>> get_winpython_version_link("3.8.2")
     'https://github.com/winpython/winpython/releases/download/2.3.20200319/Winpython64-3.8.2.0dot.exe'
@@ -40,14 +40,19 @@ def get_winpython_version_link(version):
                 if n.endswith("dot.exe"):
                     asset_version = n.replace("winpython64-", "").replace("dot.exe", "")
                     if pattern_match_version(version, asset_version):
-                        return asset["browser_download_url"]
+                        result = asset["browser_download_url"]
+                        assert isinstance(result, str)
+                        return result
 
         page += 1
 
     return None
 
 
-def test_version_of_python_exe_using_subprocess(path_to_python_exe, pattern):
+def test_version_of_python_exe_using_subprocess(
+    path_to_python_exe: str | Path,
+    pattern: str | None,
+) -> bool:
     """
     #>>> test_version_of_python_exe_using_subprocess("python", "3.8")
     #True
@@ -64,7 +69,7 @@ def test_version_of_python_exe_using_subprocess(path_to_python_exe, pattern):
     return pattern_match_version(pattern, version_exe)
 
 
-def get_r_version_link(version):
+def get_r_version_link(version: str | None) -> str:
     """
     >>> get_r_version_link("3.6.3")
     'https://cran-archive.r-project.org/bin/windows/base/old/3.6.3/R-3.6.3-win.exe'
@@ -94,10 +99,14 @@ def get_r_version_link(version):
     links = [l if l.startswith("http") else f"{link}/{Path(l).name}" for l in links]
     links = [link for link in links if link.endswith(".exe")]
 
-    return links[0]
+    result = links[0]
+    assert isinstance(result, str)
+    return result
 
 
-def test_version_of_r_exe_using_subprocess(path_to_r_exe, pattern):
+def test_version_of_r_exe_using_subprocess(
+    path_to_r_exe: str | Path, pattern: str | None
+) -> bool:
     """
     #>>> test_version_of_r_exe_using_subprocess("C:/Users/simon/devel/all-life-vif/bin/r/bin/x64/R.exe", "4.2")
     #True
