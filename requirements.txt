@@ -1,6 +1,8 @@
 beautifulsoup4==4.12.*
+click==8.*
 githubrelease==1.5.*
 locate==1.1.1
+packaging==26.*
 path==16.*
 pywin32==311; sys_platform == 'win32'
 pyyaml==6.*

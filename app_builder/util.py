@@ -8,19 +8,6 @@ from textwrap import dedent
 from typing import List, Union, Callable, Generator, Any
 
 
-def help() -> None:
-    print(dedent("""
-        Usage: app-builder [Options]
-        Options:
-          -h, --help                   Print these options
-          -d, --get-dependencies       Ensure all the dependencies are set up properly
-          -l, --local-release          Create a local release
-          -g, --github-release         Create a release and upload it to GitHub
-          -i, --init                   Initiate current git repo as an app-builder project             
-          --install-version <version>  Add and install app-builder version to the preinstall cache
-        """))
-
-
 def init() -> None:
     gitbase = None
     parts = Path(".").resolve().parts
@@ -31,7 +18,7 @@ def init() -> None:
             gitbase = d
 
     if gitbase is None:
-        raise RuntimeError("Run `app-builder --init` within a git repository.")
+        raise RuntimeError("Run `app-builder init` within a git repository.")
 
     appyaml = gitbase.joinpath("application.yaml")
 
