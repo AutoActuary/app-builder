@@ -45,33 +45,3 @@ rcedit_bin = legacy_dir / "bin" / "rcedit.exe"
 python_bin = Path(py_dir, "python", "python.exe")
 julia_bin = Path(julia_dir, "julia.exe")
 r_bin = r_dir.joinpath("bin", "Rscript.exe")
-
-
-@cache
-def python_site_packages() -> Path:
-    command: List[str | Path] = [
-        python_bin,
-        "-c",
-        "import sys; print(repr(sys.path))",
-    ]
-
-    try:
-        result = subprocess.run(
-            args=command, check=True, stdout=subprocess.PIPE, text=True
-        )
-        last_line = result.stdout.strip().split("\n")[-1]
-        paths = ast.literal_eval(last_line)
-
-        # return the first site-packages instance
-        path = [
-            i
-            for i in paths
-            if i.replace("\\", "/").lower().endswith("/lib/site-packages")
-        ][0]
-        return Path(path)
-
-    except subprocess.CalledProcessError as e:
-        cmd_str = " ".join([f'"{i}"' for i in command])
-        raise RuntimeError(
-            f"Could not find `site-packages` directory from command `{cmd_str}`"
-        ) from e
