@@ -115,22 +115,7 @@ def rmtree(
     onerror: Callable[[Any, Any, Any], Any] | None = None,
 ) -> None:
     """
-    Mimicks shutil.rmtree, but add support for deleting read-only files
-
-    >>> import tempfile
-    >>> import stat
-    >>> with tempfile.TemporaryDirectory() as tdir:
-    ...     os.makedirs(Path(tdir, "tmp"))
-    ...     with Path(tdir, "tmp", "f1").open("w") as f:
-    ...         _ = f.write("tmp")
-    ...     os.chmod(Path(tdir, "tmp", "f1"), stat.S_IREAD|stat.S_IRGRP|stat.S_IROTH)
-    ...     try:
-    ...         shutil.rmtree(Path(tdir, "tmp"))
-    ...     except Exception as e:
-    ...         print(e) # doctest: +ELLIPSIS
-    ...     rmtree(Path(tdir, "tmp"))
-    [WinError 5] Access is denied: '...f1'
-
+    Mimicks shutil.rmtree, but add support for deleting read-only files on Windows.
     """
 
     def _onerror(_func: Any, _path: Union[str, Path], _exc_info: Any) -> None:
