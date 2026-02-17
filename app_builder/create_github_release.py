@@ -4,16 +4,12 @@ import sys
 from datetime import date
 
 import github_release
-from locate import append_sys_path
 from path import Path as _Path
 
-with append_sys_path("."):
-    import app_builder__misc
-    import app_builder__paths
-    import create_releases
-
-with append_sys_path("../../.."):
-    from app_builder.scripts import iter_scripts
+from .app_builder__misc import sh, last_seen_git_tag_only_on_this_branch, get_config
+from .app_builder__paths import tools_dir, app_dir
+from .create_releases import create_releases
+from .scripts import iter_scripts
 
 
 def create_github_release() -> None:
@@ -22,7 +18,7 @@ def create_github_release() -> None:
     try:
         # Works both with https and ssh GitHub urls
         name_repo = "/".join(
-            app_builder__misc.sh("git config --get remote.origin.url")
+            sh("git config --get remote.origin.url")
             .split(".git")[0]
             .split(":")[-1]
             .split("/")[-2:]
@@ -67,7 +63,7 @@ def create_github_release() -> None:
 
     no_msg = no_msg.encode("utf-8", "ignore").decode("utf-8")
 
-    tokenpath = app_builder__paths.tools_dir.joinpath(".github_token")
+    tokenpath = tools_dir.joinpath(".github_token")
 
     def create_token():
         if not tokenpath.is_file():
@@ -98,18 +94,18 @@ def create_github_release() -> None:
     # *********************************
     # After token is sorted out
     # *********************************
-    with _Path(app_builder__paths.app_dir):  # run git commands from chdir basedir
+    with _Path(app_dir):  # run git commands from chdir basedir
 
         # *************************************
         # Ensure that the environment is as expected
         # ************************************
-        config = app_builder__misc.get_config()
+        config = get_config()
 
-        current_branch = app_builder__misc.sh("git branch --show-current")
+        current_branch = sh("git branch --show-current")
         try:
-            main_branch = app_builder__misc.sh(
-                "git symbolic-ref refs/remotes/origin/HEAD", True
-            ).split("/")[-1]
+            main_branch = sh("git symbolic-ref refs/remotes/origin/HEAD", True).split(
+                "/"
+            )[-1]
         except subprocess.CalledProcessError as e:
             # HEAD branch not set yet
             if "exit status 128" in str(e):
@@ -131,12 +127,10 @@ def create_github_release() -> None:
             sys.exit()
 
         print("Downloading GitHub tag information...")
-        app_builder__misc.sh("git fetch origin")
-        app_builder__misc.sh("git fetch --tags")
+        sh("git fetch origin")
+        sh("git fetch --tags")
 
-        if "Your branch is up to date with" not in app_builder__misc.sh(
-            "git status -uno"
-        ):
+        if "Your branch is up to date with" not in sh("git status -uno"):
             print(
                 f"You need to be in sync with Github and on the latest commit of your branch:"
             )
@@ -144,7 +138,7 @@ def create_github_release() -> None:
             print(f"git push origin {current_branch}")
             sys.exit()
 
-        target_commitish = app_builder__misc.sh("git rev-parse HEAD")
+        target_commitish = sh("git rev-parse HEAD")
 
         # *************************************
         # Get all the tag information
@@ -152,10 +146,8 @@ def create_github_release() -> None:
         recent_tag = None
         current_tag = None
         try:
-            recent_tag = app_builder__misc.last_seen_git_tag_only_on_this_branch(
-                current_branch
-            )
-            current_tag = app_builder__misc.sh(f"git describe --tags")
+            recent_tag = last_seen_git_tag_only_on_this_branch(current_branch)
+            current_tag = sh(f"git describe --tags")
         except:
             pass
 
@@ -199,12 +191,12 @@ def create_github_release() -> None:
         # *************************************
         # Build the exe from scratch (to contain correct git info)
         # ************************************
-        app_builder__misc.sh(f"git fetch --tags")
-        create_releases.create_releases(tagname)
+        sh(f"git fetch --tags")
+        create_releases(tagname)
 
     # Find and run scripts named "pre-github-upload.bat/.cmd"
     for script in iter_scripts(
-        base_dir=app_builder__paths.app_dir,
+        base_dir=app_dir,
         sub_dirs=[".", "bin", "src", "scripts"],
         extensions=["bat", "cmd"],
         names=["pre-github-upload"],
@@ -217,16 +209,16 @@ def create_github_release() -> None:
     print()
     print(f"Uploading to GitHub tag {tagname}, this may take a while...")
     github_release.gh_asset_upload(
-        name_repo, tagname, rf"{app_builder__paths.tools_dir}\releases\*{tagname}*.exe"
+        name_repo, tagname, rf"{tools_dir}\releases\*{tagname}*.exe"
     )
     github_release.gh_asset_upload(
-        name_repo, tagname, rf"{app_builder__paths.tools_dir}\releases\*{tagname}*.zip"
+        name_repo, tagname, rf"{tools_dir}\releases\*{tagname}*.zip"
     )
 
     # **********************************************
     # Find and run scripts named "post-github-upload.bat/.cmd"
     for script in iter_scripts(
-        base_dir=app_builder__paths.app_dir,
+        base_dir=app_dir,
         sub_dirs=[".", "bin", "src", "scripts"],
         extensions=["bat", "cmd"],
         names=["post-github-upload"],

@@ -1,12 +1,13 @@
-import os
-import sys
-from pathlib import Path
-import fnmatch
-import re
-import locate
-import subprocess
-from functools import cache
 import ast
+import fnmatch
+import os
+import re
+import subprocess
+import sys
+from functools import cache
+from pathlib import Path
+
+import locate
 
 
 def iglob(p, pattern):
@@ -34,11 +35,7 @@ def find_application_base_directory(start_dir) -> Path:
 
 
 # App directories
-deployment_and_release_scripts_dir = (
-    locate.this_dir().joinpath("..", "deployment-and-release-scripts").resolve()
-)
-
-app_dir = find_application_base_directory(Path(".").resolve())
+app_dir = Path(__file__).resolve().parent.parent
 tools_dir = Path(app_dir, "tools")
 temp_dir = Path(tools_dir, "temp", "package-downloads")
 py_dir = Path(app_dir, "bin", "python")
@@ -46,8 +43,8 @@ julia_dir = Path(app_dir, "bin", "julia")
 r_dir = app_dir.joinpath("bin", "r")
 
 # deploy-tools directories
-template_dir = Path(locate.this_dir(), "..", "templates").resolve()
-asset_dir = Path(locate.this_dir(), "..", "assets").resolve()
+template_dir = Path(locate.this_dir(), "src-legacy", "templates").resolve()
+asset_dir = Path(locate.this_dir(), "src-legacy", "assets").resolve()
 
 # Binaries
 ps_bin = (
@@ -61,8 +58,9 @@ ps_bin = (
     if sys.platform == "win32"
     else Path("/usr/bin/powershell")
 )
-sevenz_bin = Path(locate.this_dir(), "..", "bin", "7z.exe").resolve()
-rcedit_bin = Path(locate.this_dir(), "..", "bin", "rcedit.exe").resolve()
+sevenz_bin = Path(locate.this_dir(), "src-legacy", "bin", "7z.exe").resolve()
+sevenz_dll = Path(locate.this_dir(), "src-legacy", "bin", "7z.dll").resolve()
+rcedit_bin = Path(locate.this_dir(), "src-legacy", "bin", "rcedit.exe").resolve()
 python_bin = Path(py_dir, "python", "python.exe")
 julia_bin = Path(julia_dir, "julia.exe")
 r_bin = r_dir.joinpath("bin", "Rscript.exe")

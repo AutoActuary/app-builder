@@ -2,10 +2,8 @@ import subprocess
 from contextlib import suppress
 
 from path import Path as _Path
-from locate import allow_relative_location_imports
 
-allow_relative_location_imports(".")
-import app_builder__paths
+from .app_builder__paths import app_dir
 
 
 def sh(cmd):
@@ -13,7 +11,7 @@ def sh(cmd):
 
 
 def get_githuburl():
-    with _Path(app_builder__paths.app_dir):
+    with _Path(app_dir):
         commit = None
         with suppress(subprocess.CalledProcessError):
             commit = sh("git rev-parse HEAD")
@@ -42,7 +40,7 @@ def get_githuburl():
 
 
 def get_gitversion():
-    with _Path(app_builder__paths.app_dir):
+    with _Path(app_dir):
         try:
             return sh("git describe --tags")
         except subprocess.CalledProcessError:

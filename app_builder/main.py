@@ -1,8 +1,9 @@
 import sys
 from pathlib import Path
 
-from locate import append_sys_path
-
+from .create_github_release import create_github_release
+from .create_releases import create_releases
+from .get_dependencies import get_dependencies
 from .util import help, init
 
 
@@ -66,18 +67,12 @@ def main() -> None:
         init()
 
     elif command in ("-d", "--get-dependencies"):
-        with append_sys_path("../deployment-and-release-scripts"):
-            from get_dependencies import get_dependencies
         get_dependencies()
 
     elif command in ("-l", "--local-release"):
-        with append_sys_path("../deployment-and-release-scripts"):
-            from create_releases import create_releases
         create_releases()
 
     elif command in ("-g", "--github-release"):
-        with append_sys_path("../deployment-and-release-scripts"):
-            from create_github_release import create_github_release
         create_github_release()
 
     else:
