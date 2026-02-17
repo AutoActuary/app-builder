@@ -1,9 +1,8 @@
 import sys
 
-from locate import this_dir, append_sys_path
+from locate import append_sys_path
 
 with append_sys_path("../../.."):
-    from app_builder import exec_py
     from app_builder import util
 
 
