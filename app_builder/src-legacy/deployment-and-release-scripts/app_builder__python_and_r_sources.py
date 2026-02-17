@@ -67,7 +67,7 @@ def test_version_of_python_exe_using_subprocess(path_to_python_exe, pattern):
 def get_r_version_link(version):
     """
     >>> get_r_version_link("3.6.3")
-    'https://cran.r-project.org/bin/windows/base/old/3.6.3/R-3.6.3-win.exe'
+    'https://cran-archive.r-project.org/bin/windows/base/old/3.6.3/R-3.6.3-win.exe'
     """
     if version is None:
         version = ""
