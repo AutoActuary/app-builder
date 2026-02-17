@@ -14,6 +14,7 @@ with append_sys_path("."):
     import app_builder__misc
     import app_builder__versioning
     import app_builder__paths
+    from get_dependencies import get_dependencies
 
 with append_sys_path("../../.."):
     from app_builder.file_pattern_7zip import (
@@ -21,8 +22,6 @@ with append_sys_path("../../.."):
     )
     from app_builder.util import split_dos
     from app_builder.scripts import iter_scripts
-
-create_dependencies = __import__("create-dependencies")
 
 
 _create_shortcut_code_template_with_icon = r"""
@@ -135,10 +134,7 @@ def create_releases(version=None):
         if not path.is_dir():
             make_bat_lrln(path)
 
-    # **********************************************
-    # Create all dependencies
-    # **********************************************
-    create_dependencies.create_all_dependencies()
+    get_dependencies()
 
     # **********************************************
     # Create application entry points with correct icons
