@@ -30,16 +30,6 @@ def globlist(
     r"""
     Build a list of files from a sequence of include and exclude glob lists. These glob lists work in sequential order
     (i.e. where the next list of glob filters takes preference over the previous ones).
-
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     with working_directory(d):
-    ...         for i in ["1/i/a.txt", "1/i/b.txt", "1/ii.txt", "1/iii/c.txt", "2/i/d.txt", "2/ii/e.txt"]:
-    ...             Path(i).write_text("")
-    ...     [str(i) for i in globlist(d, ["*"], ["1/i", "2/*/e.txt"], ["1/i/b.txt"])]
-    ['1\\ii.txt', '1\\iii\\c.txt', '2\\i\\d.txt', '1\\i\\b.txt']
-
-    >>> globlist(".", [sys.executable]) #doctest: +ELLIPSIS
-    [...python.exe...]
     """
     basedir = Path(basedir)
 

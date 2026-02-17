@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 
 from app_builder.file_pattern_7zip import (
     create_7zip_from_include_exclude_and_rename_list,
+    globlist,
 )
 from app_builder.util import working_directory
 
@@ -75,3 +76,30 @@ class TestCreate7zipFromIncludeExcludeAndRenameList(unittest.TestCase):
                     ],
                     files,
                 )
+
+
+class TestGlobList(unittest.TestCase):
+    def test_1(self) -> None:
+        with TemporaryDirectory() as d:
+            with working_directory(d):
+                for i in [
+                    "1/i/a.txt",
+                    "1/i/b.txt",
+                    "1/ii.txt",
+                    "1/iii/c.txt",
+                    "2/i/d.txt",
+                    "2/ii/e.txt",
+                ]:
+                    dst = Path(d, i)
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    dst.write_text("")
+            result = [
+                p.as_posix()
+                for p in globlist(d, ["*"], ["1/i", "2/*/e.txt"], ["1/i/b.txt"])
+            ]
+
+        self.assertEqual(["1/ii.txt", "1/iii/c.txt", "2/i/d.txt", "1/i/b.txt"], result)
+
+    def test_2(self) -> None:
+        result = globlist(".", [sys.executable])
+        self.assertEqual([Path(sys.executable)], result)
