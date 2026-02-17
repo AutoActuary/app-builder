@@ -18,7 +18,6 @@ allow_relative_location_imports(".")
 import app_builder__misc
 import app_builder__paths
 
-
 create_releases = __import__("create-releases")
 
 strdate = date.today().strftime("%Y-%m-%d")

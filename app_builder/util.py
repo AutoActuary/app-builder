@@ -12,9 +12,7 @@ import sys
 
 
 def help():
-    print(
-        dedent(
-            """
+    print(dedent("""
         Usage: app-builder [Options]
         Options:
           -h, --help                   Print these options
@@ -23,9 +21,7 @@ def help():
           -g, --github-release         Create a release and upload it to GitHub
           -i, --init                   Initiate current git repo as an app-builder project             
           --install-version <version>  Add and install app-builder version to the preinstall cache
-        """
-        )
-    )
+        """))
 
 
 def init():
@@ -52,9 +48,7 @@ def init():
         shutil.copy2(i, dst.joinpath(i.name))
 
     with appyaml.open("w") as f:
-        f.write(
-            dedent(
-                r"""
+        f.write(dedent(r"""
                 app-builder: v0.2.1
                 
                 application:
@@ -88,9 +82,7 @@ def init():
                     # You can list the packages via pip versioning (i.e. `pyyaml~=5.3`)  
                     - pyyaml
                   
-            """
-            ).strip()
-        )
+            """).strip())
 
 
 @contextmanager
