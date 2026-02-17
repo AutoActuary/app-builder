@@ -19,7 +19,6 @@ allow_relative_location_imports("../../..")
 from app_builder import git_revision
 from app_builder.run_and_suppress import run_and_suppress_pip
 
-
 """
 Download/install python and R and other dependencies
 """

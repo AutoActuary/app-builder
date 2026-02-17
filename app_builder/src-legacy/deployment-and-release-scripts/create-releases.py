@@ -457,17 +457,11 @@ def create_releases(version=None):
 
     with _Path(installzip.parent.resolve()):
 
-        open("config.txt", "wb").write(
-            textwrap.dedent(
-                f"""
+        open("config.txt", "wb").write(textwrap.dedent(f"""
                 ;!@Install@!UTF-8!
                 RunProgram="{installout.name}"
                 ;!@InstallEnd@!
-                """
-            )
-            .strip()
-            .encode("utf-8")
-        )
+                """).strip().encode("utf-8"))
 
         shutil.copy(Path(app_builder__paths.sevenz_bin.parent, "7zSD.sfx"), "7zSD.sfx")
         subprocess.call(

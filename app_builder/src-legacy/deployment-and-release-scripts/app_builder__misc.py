@@ -236,7 +236,7 @@ def download(dlurl, dest):
     print(f"Download {dlurl} to {dest}")
 
     tdir_base = Path(tempfile.gettempdir(), "app-builder-downloads").resolve()
-    
+
     os.makedirs(tdir_base, exist_ok=True)
     os.makedirs(dest.parent, exist_ok=True)
 
@@ -349,7 +349,8 @@ def get_program(
     # os.makedirs(outdir, exist_ok=True)
     if not prevdl or not extract_tester():
         extractor(
-            app_builder__paths.temp_dir.joinpath(filename).resolve(), _Path(outdir).abspath()
+            app_builder__paths.temp_dir.joinpath(filename).resolve(),
+            _Path(outdir).abspath(),
         )
 
 
@@ -390,7 +391,8 @@ def get_python(version):
         (app_builder__paths.py_dir / "Lib").mkdir(parents=True, exist_ok=True)
 
         shutil.move(
-            pydir / "Lib" / "site-packages", app_builder__paths.py_dir / "Lib" / "site-packages"
+            pydir / "Lib" / "site-packages",
+            app_builder__paths.py_dir / "Lib" / "site-packages",
         )
         shutil.move(pydir / "Scripts", app_builder__paths.py_dir / "Scripts")
         shutil.move(pydir, app_builder__paths.py_dir / "python")
@@ -409,7 +411,9 @@ def get_python(version):
             / "python-venv-exe-wrapper"
             / "pythonw-venv-exe-wrapper.exe"
         )
-        venv_scripts_dir = app_builder__paths.py_dir / "python" / "Lib" / "venv" / "scripts"
+        venv_scripts_dir = (
+            app_builder__paths.py_dir / "python" / "Lib" / "venv" / "scripts"
+        )
         activate_venv_scripts = [
             *(venv_scripts_dir / "nt").glob("*activate*"),
             *(venv_scripts_dir / "common").glob("*activate*"),
@@ -474,16 +478,15 @@ def get_julia():
 
         # Add our personalised launcher wrapper to the mix
         shutil.copy2(
-            app_builder__paths.asset_dir.joinpath("launcher-julia.exe"), app_builder__paths.julia_bin
+            app_builder__paths.asset_dir.joinpath("launcher-julia.exe"),
+            app_builder__paths.julia_bin,
         )
 
         julia_env = app_builder__paths.app_dir.joinpath(
             "bin", "julia", "activate-julia-environment.cmd"
         )
 
-        open(julia_env, "w").write(
-            textwrap.dedent(
-                r"""
+        open(julia_env, "w").write(textwrap.dedent(r"""
             @echo off
             
             :: Set portable specific julia paths
@@ -526,18 +529,14 @@ def get_julia():
             if "%lastpath%" neq "%JULIA_DEPOT_PATH%" if "%errorlevel%" equ "0" (
                 echo %JULIA_DEPOT_PATH%>"%JULIA_DEPOT_PATH%\lastpath.txt"
             )
-            """
-            )
-        )
+            """))
 
         startup = app_builder__paths.app_dir.joinpath(
             "bin", "julia", "localdepot", "config", "startup.jl"
         )
         os.makedirs(startup.parent, exist_ok=True)
 
-        startup.open("w").write(
-            textwrap.dedent(
-                r"""        
+        startup.open("w").write(textwrap.dedent(r"""        
             ENV["JULIA_PKG_SERVER"] = ""
             
             # Force installation of packages
@@ -569,9 +568,7 @@ def get_julia():
                 add_and_use(:Revise)
                 add_and_use(:OhMyREPL)
             end
-            """
-            )
-        )
+            """))
 
 
 def juliainstall_dependencies(libdict: dict):
@@ -806,7 +803,9 @@ def mapped_zip(zippath, mapping, basedir=".", copymode=False):
 
         with _Path(tmp_out):
             run_and_suppress_7z(
-                [app_builder__paths.sevenz_bin, "-bsp1", "a", "-y"] + mode + [zip_out, r".\*"]
+                [app_builder__paths.sevenz_bin, "-bsp1", "a", "-y"]
+                + mode
+                + [zip_out, r".\*"]
             )
 
     rmpath(tmp_out)
