@@ -255,20 +255,6 @@ def create_release(
         with installout.open("w") as f:
             f.write(txt)
 
-    # **********************************************
-    # If there are any scripts that should be run before
-    # compressing everything into an exe, do it now
-    # **********************************************
-    external_script_args: List[str | Path] = []
-    for i, arg in enumerate(sys.argv):
-        if arg.lower() == "--build-script" or arg.lower() == "-s":
-            external_script_args = list(sys.argv[i + 1 :])
-
-    if len(external_script_args):
-        with _Path(app_dir):
-            external_script_args[0] = Path(external_script_args[0]).resolve()
-        subprocess.call(external_script_args)
-
     # Find and run scripts named "pre-build.bat" or "pre-build.cmd" or "pre-release.bat" or "pre-release.cmd"
     for script in iter_scripts(
         base_dir=app_dir,
