@@ -46,6 +46,10 @@ def get_githuburl() -> str | None:
 
 
 def git_describe() -> str:
+    """
+    Get the output of `git describe --tags` which is normally useful as a version string.
+    Return an empty string if the command fails (e.g. not a git repository, no tags, etc.)
+    """
     try:
         return (
             subprocess.check_output(
