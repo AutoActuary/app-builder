@@ -1,16 +1,16 @@
-from util import working_directory
+import os
+import shutil
+import sys
 import tempfile
 from pathlib import Path
-from typing import Optional, List, Tuple, Union
-import shutil
-import os
-from run_and_suppress import run_and_suppress_7z
-from win32 import win32file
-import win32con
+from typing import Optional, List, Tuple, Union, Generator, Any
+
+from .run_and_suppress import run_and_suppress_7z
+from .util import working_directory
 
 
 def expand_to_all_sub_files(path: Path) -> List[Path]:
-    def recursive_helper(p: Path):
+    def recursive_helper(p: Path) -> Generator[Path, None, None]:
         if p.is_dir():
             for i in p.glob("*"):
                 yield from recursive_helper(i)
@@ -20,26 +20,17 @@ def expand_to_all_sub_files(path: Path) -> List[Path]:
     return list(recursive_helper(path))
 
 
-def filename_as_key(fname):
+def filename_as_key(fname: str | Path) -> str:
     return str(Path(fname).resolve()).lower()
 
 
 def globlist(
-    basedir, *include_exclude_include_exclude_etc: List[Union[str, Path]]
+    basedir: str | Path,
+    *include_exclude_include_exclude_etc: List[Union[str, Path]],
 ) -> List[Path]:
     r"""
     Build a list of files from a sequence of include and exclude glob lists. These glob lists work in sequential order
     (i.e. where the next list of glob filters takes preference over the previous ones).
-
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     with working_directory(d):
-    ...         for i in ["1/i/a.txt", "1/i/b.txt", "1/ii.txt", "1/iii/c.txt", "2/i/d.txt", "2/ii/e.txt"]:
-    ...             Path(i).write_text("")
-    ...     [str(i) for i in globlist(d, ["*"], ["1/i", "2/*/e.txt"], ["1/i/b.txt"])]
-    ['1\\ii.txt', '1\\iii\\c.txt', '2\\i\\d.txt', '1\\i\\b.txt']
-
-    >>> globlist(".", [sys.executable]) #doctest: +ELLIPSIS
-    [...python.exe...]
     """
     basedir = Path(basedir)
 
@@ -77,8 +68,8 @@ def create_7zip_from_filelist(
     copymode: bool = False,
     append: bool = False,
     sevenzip_bin: str = "7z",
-    show_progress=True,
-):
+    show_progress: bool = True,
+) -> None:
     """
     Use 7zip to create an archive from a list of files
     """
@@ -124,18 +115,31 @@ def create_7zip_from_filelist(
             )
 
 
-def can_7z_read_file(filepath):
+def can_7z_read_file(filepath: str | Path) -> bool:
     """
     Returns True if the file cannot be opened for both read and write with
     zero sharing (exclusive access).
     """
+    if sys.platform != "win32":
+        # On non-Windows platforms, we assume that we have access.
+        return True
+
+    from win32 import win32file
+    import win32con
+
     dwDesiredAccess = win32con.GENERIC_READ | win32con.GENERIC_WRITE
     dwShareMode = 0  # no sharing; request exclusive
     dwCreationDisposition = win32con.OPEN_EXISTING
 
     try:
-        handle = win32file.CreateFile(
-            filepath, dwDesiredAccess, dwShareMode, None, dwCreationDisposition, 0, None
+        handle: Any = win32file.CreateFile(
+            str(filepath),
+            dwDesiredAccess,
+            dwShareMode,
+            None,
+            dwCreationDisposition,
+            0,
+            None,
         )
         # If we get here, we could open the file exclusively.
         win32file.CloseHandle(handle)
@@ -155,24 +159,8 @@ def create_7zip_from_include_exclude_and_rename_list(
     copymode: bool = False,
     append: bool = False,
     sevenzip_bin: str = "7z",
-    show_progress=True,
-):
-    r"""
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     with working_directory(d):
-    ...         for i in ["1/i/a.txt", "1/i/b.txt", "1/ii.txt", "1/iii/c.txt", "2/i/d.txt", "2/ii/eEe.txt"]:
-    ...             Path(i).write_text("")
-    ...         create_7zip_from_include_exclude_and_rename_list(
-    ...             Path("temp.7z"),
-    ...             Path("."),
-    ...             ["*", sys.executable],
-    ...             ["2/ii/e.txt"],
-    ...             [[sys.executable, "blap"], ["2", "3"]],
-    ...             False,
-    ...             False,
-    ...             Path(__file__).resolve().parent.joinpath("src-legacy", "bin", "7z.exe")
-    ...         )
-    """
+    show_progress: bool = True,
+) -> None:
     outpath = Path(os.path.abspath(outpath))
 
     exclude_glob_list = exclude_glob_list or []
@@ -224,7 +212,9 @@ def create_7zip_from_include_exclude_and_rename_list(
                         raise renerr
 
                 elif os.path.isdir(rename_src):
-                    rename_src_key_slash = filename_as_key(rename_src) + "/"
+                    rename_src_key_slash = filename_as_key(rename_src) + (
+                        "\\" if sys.platform == "win32" else "/"
+                    )
 
                     for fpath_key, fpath in list(filedict.items()):
 

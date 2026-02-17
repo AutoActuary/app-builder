@@ -1,27 +1,27 @@
+import collections.abc
 import os
 import shutil
-import stat
 import subprocess
 import sys
 import tempfile
-from contextlib import suppress
-from typing import Union, Callable
 import textwrap
-import collections.abc
-import toml
-
-import yaml
-from path import Path as _Path
-from pathlib import Path
+from contextlib import suppress
 from itertools import chain
-from locate import allow_relative_location_imports
+from pathlib import Path
+from typing import Union
 
-allow_relative_location_imports(".")
-import app_builder__paths
-import app_builder__python_and_r_sources as prs
+import toml
+import yaml
+from locate import append_sys_path
+from path import Path as _Path
 
-allow_relative_location_imports("../../..")
-from app_builder.run_and_suppress import run_and_suppress_pip, run_and_suppress_7z
+with append_sys_path("."):
+    import app_builder__paths
+    import app_builder__python_and_r_sources as prs
+
+with append_sys_path("../../.."):
+    from app_builder.run_and_suppress import run_and_suppress_pip, run_and_suppress_7z
+    from app_builder.util import rmtree
 
 
 def nested_update(d, u):
@@ -75,8 +75,12 @@ def last_seen_git_tag_only_on_this_branch(branch):
 
 
 def get_config():
+    glob_kwargs = {"case_sensitive": False} if sys.version_info >= (3, 12) else {}
+    config_path = next(
+        iter(app_builder__paths.app_dir.glob("application.yaml", **glob_kwargs))
+    )
     config = yaml.load(
-        app_builder__paths.app_dir.joinpath("Application.yaml").open().read(),
+        config_path.read_text(),
         Loader=yaml.FullLoader,
     )
 
@@ -109,43 +113,6 @@ def move_tree(source, dest):
             absf = os.path.abspath(ndir + "/" + f)
             os.rename(absf, dest + "/" + absf[len(source) :])
     rmtree(source)
-
-
-def rmtree(
-    path: Union[str, Path], ignore_errors: bool = False, onerror: Callable = None
-) -> None:
-    """
-    Mimicks shutil.rmtree, but add support for deleting read-only files
-
-    >>> import tempfile
-    >>> with tempfile.TemporaryDirectory() as tdir:
-    ...     os.makedirs(Path(tdir, "tmp"))
-    ...     with Path(tdir, "tmp", "f1").open("w") as f:
-    ...         _ = f.write("tmp")
-    ...     os.chmod(Path(tdir, "tmp", "f1"), stat.S_IREAD|stat.S_IRGRP|stat.S_IROTH)
-    ...     try:
-    ...         shutil.rmtree(Path(tdir, "tmp"))
-    ...     except Exception as e:
-    ...         print(e) # doctest: +ELLIPSIS
-    ...     rmtree(Path(tdir, "tmp"))
-    [WinError 5] Access is denied: '...f1'
-
-    """
-
-    def _onerror(_func: Callable, _path: Union[str, Path], _exc_info) -> None:
-        # Is the error an access error ?
-        try:
-            os.chmod(_path, stat.S_IWUSR)
-            _func(_path)
-        except Exception as e:
-            if ignore_errors:
-                pass
-            elif onerror is not None:
-                onerror(_func, _path, sys.exc_info())
-            else:
-                raise
-
-    return shutil.rmtree(path, False, _onerror)
 
 
 def rmtree_exist_ok(dirname):
@@ -306,6 +273,8 @@ def get_program(
     extract_tester=lambda: True,
     extractor=lambda x, y: flatextract_file(x, y),
 ):
+    app_builder__paths.temp_dir.mkdir(parents=True, exist_ok=True)
+
     # ************************************************
     # Get download url
     # ************************************************
@@ -367,6 +336,7 @@ def get_pandoc():
 
 
 def get_python(version):
+    app_builder__paths.temp_dir.mkdir(parents=True, exist_ok=True)
 
     if (
         app_builder__paths.python_bin.exists()
@@ -639,6 +609,7 @@ def is_pip(pname):
 
 
 def get_r(version):
+    app_builder__paths.temp_dir.mkdir(parents=True, exist_ok=True)
 
     if app_builder__paths.r_bin.exists() and prs.test_version_of_r_exe_using_subprocess(
         app_builder__paths.r_bin, version

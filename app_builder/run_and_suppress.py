@@ -1,12 +1,15 @@
 import subprocess
 import re
-from typing import List
+from typing import List, Sequence, Any
 import sys
 
 
 def run_and_suppress(
-    command, line_suppress_regex: List[re.Pattern], check=True, **kwargs
-):
+    command: Sequence[str],
+    line_suppress_regex: List[re.Pattern[str]],
+    check: bool = True,
+    **kwargs: Any,
+) -> None:
     """Executes a python command with real-time output streaming and raises exceptions if check=True.
 
     Args:
@@ -29,9 +32,9 @@ def run_and_suppress(
     nothing_line_re = re.compile(r"^(\s*\r)|(\s*\n)|()$")
     first_output = [True]
     nothing_lines = []
-    buffer = []
+    buffer: List[bytes] = []
 
-    def write_buffer():
+    def write_buffer() -> None:
         line = (b"".join(buffer)).decode("utf-8")
         buffer.clear()
 
@@ -49,7 +52,7 @@ def run_and_suppress(
             nothing_lines.clear()
             first_output[0] = False
 
-    for char in iter(lambda: process.stdout.read(1), b""):
+    for char in iter(lambda: process.stdout.read(1) if process.stdout else b"", b""):
         buffer.append(char)
         if char in (b"\n", b"\r"):
             write_buffer()
@@ -98,7 +101,7 @@ _suppress_re_list_7z = [
 ]
 
 
-def run_and_suppress_7z(command, **kwargs):
+def run_and_suppress_7z(command: Sequence[str], **kwargs: Any) -> None:
     return run_and_suppress(command, _suppress_re_list_7z, **kwargs)
 
 
@@ -117,5 +120,5 @@ _suppress_re_list_pip = [
 ]
 
 
-def run_and_suppress_pip(command, **kwargs):
+def run_and_suppress_pip(command: Sequence[str], **kwargs: Any) -> None:
     return run_and_suppress(command, _suppress_re_list_pip, **kwargs)

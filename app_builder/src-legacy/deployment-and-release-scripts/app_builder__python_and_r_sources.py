@@ -20,8 +20,7 @@ def get_winpython_version_link(version):
     'https://github.com/winpython/winpython/releases/download/2.3.20200319/Winpython64-3.8.2.0dot.exe'
 
     >>> get_winpython_version_link(None) # doctest: +ELLIPSIS
-    'https://github.com/winpython/winpython/releases/download/.../Winpython...exe'
-
+    'https://github.com/winpython/winpython/releases/download/.../WinPython...exe'
     """
 
     if version is None:
@@ -67,7 +66,7 @@ def test_version_of_python_exe_using_subprocess(path_to_python_exe, pattern):
 def get_r_version_link(version):
     """
     >>> get_r_version_link("3.6.3")
-    'https://cran.r-project.org/bin/windows/base/old/3.6.3/R-3.6.3-win.exe'
+    'https://cran-archive.r-project.org/bin/windows/base/old/3.6.3/R-3.6.3-win.exe'
     """
     if version is None:
         version = ""

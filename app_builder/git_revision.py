@@ -1,15 +1,17 @@
-from pathlib import Path
-import urllib
-from urllib.request import urlopen
-from json import loads
-import tempfile
-import subprocess
-from contextlib import suppress
 import os
+import subprocess
+import tempfile
+import urllib
+from contextlib import suppress
+from json import loads
+from pathlib import Path
+from urllib.request import urlopen
+
 from locate import this_dir
-import paths
-from shell import sh_lines, working_directory, sh_quiet
-import util
+
+from . import paths, util
+from .shell import sh_lines, sh_quiet
+from .util import working_directory
 
 
 def ensure_git():
