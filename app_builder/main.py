@@ -92,7 +92,8 @@ def caller_version_tuple() -> tuple[int, ...] | None:
     "--use-version",
     "bc_use_version",
     type=str,
-    help="Use the specified version of app-builder, ignoring the version specified in `application.yaml`.",
+    help="Use the specified version of app-builder, ignoring the version specified in `application.yaml`. "
+    "The special value `current` may be used to refer to the currently installed version of app-builder.",
 )
 def main(
     *,

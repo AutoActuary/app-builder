@@ -250,7 +250,10 @@ def run_versioned_main() -> int:
             print("Usage: app-builder --use-version <version>")
             return 255
 
-        ensure_app_version(desired_version)
+        if desired_version == "current":
+            desired_version = None
+        else:
+            ensure_app_version(desired_version)
     else:
         # Ensure that we have the version of `app-builder` that is specified in `application.yaml` before continuing.
         try:
