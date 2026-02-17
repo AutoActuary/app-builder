@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from .create_github_release import create_github_release
-from .create_releases import create_releases
+from .create_release import create_release
 from .get_dependencies import get_dependencies
 from .util import help, init
 
@@ -71,7 +71,7 @@ def main() -> None:
         get_dependencies()
 
     elif command in ("-l", "--local-release"):
-        create_releases()
+        create_release()
 
     elif command in ("-g", "--github-release"):
         create_github_release()

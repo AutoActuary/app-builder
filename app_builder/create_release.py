@@ -113,7 +113,7 @@ def create_shortcut_cmd_code(
     return code.replace(r"\"", r'\""')
 
 
-def create_releases(version: str | None = None) -> None:
+def create_release(version: str | None = None) -> None:
     config = get_config()
 
     name = config["application"]["name"]
