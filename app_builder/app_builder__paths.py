@@ -14,25 +14,6 @@ def iglob(p: str | Path, pattern: str) -> List[Path]:
     return [f for f in Path(p).glob("*") if rule.match(f.name)]
 
 
-def find_application_base_directory(start_dir: Path) -> Path:
-    """
-    Travel up from the starting directory to find the application's base directory, pattern contains 'Application.yaml'.
-    """
-    d = start_dir.resolve()
-    for i in range(1000):
-        if len(iglob(d, "application.yaml") + iglob(d, ".git")) == 2:
-            return d.resolve()
-
-        parent = d.parent
-        if parent == d:  # like "c:" == "c:"
-            raise FileNotFoundError(
-                "Expected git repository with `application.yaml` at base!"
-            )
-        d = parent
-
-    raise FileNotFoundError("Expected git repository with `application.yaml` at base!")
-
-
 # App directories
 app_dir = Path(__file__).resolve().parent.parent
 tools_dir = Path(app_dir, "tools")
