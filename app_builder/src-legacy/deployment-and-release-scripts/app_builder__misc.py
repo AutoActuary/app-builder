@@ -75,8 +75,12 @@ def last_seen_git_tag_only_on_this_branch(branch):
 
 
 def get_config():
+    glob_kwargs = {"case_sensitive": False} if sys.version_info >= (3, 12) else {}
+    config_path = next(
+        iter(app_builder__paths.app_dir.glob("application.yaml", **glob_kwargs))
+    )
     config = yaml.load(
-        app_builder__paths.app_dir.joinpath("Application.yaml").open().read(),
+        config_path.read_text(),
         Loader=yaml.FullLoader,
     )
 
