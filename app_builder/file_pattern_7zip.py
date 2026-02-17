@@ -5,8 +5,6 @@ from typing import Optional, List, Tuple, Union
 import shutil
 import os
 from run_and_suppress import run_and_suppress_7z
-from win32 import win32file
-import win32con
 
 
 def expand_to_all_sub_files(path: Path) -> List[Path]:
@@ -129,6 +127,9 @@ def can_7z_read_file(filepath):
     Returns True if the file cannot be opened for both read and write with
     zero sharing (exclusive access).
     """
+    from win32 import win32file
+    import win32con
+
     dwDesiredAccess = win32con.GENERIC_READ | win32con.GENERIC_WRITE
     dwShareMode = 0  # no sharing; request exclusive
     dwCreationDisposition = win32con.OPEN_EXISTING
