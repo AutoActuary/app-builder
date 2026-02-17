@@ -1,3 +1,5 @@
+import sys
+
 from util import working_directory
 import tempfile
 from pathlib import Path
@@ -127,6 +129,10 @@ def can_7z_read_file(filepath):
     Returns True if the file cannot be opened for both read and write with
     zero sharing (exclusive access).
     """
+    if sys.platform != "win32":
+        # On non-Windows platforms, we assume that we have access.
+        return True
+
     from win32 import win32file
     import win32con
 
