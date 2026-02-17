@@ -1,17 +1,14 @@
-import glob
+import os
 import shutil
-import subprocess
+import stat
+import sys
+from contextlib import contextmanager
 from pathlib import Path
 from textwrap import dedent
-import os
-import stat
-from contextlib import contextmanager
-from typing import List, Union, Callable
-import tempfile
-import sys
+from typing import List, Union, Callable, Generator, Any
 
 
-def help():
+def help() -> None:
     print(dedent("""
         Usage: app-builder [Options]
         Options:
@@ -24,7 +21,7 @@ def help():
         """))
 
 
-def init():
+def init() -> None:
     gitbase = None
     parts = Path(".").resolve().parts
 
@@ -44,8 +41,8 @@ def init():
         )
 
     os.makedirs(dst := gitbase.joinpath("application-templates"), exist_ok=True)
-    for i in Path(__file__).resolve().parent.joinpath("assets", "templates").glob("*"):
-        shutil.copy2(i, dst.joinpath(i.name))
+    for p in Path(__file__).resolve().parent.joinpath("assets", "templates").glob("*"):
+        shutil.copy2(p, dst.joinpath(p.name))
 
     with appyaml.open("w") as f:
         f.write(dedent(r"""
@@ -86,7 +83,7 @@ def init():
 
 
 @contextmanager
-def working_directory(path):
+def working_directory(path: Path | str) -> Generator[None, None, None]:
     """
     A context manager which changes the working directory to the given
     path, and then changes it back to its previous value on exit.
@@ -105,7 +102,7 @@ def working_directory(path):
         os.chdir(prev_cwd)
 
 
-def force_file_path(path):
+def force_file_path(path: Path | str) -> None:
     os.makedirs(Path(path).parent, exist_ok=True)
     if not Path(path).exists():
         with Path(path).open("w") as f:
@@ -113,7 +110,9 @@ def force_file_path(path):
 
 
 def rmtree(
-    path: Union[str, Path], ignore_errors: bool = False, onerror: Callable = None
+    path: Union[str, Path],
+    ignore_errors: bool = False,
+    onerror: Callable[[Any, Any, Any], Any] | None = None,
 ) -> None:
     """
     Mimicks shutil.rmtree, but add support for deleting read-only files
@@ -134,7 +133,7 @@ def rmtree(
 
     """
 
-    def _onerror(_func: Callable, _path: Union[str, Path], _exc_info) -> None:
+    def _onerror(_func: Any, _path: Union[str, Path], _exc_info: Any) -> None:
         # Is the error an access error ?
         try:
             os.chmod(_path, stat.S_IWUSR)
