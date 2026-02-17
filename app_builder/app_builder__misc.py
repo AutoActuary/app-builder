@@ -606,20 +606,6 @@ def pipinstall_requirements(liblist: Iterable[str]) -> None:
     os.unlink(reqfile)
 
 
-def is_pip(pname: str) -> bool:
-    try:
-        pipanswer = subprocess.check_output(
-            [py_dir.joinpath(r"scripts\pip"), "show", pname]
-        ).decode("utf-8")
-    except:
-        return False
-
-    if "WARNING: Package(s) not found:" in pipanswer:
-        return False
-
-    return True
-
-
 def get_r(version: str | None) -> None:
     temp_dir.mkdir(parents=True, exist_ok=True)
 
