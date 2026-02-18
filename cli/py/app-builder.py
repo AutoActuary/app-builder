@@ -48,17 +48,26 @@ def get_desired_version() -> str:
                 raise ApplicationYamlError(
                     "`application.yaml` must start with `app_builder: <version>`"
                 )
-            version = line.split(":", 1)[1].strip()
-            if (version[0] + version[-1]) in ('""', "''"):
-                version = version[1:-1]
-            if version:
-                return version
+
+            try:
+                version = line.split(":", 1)[1].strip()
+                if (version[0] + version[-1]) in ('""', "''"):
+                    version = version[1:-1]
+                if version:
+                    return version
+            except IndexError:
+                raise ApplicationYamlError(
+                    "`application.yaml` starts with `app_builder: <version>` but the version is not understood"
+                )
 
             raise ApplicationYamlError(
                 "`application.yaml` starts with `app_builder: <version>` but the version is empty"
             )
 
-        raise FileNotFoundError("`application.yaml` not found")
+        # No lines in the file.
+        raise ApplicationYamlError(
+            "`application.yaml` must start with `app_builder: <version>`"
+        )
 
 
 def create_app_builder_based_venv(
