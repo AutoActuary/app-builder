@@ -59,5 +59,5 @@ def git_describe() -> str | None:
             .decode("utf-8")
             .strip()
         )
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError:
         return None
