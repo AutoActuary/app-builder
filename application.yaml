@@ -1,4 +1,4 @@
-app_builder: v0.16.2
+app_builder: v0.19.0
 
 Application:
   name: App Builder
@@ -17,10 +17,13 @@ Application:
     exclude:
       - bin/pre-build.cmd
       - bin/python/Scripts
-    
+      - '**/__pycache__/*'
+      - '**/.mypy_cache/*'
+      - '**/*.log'
+
 dependencies:
-    python:
-      version: 3.11.6
-      pip: 23.2.1
-      requirements_files:
-        - "requirements.txt"
+  python:
+    version: 3.11.6
+    pip: 23.2.1
+    requirements_files:
+      - "requirements.txt"

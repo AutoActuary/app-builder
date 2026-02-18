@@ -1,6 +1,4 @@
-import fnmatch
 import os
-import re
 import shutil
 import sys
 import tempfile
@@ -9,48 +7,33 @@ from subprocess import run, call
 from typing import Collection, List
 
 from locate import append_sys_path
+from packaging.version import Version
 
 with append_sys_path("../.."):
     from app_builder import git_revision
     from app_builder import paths
     from app_builder.shell import copy
-    from app_builder.util import help, init, rmtree
+    from app_builder.util import rmtree
     from app_builder.run_and_suppress import run_and_suppress_pip
+    from app_builder.errors import ApplicationYamlError
 
 
-class ApplicationYamlError(Exception):
-    pass
-
-
-def iglob(p: str | Path, pattern: str) -> List[Path]:
-    rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
-    return [f for f in Path(p).glob("*") if rule.match(f.name)]
-
-
-def get_app_base_directory(start_dir: Path) -> Path:
+def get_current_version() -> str:
     """
-    Travel up from the starting directory to find the application's base directory, pattern contains 'Application.yaml'.
+    Get the current version of `app-builder` from the `version.txt` file that is injected during the build process.
+    If `version.txt` does not exist, return "dev" to indicate that this is a development version of app-builder.
     """
-    d = start_dir.resolve()
-    err = ApplicationYamlError(
-        "Expected git repository with 'application.yaml' at base. To initiate app-builder within"
-        " the current repo, use `app-builder --init`"
-    )
-    for i in range(1000):
-        if len(iglob(d, "application.yaml") + iglob(d, ".git")) == 2:
-            return d.resolve()
-
-        if d.parent == d:  # like "c:" == "c:"
-            raise err
-
-        d = d.parent
-
-    raise err
+    try:
+        return paths.version_txt_path.read_text().strip()
+    except FileNotFoundError:
+        return "dev"
 
 
-def get_app_version() -> str:
-    base = get_app_base_directory(Path(".").resolve())
-    version = None
+def get_desired_version() -> str:
+    """
+    Get the desired version of `app-builder` from `application.yaml`.
+    """
+    base = paths.get_app_base_directory(Path("."))
     with open(base.joinpath("application.yaml"), "r") as f:
         for line in f.readlines():
             line = line.split("#")[0].strip()
@@ -63,17 +46,28 @@ def get_app_version() -> str:
                 "app_builder",
             ):
                 raise ApplicationYamlError(
-                    "app-builder expects 'application.yaml' files to start with `app_builder: <version>`"
+                    "`application.yaml` must start with `app_builder: <version>`"
                 )
-            else:
+
+            try:
                 version = line.split(":", 1)[1].strip()
                 if (version[0] + version[-1]) in ('""', "''"):
                     version = version[1:-1]
-                assert version != ""
-                break
+                if version:
+                    return version
+            except IndexError:
+                raise ApplicationYamlError(
+                    "`application.yaml` starts with `app_builder: <version>` but the version is not understood"
+                )
 
-    assert version is not None
-    return version
+            raise ApplicationYamlError(
+                "`application.yaml` starts with `app_builder: <version>` but the version is empty"
+            )
+
+        # No lines in the file.
+        raise ApplicationYamlError(
+            "`application.yaml` must start with `app_builder: <version>`"
+        )
 
 
 def create_app_builder_based_venv(
@@ -207,53 +201,89 @@ def main_arg_in(options: Collection[str]) -> bool:
     return len(sys.argv) >= 2 and sys.argv[1].lower() in options
 
 
-def run_versioned_main() -> None:
-    try:
-        if main_arg_in(["--install-version"]):
-            if len(sys.argv) < 3:
-                help()
-                sys.exit(255)
+def run_versioned_main() -> int:
+    desired_version: str | None
 
-            version = sys.argv[2]
-            print(f"Install version '{version}'")
-            ensure_app_version(version)
-            sys.exit(0)
+    # Allow the user to request a specific version of `app-builder` on the command line.
+    if main_arg_in(["--install-version"]):
+        try:
+            desired_version = sys.argv[2]
+        except IndexError:
+            print("Usage: app-builder --install-version <version>")
+            return 255
 
+        print(f"Install version '{desired_version}'")
+        ensure_app_version(desired_version)
+        return 0
+
+    if main_arg_in(["-h", "--help", "help", "-i", "--init", "init"]):
+        # It looks like the user is trying to get help or initialize a new project,
+        # so just run the current version.
+        # Do not install anything, and do not rely on `application.yaml`.
+        desired_version = None
+    elif main_arg_in(["--use-version"]):
+        try:
+            desired_version = sys.argv[2]
+        except IndexError:
+            print("Usage: app-builder --use-version <version>")
+            return 255
+
+        if desired_version == "current":
+            desired_version = None
         else:
-            version = get_app_version()
-            ensure_app_version(version)
-
-    # If something is wrong with application.yaml rather print help menu
-    except ApplicationYamlError:
-        if len(sys.argv) < 2 or main_arg_in(["-h", "--help"]):
-            help()
-            sys.exit(255)
-
-        elif main_arg_in(["-i", "--init"]):
-            init()
-            sys.exit(0)
-
+            ensure_app_version(desired_version)
+    else:
+        # Ensure that we have the version of `app-builder` that is specified in `application.yaml` before continuing.
+        try:
+            desired_version = get_desired_version()
+        except FileNotFoundError:
+            # `application.yaml` was not found, which means the user has not yet run `init`.
+            # Continue with the current version of `app-builder`.
+            desired_version = None
+        except ApplicationYamlError as e:
+            # `application.yaml` was found, but we could not discern the version number.
+            print(e)
+            return 1
         else:
-            raise
+            ensure_app_version(desired_version)
 
-    # Leave trail
-    rev_path = paths.versions.joinpath(version)
+    interpreter_args: List[str | Path]
+    if desired_version is None:
+        # Use the current version.
+        print(f"Using `app-builder` version: {get_current_version()}")
+        interpreter = Path(sys.executable)
+        log_path = paths.base_dir / "run.log"
+        interpreter_args = ["-m", "app_builder"]
+    else:
+        # Use the specified version.
+        print(f"Using `app-builder` version: {desired_version}")
+        version_path = paths.versions / desired_version
+        interpreter = version_path / "venv" / "Scripts" / "python.exe"
+        log_path = version_path / "run.log"
 
-    rev_path.joinpath("run.log").write_text("")
+        if Version(desired_version) <= Version("0.19.0"):
+            # These versions need to be invoked using main.py as a script.
+            interpreter_args = [version_path / "repo" / "app_builder" / "main.py"]
+        else:
+            # Versions newer than 0.19.0 need to be run as a module.
+            interpreter_args = ["-m", "app_builder"]
 
-    # Run directly
+    log_path.write_text("")
+
     exit_code = call(
-        [
-            rev_path / "venv" / "Scripts" / "python.exe",
-            rev_path / "repo" / "app_builder" / "main.py",
+        args=[
+            interpreter,
+            "-X",
+            "utf8",
+            *interpreter_args,
             *sys.argv[1:],
         ],
     )
 
     version_cleanup()
 
-    sys.exit(exit_code)
+    return exit_code
 
 
 if __name__ == "__main__":
-    run_versioned_main()
+    sys.exit(run_versioned_main())

@@ -6,19 +6,25 @@ from path import Path as _Path
 from .app_builder__paths import app_dir
 
 
-def sh(cmd: str) -> str:
-    return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-
-
 def get_githuburl() -> str | None:
     with _Path(app_dir):
         commit = None
         with suppress(subprocess.CalledProcessError):
-            commit = sh("git rev-parse HEAD")
+            commit = (
+                subprocess.check_output("git rev-parse HEAD", shell=True)
+                .decode("utf-8")
+                .strip()
+            )
 
         giturl = None
         with suppress(subprocess.CalledProcessError):
-            giturl = sh("git config --get remote.origin.url")
+            giturl = (
+                subprocess.check_output(
+                    "git config --get remote.origin.url", shell=True
+                )
+                .decode("utf-8")
+                .strip()
+            )
 
         if giturl is None:
             return None
@@ -39,9 +45,19 @@ def get_githuburl() -> str | None:
     return giturl
 
 
-def get_gitversion() -> str:
-    with _Path(app_dir):
-        try:
-            return sh("git describe --tags")
-        except subprocess.CalledProcessError:
-            return ""
+def git_describe() -> str | None:
+    """
+    Get the output of `git describe --tags` which is normally useful as a version string.
+    Returns None if the command fails (e.g. not a git repository, no tags, etc.)
+    """
+    try:
+        return (
+            subprocess.check_output(
+                ["git", "describe", "--tags"],
+                cwd=app_dir,
+            )
+            .decode("utf-8")
+            .strip()
+        )
+    except subprocess.CalledProcessError:
+        return None

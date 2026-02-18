@@ -2,10 +2,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .create_github_release import create_github_release
-from .create_releases import create_releases
-from .get_dependencies import get_dependencies
-from .util import help, init
+import click
+from .commands.init import init
+from .commands.deps import deps
+from .commands.release import release
+from .commands.release_gh import release_gh
 
 
 def caller_version_tuple() -> tuple[int, ...] | None:
@@ -45,7 +46,77 @@ def caller_version_tuple() -> tuple[int, ...] | None:
     return version
 
 
-def main() -> None:
+@click.group(
+    invoke_without_command=True,
+)
+@click.pass_context
+@click.option(
+    "-i",
+    "--init",
+    "bc_i",
+    is_flag=True,
+    help="Initialize the current git repository as an app-builder project. "
+    "Deprecated. Use 'app-builder init' instead.",
+)
+@click.option(
+    "-d",
+    "--get-dependencies",
+    "bc_d",
+    is_flag=True,
+    help="Ensure all the dependencies are set up properly. "
+    "Deprecated. Use 'app-builder deps' instead.",
+)
+@click.option(
+    "-l",
+    "--local-release",
+    "bc_l",
+    is_flag=True,
+    help="Create a release. Deprecated. Use 'app-builder release' instead.",
+)
+@click.option(
+    "-g",
+    "--github-release",
+    "bc_g",
+    is_flag=True,
+    help="Create a release and upload it to GitHub. "
+    "Deprecated. Use 'app-builder release-gh' instead.",
+)
+# TODO: Maybe this should be a separate CLI,
+#   like `app-builder-install` or `app-builder-setup` or `app-builder-version-manager`?
+@click.option(
+    # This is handled by the CLI wrapper. We only put it here to include it in the help message.
+    "--install-version",
+    "_unused_install_version",
+    type=str,
+    help="Install a specific version of app-builder and exit.",
+)
+@click.option(
+    # This is handled by the CLI wrapper. We only put it here to include it in the help message.
+    "--use-version",
+    "_unused_use_version",
+    type=str,
+    help="Use the specified version of app-builder, ignoring the version specified in `application.yaml`. "
+    "The special value `current` may be used to refer to the currently installed version of app-builder.",
+)
+def main(
+    ctx: click.Context,
+    *,
+    bc_i: bool = False,
+    bc_d: bool = False,
+    bc_l: bool = False,
+    bc_g: bool = False,
+    _unused_install_version: str | None = None,
+    _unused_use_version: str | None = None,
+) -> None:
+    """
+    \b
+     █████╗ ██████╗ ██████╗       ██████╗ ██╗   ██╗██╗██╗     ██████╗ ███████╗██████╗
+    ██╔══██╗██╔══██╗██╔══██╗      ██╔══██╗██║   ██║██║██║     ██╔══██╗██╔════╝██╔══██╗
+    ███████║██████╔╝██████╔╝█████╗██████╔╝██║   ██║██║██║     ██║  ██║█████╗  ██████╔╝
+    ██╔══██║██╔═══╝ ██╔═══╝ ╚════╝██╔══██╗██║   ██║██║██║     ██║  ██║██╔══╝  ██╔══██╗
+    ██║  ██║██║     ██║           ██████╔╝╚██████╔╝██║███████╗██████╔╝███████╗██║  ██║
+    ╚═╝  ╚═╝╚═╝     ╚═╝           ╚═════╝  ╚═════╝ ╚═╝╚══════╝╚═════╝ ╚══════╝╚═╝  ╚═╝
+    """
     version = caller_version_tuple()
     if version is not None and version < (0, 1, 0):
         print()
@@ -57,29 +128,32 @@ def main() -> None:
         )
         sys.exit(-1)
 
-    # Reshuffle args in order to call future scripts
-    command = "-h" if len(sys.argv) < 2 else sys.argv[1].lower()
-    sys.argv = sys.argv[0:1] + sys.argv[2:]
+    if bc_i:
+        from .util import init
 
-    if command in ("-h", "--help"):
-        help()
-
-    elif command in ("-i", "--init"):
         init()
 
-    elif command in ("-d", "--get-dependencies"):
+    elif bc_d:
+        from .get_dependencies import get_dependencies
+
         get_dependencies()
 
-    elif command in ("-l", "--local-release"):
-        create_releases()
+    elif bc_l:
+        from .create_release import create_release
 
-    elif command in ("-g", "--github-release"):
+        create_release()
+
+    elif bc_g:
+        from .create_github_release import create_github_release
+
         create_github_release()
 
-    else:
-        print("Error: wrong commandline arguments")
-        help()
+    elif ctx.invoked_subcommand is None:
+        # No subcommand will run, so print the help message.
+        click.echo(ctx.get_help())
 
 
-if __name__ == "__main__":
-    main()
+main.add_command(init)
+main.add_command(deps)
+main.add_command(release)
+main.add_command(release_gh)

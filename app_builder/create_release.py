@@ -1,12 +1,12 @@
 import os
 import shutil
 import subprocess
-import sys
 import textwrap
 from itertools import chain
 from pathlib import Path
 from subprocess import list2cmdline
-from typing import Iterable, Mapping, Any, List, Literal, Sequence
+from tempfile import TemporaryDirectory
+from typing import Iterable, Mapping, Any
 
 from path import Path as _Path
 
@@ -19,7 +19,7 @@ from .app_builder__paths import (
     app_dir,
     rcedit_bin,
 )
-from .app_builder__versioning import get_gitversion, get_githuburl
+from .app_builder__versioning import git_describe, get_githuburl
 from .file_pattern_7zip import create_7zip_from_include_exclude_and_rename_list
 from .get_dependencies import get_dependencies
 from .scripts import iter_scripts
@@ -113,13 +113,16 @@ def create_shortcut_cmd_code(
     return code.replace(r"\"", r'\""')
 
 
-def create_releases(version: str | None = None) -> None:
+def create_release(
+    *,
+    version: str | None = None,
+) -> None:
     config = get_config()
 
     name = config["application"]["name"]
 
     if version is None:
-        version = get_gitversion()
+        version = git_describe() or "unknown"
 
     # **********************************************
     # Make 100% sure all .bat files have \r\n endings
@@ -252,20 +255,6 @@ def create_releases(version: str | None = None) -> None:
         with installout.open("w") as f:
             f.write(txt)
 
-    # **********************************************
-    # If there are any scripts that should be run before
-    # compressing everything into an exe, do it now
-    # **********************************************
-    external_script_args: List[str | Path] = []
-    for i, arg in enumerate(sys.argv):
-        if arg.lower() == "--build-script" or arg.lower() == "-s":
-            external_script_args = list(sys.argv[i + 1 :])
-
-    if len(external_script_args):
-        with _Path(app_dir):
-            external_script_args[0] = Path(external_script_args[0]).resolve()
-        subprocess.call(external_script_args)
-
     # Find and run scripts named "pre-build.bat" or "pre-build.cmd" or "pre-release.bat" or "pre-release.cmd"
     for script in iter_scripts(
         base_dir=app_dir,
@@ -381,6 +370,22 @@ def create_releases(version: str | None = None) -> None:
             sevenzip_bin=sevenz_bin,
             show_progress=False,
         )
+
+        # Inject a text file containing the version string.
+        with TemporaryDirectory() as tmp_dir_str:
+            tmp_dir = Path(tmp_dir_str)
+
+            version_txt = tmp_dir / "version.txt"
+            version_txt.open("w").write(version)
+
+            create_7zip_from_include_exclude_and_rename_list(
+                outpath=programzip,
+                basedir=tmp_dir,
+                include_glob_list=["version.txt"],
+                append=True,
+                sevenzip_bin=sevenz_bin,
+                show_progress=False,
+            )
 
         print(f"Creating 7zip installer for version {version}:")
         installzip = tools_dir.joinpath(

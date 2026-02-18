@@ -8,7 +8,7 @@ from path import Path as _Path
 
 from .app_builder__misc import sh, last_seen_git_tag_only_on_this_branch, get_config
 from .app_builder__paths import tools_dir, app_dir
-from .create_releases import create_releases
+from .create_release import create_release
 from .scripts import iter_scripts
 
 
@@ -192,7 +192,7 @@ def create_github_release() -> None:
         # Build the exe from scratch (to contain correct git info)
         # ************************************
         sh(f"git fetch --tags")
-        create_releases(tagname)
+        create_release(version=tagname)
 
     # Find and run scripts named "pre-github-upload.bat/.cmd"
     for script in iter_scripts(
