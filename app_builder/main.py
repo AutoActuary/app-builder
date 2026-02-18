@@ -49,6 +49,7 @@ def caller_version_tuple() -> tuple[int, ...] | None:
 @click.group(
     invoke_without_command=True,
 )
+@click.pass_context
 @click.option(
     "-i",
     "--init",
@@ -83,26 +84,29 @@ def caller_version_tuple() -> tuple[int, ...] | None:
 # TODO: Maybe this should be a separate CLI,
 #   like `app-builder-install` or `app-builder-setup` or `app-builder-version-manager`?
 @click.option(
+    # This is handled by the CLI wrapper. We only put it here to include it in the help message.
     "--install-version",
-    "bc_install_version",
+    "_unused_install_version",
     type=str,
     help="Install a specific version of app-builder and exit.",
 )
 @click.option(
+    # This is handled by the CLI wrapper. We only put it here to include it in the help message.
     "--use-version",
-    "bc_use_version",
+    "_unused_use_version",
     type=str,
     help="Use the specified version of app-builder, ignoring the version specified in `application.yaml`. "
     "The special value `current` may be used to refer to the currently installed version of app-builder.",
 )
 def main(
+    ctx: click.Context,
     *,
     bc_i: bool = False,
     bc_d: bool = False,
     bc_l: bool = False,
     bc_g: bool = False,
-    bc_install_version: str | None = None,
-    bc_use_version: str | None = None,
+    _unused_install_version: str | None = None,
+    _unused_use_version: str | None = None,
 ) -> None:
     """
     \b
@@ -144,13 +148,9 @@ def main(
 
         create_github_release()
 
-    elif bc_install_version:
-        # This should never happen, since the `--install-version` flag is captured by the CLI wrapper.
-        pass
-
-    elif bc_use_version:
-        # This should never happen, since the `--use-version` flag is captured by the CLI wrapper.
-        pass
+    elif ctx.invoked_subcommand is None:
+        # No subcommand will run, so print the help message.
+        click.echo(ctx.get_help())
 
 
 main.add_command(init)
