@@ -1,21 +1,11 @@
-import ast
-import fnmatch
 import os
-import re
-import subprocess
 import sys
-from functools import cache
 from pathlib import Path
-from typing import List
 
-
-def iglob(p: str | Path, pattern: str) -> List[Path]:
-    rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
-    return [f for f in Path(p).glob("*") if rule.match(f.name)]
-
+from .paths import get_app_base_directory
 
 # App directories
-app_dir = Path(__file__).resolve().parent.parent
+app_dir = get_app_base_directory(Path(".").resolve())
 tools_dir = Path(app_dir, "tools")
 temp_dir = Path(tools_dir, "temp", "package-downloads")
 py_dir = Path(app_dir, "bin", "python")

@@ -1,6 +1,4 @@
-import fnmatch
 import os
-import re
 import shutil
 import sys
 import tempfile
@@ -17,36 +15,7 @@ with append_sys_path("../.."):
     from app_builder.shell import copy
     from app_builder.util import rmtree
     from app_builder.run_and_suppress import run_and_suppress_pip
-
-
-class ApplicationYamlError(Exception):
-    pass
-
-
-def iglob(p: str | Path, pattern: str) -> List[Path]:
-    rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
-    return [f for f in Path(p).glob("*") if rule.match(f.name)]
-
-
-def get_app_base_directory(start_dir: Path) -> Path:
-    """
-    Travel up from the starting directory to find the application's base directory, pattern contains 'Application.yaml'.
-    """
-    d = start_dir.resolve()
-    err = ApplicationYamlError(
-        "Expected git repository with 'application.yaml' at base. To initiate app-builder within"
-        " the current repo, use `app-builder --init`"
-    )
-    for i in range(1000):
-        if len(iglob(d, "application.yaml") + iglob(d, ".git")) == 2:
-            return d.resolve()
-
-        if d.parent == d:  # like "c:" == "c:"
-            raise err
-
-        d = d.parent
-
-    raise err
+    from app_builder.errors import ApplicationYamlError
 
 
 def get_current_version() -> str:
@@ -64,7 +33,7 @@ def get_desired_version() -> str:
     """
     Get the desired version of `app-builder` from `application.yaml`.
     """
-    base = get_app_base_directory(Path(".").resolve())
+    base = paths.get_app_base_directory(Path("."))
     with open(base.joinpath("application.yaml"), "r") as f:
         for line in f.readlines():
             line = line.split("#")[0].strip()
@@ -269,6 +238,7 @@ def run_versioned_main() -> int:
         else:
             ensure_app_version(desired_version)
 
+    interpreter_args: List[str | Path]
     if desired_version is None:
         # Use the current version.
         print(f"Using `app-builder` version: {get_current_version()}")
