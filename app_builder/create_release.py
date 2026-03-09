@@ -230,7 +230,7 @@ def create_release(
         cmds = []
         for file in config["application"]["startmenu"]:
             if isinstance(file, str):
-                create_shortcut_cmd_code(file)
+                cmd = create_shortcut_cmd_code(file)
 
             elif isinstance(file, list) and len(file) in (2, 3):
                 cmd = file[0]
