@@ -1,0 +1,25 @@
+app_builder_version: v1.0.0
+python_bundled: null
+python_venv: null
+installer:
+  name: app-builder
+  install_directory: "%localappdata%\\autoactuary\\app-builder-1x"
+  ascii_banner: application-templates/asciibanner.txt
+  icon: application-templates/icon.ico
+  dist: dist
+  paths:
+    include:
+      - app_builder
+      - cli
+      - assets
+      - requirements.txt
+      - mypy.ini
+      - README.md
+      - app_builder.yaml
+    exclude:
+      - "**/__pycache__"
+      - dist
+      - .git
+      - .mypy_cache
+      - .pytest_cache
+build_hooks: {}

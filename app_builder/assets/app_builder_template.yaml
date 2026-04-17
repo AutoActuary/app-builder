@@ -1,0 +1,77 @@
+# app_builder.yaml
+# This file is both a real config and a living example of the 1.x structure.
+# Trim it down aggressively for your app; every section is optional unless marked otherwise.
+
+# Optional str: Pin the app-builder line that this project expects.
+app_builder_version: v1.0.0
+
+# Optional Dict: Create a portable Python environment that ships with the app.
+python_bundled:
+  path: bin/python
+  python_version: 3.11.1
+  pip_version: 23.2.1
+  requirements:
+    - pyyaml>=6
+  requirements_files:
+    - requirements.txt
+
+# Optional Dict: Create a build-only venv derived from the bundled Python.
+python_venv:
+  path: venv
+  requirements:
+    - mypy
+  requirements_files: []
+
+installer:
+  # Required str: Human-facing app name.
+  name: MyApp
+
+  # Required str: Installation directory, with Windows %ENV_VAR% expansion.
+  install_directory: "%localappdata%\\MyCompany\\MyApp"
+
+  # Optional paths used by generated installer metadata.
+  ascii_banner: application-templates/asciibanner.txt
+  icon: application-templates/icon.ico
+  pause_on_exit: true
+  add_uninstaller: true
+
+  # Optional shortcuts for the Windows start menu.
+  start_menu:
+    - application-templates/program.cmd
+    - [docs/index.html, "MyApp Docs", application-templates/icon.ico]
+
+  # Optional install / uninstall hooks.
+  install_hooks:
+    pre_install: []
+    post_install: []
+    pre_uninstall: []
+    post_uninstall: []
+
+  # Optional output directory for release artifacts.
+  dist: dist
+
+  # Required in practice: what gets packaged.
+  paths:
+    include:
+      - src
+      - app_builder.yaml
+      - application-templates
+    exclude:
+      - "**/__pycache__"
+      - dist
+      - venv
+    remap:
+      - [README.md, docs/README.md]
+
+# Optional build pipeline hooks.
+build_hooks:
+  pre_process: []
+  pre_python_bundled: []
+  post_python_bundled: []
+  pre_python_venv: []
+  post_python_venv: []
+  pre_dist: []
+  post_dist: []
+  pre_github_release: []
+  post_github_release: []
+  post_process: []
