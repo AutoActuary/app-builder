@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 
 class ConfigError(ValueError):
@@ -293,7 +293,7 @@ class AppBuilderConfig:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return _dataclass_to_dict(self)
+        return cast(dict[str, Any], _dataclass_to_dict(self))
 
 
 def _dataclass_to_dict(value: Any) -> Any:

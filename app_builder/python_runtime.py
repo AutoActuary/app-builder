@@ -40,7 +40,7 @@ def _create_venv(target: Path, *, python_executable: Path | None = None) -> Path
     if target.exists():
         return _python_executable(target)
     if python_executable is None:
-        builder = venv.EnvBuilder(with_pip=True, clear=False, symlinks=False, upgrade=False, with_prompt="app-builder")
+        builder = venv.EnvBuilder(with_pip=True, clear=False, symlinks=False, upgrade=False)
         builder.create(str(target))
         return _python_executable(target)
 

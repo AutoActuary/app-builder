@@ -4,8 +4,9 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
+from typing import Mapping
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from .config import load_project_config
@@ -139,13 +140,13 @@ def _run_dependency_stages(project_root: Path) -> PythonEnvironmentResult:
 
 def _write_payload_archive(
     payload_archive: Path,
-    remap_table: dict[Path, object],
+    remap_table: Mapping[Path, PurePosixPath],
     *,
     version: str,
 ) -> None:
     with ZipFile(payload_archive, "w", compression=ZIP_DEFLATED) as zip_file:
-        for source, destination in sorted(remap_table.items(), key=lambda item: item[1].as_posix()):  # type: ignore[union-attr]
-            zip_file.write(source, destination.as_posix())  # type: ignore[union-attr]
+        for source, destination in sorted(remap_table.items(), key=lambda item: item[1].as_posix()):
+            zip_file.write(source, destination.as_posix())
         zip_file.writestr("version.txt", version)
 
 

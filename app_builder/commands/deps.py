@@ -1,11 +1,16 @@
 import click
+from pathlib import Path
 
-from ..get_dependencies import get_dependencies
+from ..build import ensure_python_environments
+from ..project import find_project_root
 
 
 @click.command()
 def deps() -> None:
     """
-    Ensure all the dependencies are set up properly.
+    Ensure configured Python environments are set up.
     """
-    get_dependencies()
+
+    result = ensure_python_environments(find_project_root(Path.cwd()))
+    click.echo(f"Bundled Python: {result.python_bundled or 'disabled'}")
+    click.echo(f"Build venv: {result.python_venv or 'disabled'}")

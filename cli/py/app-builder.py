@@ -1,289 +1,130 @@
+from __future__ import annotations
+
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
+import venv
 from pathlib import Path
-from subprocess import run, call
-from typing import Collection, List
+from typing import Sequence
 
-from locate import append_sys_path
-from packaging.version import Version
-
-with append_sys_path("../.."):
-    from app_builder import git_revision
-    from app_builder import paths
-    from app_builder.shell import copy
-    from app_builder.util import rmtree
-    from app_builder.run_and_suppress import run_and_suppress_pip
-    from app_builder.errors import ApplicationYamlError
+import yaml
 
 
-def get_current_version() -> str:
-    """
-    Get the current version of `app-builder` from the `version.txt` file that is injected during the build process.
-    If `version.txt` does not exist, return "dev" to indicate that this is a development version of app-builder.
-    """
-    try:
-        return paths.version_txt_path.read_text().strip()
-    except FileNotFoundError:
-        return "dev"
+CONFIG_FILENAMES = ("app_builder.yaml", "app-builder.yaml", "application.yaml")
+VERSIONS_DIR = Path(
+    os.environ.get("LOCALAPPDATA", tempfile.gettempdir()),
+    "autoactuary",
+    "app-builder",
+    "versions",
+)
 
 
-def get_desired_version() -> str:
-    """
-    Get the desired version of `app-builder` from `application.yaml`.
-    """
-    base = paths.get_app_base_directory(Path("."))
-    with open(base.joinpath("application.yaml"), "r") as f:
-        for line in f.readlines():
-            line = line.split("#")[0].strip()
-            if line == "":
-                continue
-
-            # Allow both app-builder and app_builder for legacy reasons
-            if ":" not in line or line.split(":")[0].strip().lower() not in (
-                "app-builder",
-                "app_builder",
-            ):
-                raise ApplicationYamlError(
-                    "`application.yaml` must start with `app_builder: <version>`"
-                )
-
-            try:
-                version = line.split(":", 1)[1].strip()
-                if (version[0] + version[-1]) in ('""', "''"):
-                    version = version[1:-1]
-                if version:
-                    return version
-            except IndexError:
-                raise ApplicationYamlError(
-                    "`application.yaml` starts with `app_builder: <version>` but the version is not understood"
-                )
-
-            raise ApplicationYamlError(
-                "`application.yaml` starts with `app_builder: <version>` but the version is empty"
-            )
-
-        # No lines in the file.
-        raise ApplicationYamlError(
-            "`application.yaml` must start with `app_builder: <version>`"
-        )
+class ConfigVersionError(RuntimeError):
+    pass
 
 
-def create_app_builder_based_venv(
-    venv_path: Path,
-) -> Path:
-
-    base_python_exe = (
-        Path(__file__).resolve().parent.parent.parent
-        / "bin"
-        / "python"
-        / "python"
-        / "python.exe"
-    )
-
-    run(
-        [
-            str(base_python_exe),
-            "-m",
-            "venv",
-            str(venv_path),
-            "--without-pip",
-        ],
-        check=True,
-    )
-
-    # Define the source directory to copy files from
-    src_base = base_python_exe.parent.parent
-
-    # Ignore files in original that will cause overwrites
-    exclude_relpath_lower_strings = {
-        "scripts",
-        "python",
-        "python.exe",
-        "pyvenv.cfg",
-        "lib",
-    }
-
-    def copy_included_files(src: Path = src_base) -> None:
-        relpath = src.resolve().relative_to(src_base.resolve())
-        if relpath.as_posix().lower() not in exclude_relpath_lower_strings:
-            if src.is_dir():
-                for f in src.glob("*"):
-                    copy_included_files(f)
-            else:
-                dest = venv_path / relpath
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dest)
-
-    copy_included_files()
-
-    # Load original autory's site packages in order for the venv to have access to them
-    (venv_path / "Lib" / "site-packages" / "base_site_packages.pth").write_text(
-        f"import site; site.addsitedir({repr((src_base / 'Lib/site-packages').as_posix())})"
-    )
-
-    return venv_path / "Scripts" / "python.exe"
+def _find_project_root(start: Path) -> Path:
+    current = start.resolve()
+    while True:
+        if (current / ".git").exists():
+            return current
+        if current.parent == current:
+            raise FileNotFoundError("Run app-builder inside a git repository.")
+        current = current.parent
 
 
-def ensure_app_version(version: str) -> None:
-    path_rev = paths.versions.joinpath(version)
-
-    # Maybe no work needed
-    if not path_rev.joinpath("app-builder.cmd").is_file():
-
-        print(f"Requires app-builder version '{version}'")
-        print(f"Git-clone and pip-install additional requirements")
-        git_revision.git_download(
-            "https://github.com/AutoActuary/app-builder.git", paths.live_repo, version
-        )
-
-        # Use temp directory so that we can't accidently end up half way
-        with tempfile.TemporaryDirectory() as tdir_str:
-            tdir = Path(tdir_str)
-
-            tdir.joinpath("app-builder.cmd").write_text(
-                r'@call "%~dp0\venv\Scripts\python.exe" "%~dp0repo\app_builder\main.py" %*'
-            )
-
-            tdir.joinpath("run.log").write_text("")
-
-            tmp_rev_repo = tdir.joinpath("repo")
-            os.makedirs(tmp_rev_repo, exist_ok=True)
-
-            for i in paths.live_repo.glob("*"):
-                if i.name == ".git":
-                    continue
-                copy(i, tmp_rev_repo.joinpath(i.name))
-
-            create_app_builder_based_venv(tdir / "venv")
-
-            run_and_suppress_pip(
-                [
-                    tdir / "venv" / "Scripts" / "python.exe",
-                    "-m",
-                    "pip",
-                    "install",
-                    "-r",
-                    tmp_rev_repo.joinpath("requirements.txt"),
-                    "--no-warn-script-location",
-                    "--disable-pip-version-check",
-                ]
-            )
-
-            rmtree(path_rev, ignore_errors=True)
-            os.makedirs(path_rev.parent, exist_ok=True)
-            shutil.copytree(tdir, path_rev)
-
-        print(f"App-builder version '{version}' packaged at '{str(path_rev)}'")
-        print()
+def _find_config_path(project_root: Path) -> Path | None:
+    for filename in CONFIG_FILENAMES:
+        path = project_root / filename
+        if path.exists():
+            return path
+    return None
 
 
-def version_cleanup() -> None:
-    """
-    Use arbitrary filter choices to not let the version directory blow up in size
-    """
-    vdict = {}
-    for p in paths.versions.glob("*"):
-        run_log = p.joinpath("run.log")
+def _read_desired_version(project_root: Path) -> str | None:
+    config_path = _find_config_path(project_root)
+    if config_path is None:
+        return None
+    if config_path.name == "application.yaml":
+        raise ConfigVersionError("Legacy application.yaml is not supported by the 1.x dispatcher.")
 
-        if run_log.is_file():
-            vdict[os.path.getmtime(run_log)] = p
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        raise ConfigVersionError(f"{config_path.name} must contain a YAML mapping.")
+    version = raw.get("app_builder_version")
+    if version is None:
+        return None
+    if not isinstance(version, str):
+        raise ConfigVersionError("app_builder_version must be a string.")
+    return version
 
-    # Keep the last used 50 versions
-    discard = sorted(list(vdict.keys()))[:-50]
 
-    for d in discard:
-        rmtree(vdict[d])
+def _version_python(version_root: Path) -> Path:
+    scripts_dir = "Scripts" if os.name == "nt" else "bin"
+    exe_name = "python.exe" if os.name == "nt" else "python"
+    return version_root / "venv" / scripts_dir / exe_name
 
 
-def main_arg_in(options: Collection[str]) -> bool:
-    return len(sys.argv) >= 2 and sys.argv[1].lower() in options
+def _run(args: Sequence[str | Path], *, cwd: Path) -> None:
+    subprocess.run([str(arg) for arg in args], cwd=cwd, check=True)
+
+
+def ensure_app_version(version: str) -> Path:
+    version_root = VERSIONS_DIR / version
+    python_executable = _version_python(version_root)
+    if python_executable.exists():
+        return version_root
+
+    repo_root = version_root / "repo"
+    if version_root.exists():
+        shutil.rmtree(version_root)
+    version_root.mkdir(parents=True, exist_ok=True)
+
+    _run(["git", "clone", "https://github.com/AutoActuary/app-builder.git", str(repo_root)], cwd=version_root)
+    _run(["git", "checkout", version], cwd=repo_root)
+    venv.EnvBuilder(with_pip=True, clear=True, symlinks=False).create(str(version_root / "venv"))
+    _run([_version_python(version_root), "-m", "pip", "install", "-r", repo_root / "requirements.txt"], cwd=repo_root)
+    return version_root
+
+
+def _main_arg_in(options: Sequence[str]) -> bool:
+    return len(sys.argv) >= 2 and sys.argv[1].lower() in {option.lower() for option in options}
 
 
 def run_versioned_main() -> int:
-    desired_version: str | None
-
-    # Allow the user to request a specific version of `app-builder` on the command line.
-    if main_arg_in(["--install-version"]):
-        try:
-            desired_version = sys.argv[2]
-        except IndexError:
+    if _main_arg_in(["--install-version"]):
+        if len(sys.argv) < 3:
             print("Usage: app-builder --install-version <version>")
             return 255
-
-        print(f"Install version '{desired_version}'")
-        ensure_app_version(desired_version)
+        ensure_app_version(sys.argv[2])
         return 0
 
-    if main_arg_in(["-h", "--help", "help", "-i", "--init", "init"]):
-        # It looks like the user is trying to get help or initialize a new project,
-        # so just run the current version.
-        # Do not install anything, and do not rely on `application.yaml`.
-        desired_version = None
-    elif main_arg_in(["--use-version"]):
-        try:
-            desired_version = sys.argv[2]
-        except IndexError:
+    if _main_arg_in(["--use-version"]):
+        if len(sys.argv) < 3:
             print("Usage: app-builder --use-version <version>")
             return 255
-
-        if desired_version == "current":
-            desired_version = None
-        else:
-            ensure_app_version(desired_version)
+        desired_version = sys.argv[2]
+    elif _main_arg_in(["-h", "--help", "help", "-i", "--init", "init"]):
+        desired_version = "current"
     else:
-        # Ensure that we have the version of `app-builder` that is specified in `application.yaml` before continuing.
         try:
-            desired_version = get_desired_version()
-        except FileNotFoundError:
-            # `application.yaml` was not found, which means the user has not yet run `init`.
-            # Continue with the current version of `app-builder`.
-            desired_version = None
-        except ApplicationYamlError as e:
-            # `application.yaml` was found, but we could not discern the version number.
-            print(e)
+            desired_version = _read_desired_version(_find_project_root(Path.cwd())) or "current"
+        except (ConfigVersionError, FileNotFoundError) as exc:
+            print(exc)
             return 1
-        else:
-            ensure_app_version(desired_version)
 
-    interpreter_args: List[str | Path]
-    if desired_version is None:
-        # Use the current version.
-        print(f"Using `app-builder` version: {get_current_version()}")
-        interpreter = Path(sys.executable)
-        log_path = paths.base_dir / "run.log"
-        interpreter_args = ["-m", "app_builder"]
-    else:
-        # Use the specified version.
-        print(f"Using `app-builder` version: {desired_version}")
-        version_path = paths.versions / desired_version
-        interpreter = version_path / "venv" / "Scripts" / "python.exe"
-        log_path = version_path / "run.log"
+    if desired_version == "current":
+        command = [Path(sys.executable), "-m", "app_builder", *sys.argv[1:]]
+        completed = subprocess.run([str(item) for item in command], check=False)
+        return int(completed.returncode)
 
-        if Version(desired_version) <= Version("0.19.0"):
-            # These versions need to be invoked using main.py as a script.
-            interpreter_args = [version_path / "repo" / "app_builder" / "main.py"]
-        else:
-            # Versions newer than 0.19.0 need to be run as a module.
-            interpreter_args = ["-m", "app_builder"]
-
-    log_path.write_text("")
-
-    exit_code = call(
-        args=[
-            interpreter,
-            "-X",
-            "utf8",
-            *interpreter_args,
-            *sys.argv[1:],
-        ],
-    )
-
-    version_cleanup()
-
-    return exit_code
+    version_root = ensure_app_version(desired_version)
+    command = [_version_python(version_root), "-m", "app_builder", *sys.argv[1:]]
+    completed = subprocess.run([str(item) for item in command], cwd=version_root / "repo", check=False)
+    return int(completed.returncode)
 
 
 if __name__ == "__main__":
-    sys.exit(run_versioned_main())
+    raise SystemExit(run_versioned_main())

@@ -1,25 +1,37 @@
-# App-builder
+# app-builder
 
-### Usage
+`app-builder` is the 1.x rewrite of the old AutoActuary packaging tool: schema-first, Python-focused, and much less willing to hide build behavior in legacy magic.
+
+## Current direction
+
+- `app_builder.yaml` is the source of truth.
+- The config model lives in code as plain dataclasses and can be loaded without `pydantic`.
+- Optional `pydantic` adapters exist for richer schema tooling when that dependency is present.
+- The release flow is explicit: build hooks, optional bundled Python, optional build venv, payload packaging, installer bundle creation, and optional GitHub release upload.
+
+## Commands
+
+```text
+app-builder init
+app-builder deps
+app-builder release [--version <version>]
+app-builder release-gh [--version <version>] [--draft]
 ```
-Usage: app-builder [Options]
-Options:
-  -h, --help             Print these options
-  -d, --get-dependencies Ensure all the dependencies are set up properly
-  -l, --local-release    Create a local release
-  -g, --github-release   Create a release and upload it to GitHub
-  -i, --init             Initiate current git repo as an app-builder project
+
+## Template
+
+Run `app-builder init` inside a git repository to generate:
+
+- `app_builder.yaml`
+- `application-templates/asciibanner.txt`
+- `application-templates/icon.ico`
+- `application-templates/program.cmd`
+
+The generated YAML file is intentionally heavily commented and is meant to double as real config, template, and documentation base.
+
+## Testing
+
+```text
+python -m unittest discover -s test -v
+mypy --config-file mypy.ini
 ```
-
-Use `-i` to create a template app-builder configuration file within your project: <br>
-![image](https://user-images.githubusercontent.com/4103775/149367396-a30c3821-3f9b-4344-b762-9dc02b90174f.png)
-
-From here on forth you can edit this file to configure your application to your requirements and use the rest of the app to compile releases and publish them on GitHub.
-
-### History
-This is a port of `deploy-scripts` with a focus on extracting only the functionality that is related to packaging an app. The first priority was to debundle our packaging and dependency tools from other drips and drabs. The main reason is that `deploy-scripts` shared a python instance with the app it is deploying, and as a result package-upgrades from the app side constantly broke the `deploy-scipts` side. With this rework, `app-builder` can check-out any version of itself completely isolated from the rest of the system.
-
-### Roadmap
-- Write documentation (or at least a how-to guide)
-- Take what we need from the legacy code base and start with a cleaner implementation
-- Also make this into a pip installable module

@@ -1,11 +1,14 @@
 import click
+from pathlib import Path
 
-from ..util import init as init_
+from ..template import initialize_project
 
 
 @click.command()
-def init() -> None:
+@click.option("--force", is_flag=True, help="Overwrite an existing template config if one already exists.")
+def init(*, force: bool) -> None:
     """
     Initialize the current git repository as an app-builder project.
     """
-    init_()
+
+    initialize_project(Path.cwd(), force=force)

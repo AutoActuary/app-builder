@@ -5,7 +5,7 @@ from typing import Any
 from .schema import AppBuilderConfig
 
 try:
-    from pydantic import BaseModel, ConfigDict
+    from pydantic import BaseModel, ConfigDict  # type: ignore[import-not-found]
 
     class _PythonBundledModel(BaseModel):
         model_config = ConfigDict(extra="forbid")
@@ -77,7 +77,7 @@ try:
     PYDANTIC_AVAILABLE = True
 
 except ImportError:  # pragma: no cover
-    AppBuilderPydanticModel = None  # type: ignore[assignment]
+    AppBuilderPydanticModel: Any = None
     PYDANTIC_AVAILABLE = False
 
 
