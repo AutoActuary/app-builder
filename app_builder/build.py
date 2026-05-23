@@ -13,7 +13,10 @@ from .config import load_project_config
 from .fileset import build_remap_table, collect_files
 from .hooks import run_hook_commands
 from .project import detect_version, expand_windows_envvars
-from .python_runtime import PythonEnvironmentResult, ensure_python_environments as materialize_python_environments
+from .python_runtime import (
+    PythonEnvironmentResult,
+    ensure_python_environments as materialize_python_environments,
+)
 
 
 @dataclass(slots=True)
@@ -29,7 +32,9 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
     version = version or detect_version(project_root)
 
     env_result = _run_dependency_stages(project_root)
-    hook_env = _build_hook_environment(config.installer.name, config.installer.install_directory, project_root)
+    hook_env = _build_hook_environment(
+        config.installer.name, config.installer.install_directory, project_root
+    )
     python_for_hooks = env_result.python_venv or env_result.python_bundled
 
     run_hook_commands(
@@ -47,7 +52,9 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
         config.installer.paths.include,
         config.installer.paths.exclude,
     )
-    remap_table = build_remap_table(project_root, included_files, config.installer.paths.remap)
+    remap_table = build_remap_table(
+        project_root, included_files, config.installer.paths.remap
+    )
 
     payload_archive = dist_dir / f"{_slugify(config.installer.name)}-{version}.zip"
     _write_payload_archive(payload_archive, remap_table, version=version)
@@ -73,10 +80,14 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
         },
         "included_files": [dst.as_posix() for dst in remap_table.values()],
     }
-    manifest_path = dist_dir / f"{_slugify(config.installer.name)}-{version}-manifest.json"
+    manifest_path = (
+        dist_dir / f"{_slugify(config.installer.name)}-{version}-manifest.json"
+    )
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
-    installer_archive = dist_dir / f"{_slugify(config.installer.name)}-{version}-installer.zip"
+    installer_archive = (
+        dist_dir / f"{_slugify(config.installer.name)}-{version}-installer.zip"
+    )
     _write_installer_archive(
         installer_archive,
         payload_archive=payload_archive,
@@ -112,9 +123,21 @@ def ensure_python_environments(project_root: Path) -> PythonEnvironmentResult:
 
 def _run_dependency_stages(project_root: Path) -> PythonEnvironmentResult:
     _, config = load_project_config(project_root)
-    hook_env = _build_hook_environment(config.installer.name, config.installer.install_directory, project_root)
-    run_hook_commands(project_root, config.build_hooks.pre_process, environment=hook_env, python_for_hooks=None)
-    run_hook_commands(project_root, config.build_hooks.pre_python_bundled, environment=hook_env, python_for_hooks=None)
+    hook_env = _build_hook_environment(
+        config.installer.name, config.installer.install_directory, project_root
+    )
+    run_hook_commands(
+        project_root,
+        config.build_hooks.pre_process,
+        environment=hook_env,
+        python_for_hooks=None,
+    )
+    run_hook_commands(
+        project_root,
+        config.build_hooks.pre_python_bundled,
+        environment=hook_env,
+        python_for_hooks=None,
+    )
     env_result = materialize_python_environments(project_root)
     python_for_hooks = env_result.python_bundled
     run_hook_commands(
@@ -145,7 +168,9 @@ def _write_payload_archive(
     version: str,
 ) -> None:
     with ZipFile(payload_archive, "w", compression=ZIP_DEFLATED) as zip_file:
-        for source, destination in sorted(remap_table.items(), key=lambda item: item[1].as_posix()):
+        for source, destination in sorted(
+            remap_table.items(), key=lambda item: item[1].as_posix()
+        ):
             zip_file.write(source, destination.as_posix())
         zip_file.writestr("version.txt", version)
 
@@ -164,10 +189,14 @@ def _write_installer_archive(
         install_cmd = temp_dir / "install.cmd"
         uninstall_cmd = temp_dir / "uninstall.cmd"
         install_cmd.write_text(
-            _render_install_script(app_name, payload_archive.name, manifest_path.name, pause_on_exit),
+            _render_install_script(
+                app_name, payload_archive.name, manifest_path.name, pause_on_exit
+            ),
             encoding="utf-8",
         )
-        uninstall_cmd.write_text(_render_uninstall_script(app_name, pause_on_exit), encoding="utf-8")
+        uninstall_cmd.write_text(
+            _render_uninstall_script(app_name, pause_on_exit), encoding="utf-8"
+        )
         with ZipFile(installer_archive, "w", compression=ZIP_DEFLATED) as zip_file:
             zip_file.write(payload_archive, payload_archive.name)
             zip_file.write(manifest_path, manifest_path.name)
@@ -176,7 +205,9 @@ def _write_installer_archive(
                 zip_file.write(uninstall_cmd, uninstall_cmd.name)
 
 
-def _render_install_script(app_name: str, payload_name: str, manifest_name: str, pause_on_exit: bool) -> str:
+def _render_install_script(
+    app_name: str, payload_name: str, manifest_name: str, pause_on_exit: bool
+) -> str:
     pause_block = "pause\n" if pause_on_exit else ""
     return (
         "@echo off\n"
@@ -193,7 +224,9 @@ def _render_uninstall_script(app_name: str, pause_on_exit: bool) -> str:
     return f"@echo off\necho Uninstall {app_name} according to your deployment policy.\n{pause_block}"
 
 
-def _build_hook_environment(app_name: str, install_directory: str, project_root: Path) -> dict[str, str]:
+def _build_hook_environment(
+    app_name: str, install_directory: str, project_root: Path
+) -> dict[str, str]:
     return {
         "app_builder_name": app_name,
         "app_builder_install_directory": expand_windows_envvars(install_directory),
@@ -209,10 +242,19 @@ def _build_hook_environment(app_name: str, install_directory: str, project_root:
     }
 
 
-def upload_release_to_github(project_root: Path, *, release: ReleaseResult, draft: bool) -> str:
+def upload_release_to_github(
+    project_root: Path, *, release: ReleaseResult, draft: bool
+) -> str:
     _, config = load_project_config(project_root)
-    hook_env = _build_hook_environment(config.installer.name, config.installer.install_directory, project_root)
-    run_hook_commands(project_root, config.build_hooks.pre_github_release, environment=hook_env, python_for_hooks=None)
+    hook_env = _build_hook_environment(
+        config.installer.name, config.installer.install_directory, project_root
+    )
+    run_hook_commands(
+        project_root,
+        config.build_hooks.pre_github_release,
+        environment=hook_env,
+        python_for_hooks=None,
+    )
 
     remote_url = subprocess.run(
         ["git", "config", "--get", "remote.origin.url"],
@@ -250,7 +292,11 @@ def upload_release_to_github(project_root: Path, *, release: ReleaseResult, draf
         release_payload = json.loads(response.read().decode("utf-8"))
     upload_url = release_payload["upload_url"].split("{", 1)[0]
     html_url = str(release_payload["html_url"])
-    for artifact in (release.payload_archive, release.installer_archive, release.manifest_path):
+    for artifact in (
+        release.payload_archive,
+        release.installer_archive,
+        release.manifest_path,
+    ):
         upload_request = urllib.request.Request(
             f"{upload_url}?name={artifact.name}",
             data=artifact.read_bytes(),
@@ -265,7 +311,12 @@ def upload_release_to_github(project_root: Path, *, release: ReleaseResult, draf
         with urllib.request.urlopen(upload_request):
             pass
 
-    run_hook_commands(project_root, config.build_hooks.post_github_release, environment=hook_env, python_for_hooks=None)
+    run_hook_commands(
+        project_root,
+        config.build_hooks.post_github_release,
+        environment=hook_env,
+        python_for_hooks=None,
+    )
     return html_url
 
 

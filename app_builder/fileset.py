@@ -17,7 +17,9 @@ def expand_patterns(project_root: Path, patterns: list[str]) -> list[Path]:
     return matches
 
 
-def collect_files(project_root: Path, include: list[str], exclude: list[str]) -> list[Path]:
+def collect_files(
+    project_root: Path, include: list[str], exclude: list[str]
+) -> list[Path]:
     files: dict[Path, None] = {}
     for path in expand_patterns(project_root, include):
         if path.is_dir():
@@ -43,7 +45,9 @@ def build_remap_table(
     remap: list[tuple[str, str]],
 ) -> dict[Path, PurePosixPath]:
     mapping: dict[Path, PurePosixPath] = {}
-    remap_by_source = {Path(project_root / src).resolve(): PurePosixPath(dst) for src, dst in remap}
+    remap_by_source = {
+        Path(project_root / src).resolve(): PurePosixPath(dst) for src, dst in remap
+    }
     remap_dir_sources = sorted(
         [(src, dst) for src, dst in remap_by_source.items() if src.is_dir()],
         key=lambda item: len(item[0].parts),
@@ -63,5 +67,7 @@ def build_remap_table(
                 break
         if remapped:
             continue
-        mapping[file_path] = PurePosixPath(file_path.resolve().relative_to(project_root.resolve()).as_posix())
+        mapping[file_path] = PurePosixPath(
+            file_path.resolve().relative_to(project_root.resolve()).as_posix()
+        )
     return mapping

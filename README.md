@@ -5,9 +5,10 @@
 ## Current direction
 
 - `app_builder.yaml` is the source of truth.
+- `app_builder_version` is accepted as metadata but is ignored for now; the CLI always runs the installed/current module.
 - The config model lives in code as plain dataclasses and can be loaded without `pydantic`.
 - Optional `pydantic` adapters exist for richer schema tooling when that dependency is present.
-- The release flow is explicit: build hooks, optional bundled Python, optional build venv, payload packaging, installer bundle creation, and optional GitHub release upload.
+- The release flow is explicit: build hooks, optional downloaded WinPython, optional Autory-style venv, payload packaging, installer bundle creation, and optional GitHub release upload.
 
 ## Commands
 

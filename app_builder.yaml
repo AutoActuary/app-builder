@@ -1,3 +1,4 @@
+# Accepted as metadata only; app-builder version dispatch is intentionally disabled for now.
 app_builder_version: v1.0.0
 python_bundled: null
 python_venv: null

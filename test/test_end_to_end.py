@@ -14,9 +14,13 @@ class TestEndToEndBuild(unittest.TestCase):
     def test_build_release_for_demo_app(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             project_root = Path(temp_dir_str)
-            subprocess.run(["git", "init"], cwd=project_root, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "init"], cwd=project_root, check=True, capture_output=True
+            )
             (project_root / "src").mkdir()
-            (project_root / "src" / "hello.py").write_text("print('hello world')\n", encoding="utf-8")
+            (project_root / "src" / "hello.py").write_text(
+                "print('hello world')\n", encoding="utf-8"
+            )
             (project_root / "README.md").write_text("demo\n", encoding="utf-8")
             (project_root / "app_builder.yaml").write_text(
                 """

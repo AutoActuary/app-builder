@@ -56,11 +56,15 @@ class TestFileset(unittest.TestCase):
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
             (temp_dir / "src").mkdir()
-            (temp_dir / "src" / "main.py").write_text("print('hello')", encoding="utf-8")
+            (temp_dir / "src" / "main.py").write_text(
+                "print('hello')", encoding="utf-8"
+            )
             (temp_dir / "README.md").write_text("docs", encoding="utf-8")
 
             files = collect_files(temp_dir, ["src", "README.md"], [])
-            remap = build_remap_table(temp_dir, files, [("README.md", "docs/README.md")])
+            remap = build_remap_table(
+                temp_dir, files, [("README.md", "docs/README.md")]
+            )
 
         self.assertEqual(
             {

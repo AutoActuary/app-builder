@@ -21,7 +21,9 @@ def run_hook_commands(
     env = os.environ.copy()
     env.update(environment)
     for command in commands:
-        _run_single_hook(project_root, command, env=env, python_for_hooks=python_for_hooks)
+        _run_single_hook(
+            project_root, command, env=env, python_for_hooks=python_for_hooks
+        )
 
 
 def _run_single_hook(
@@ -46,7 +48,14 @@ def _run_single_hook(
         return
     if candidate.exists() and suffix == ".ps1":
         subprocess.run(
-            ["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", str(candidate), *parts[1:]],
+            [
+                "powershell.exe",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(candidate),
+                *parts[1:],
+            ],
             cwd=project_root,
             env=env,
             check=True,

@@ -2,20 +2,23 @@
 # This file is both a real config and a living example of the 1.x structure.
 # Trim it down aggressively for your app; every section is optional unless marked otherwise.
 
-# Optional str: Pin the app-builder line that this project expects.
+# Optional str: currently ignored. Versioned app-builder dispatch will be added later.
 app_builder_version: v1.0.0
 
-# Optional Dict: Create a portable Python environment that ships with the app.
+# Optional Dict: Download and materialize a portable WinPython environment
+# that ships with the app.
 python_bundled:
   path: bin/python
-  python_version: 3.11.1
-  pip_version: 23.2.1
+  python_version: 3.12.10
+  pip_version: 24.*
   requirements:
     - pyyaml>=6
   requirements_files:
     - requirements.txt
 
-# Optional Dict: Create a build-only venv derived from the bundled Python.
+# Optional Dict: Create a venv derived from the bundled Python.
+# The venv keeps its own scripts but reads the bundled base site-packages,
+# matching the venv layout used by Autory.
 python_venv:
   path: venv
   requirements:

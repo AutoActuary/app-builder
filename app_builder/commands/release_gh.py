@@ -16,4 +16,6 @@ def release_gh(*, version: str | None, draft: bool) -> None:
 
     project_root = find_project_root(Path.cwd())
     release_result = build_release(project_root, version=version)
-    click.echo(upload_release_to_github(project_root, release=release_result, draft=draft))
+    click.echo(
+        upload_release_to_github(project_root, release=release_result, draft=draft)
+    )

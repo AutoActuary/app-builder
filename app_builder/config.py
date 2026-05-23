@@ -7,14 +7,15 @@ import yaml
 
 from .schema import AppBuilderConfig, ConfigError
 
-
 CONFIG_FILENAMES = ("app_builder.yaml", "app-builder.yaml", "application.yaml")
 
 
 def load_config(config_path: Path) -> AppBuilderConfig:
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
-        raise ConfigError(f"Expected {config_path.name} to contain a YAML mapping at the top level.")
+        raise ConfigError(
+            f"Expected {config_path.name} to contain a YAML mapping at the top level."
+        )
     return AppBuilderConfig.from_mapping(raw)
 
 

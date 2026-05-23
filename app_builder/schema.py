@@ -13,7 +13,9 @@ def _ensure_mapping(value: Any, *, field_name: str) -> Mapping[str, Any]:
     if value is None:
         return {}
     if not isinstance(value, Mapping):
-        raise ConfigError(f"Expected '{field_name}' to be a mapping, got {type(value).__name__}.")
+        raise ConfigError(
+            f"Expected '{field_name}' to be a mapping, got {type(value).__name__}."
+        )
     return value
 
 
@@ -25,7 +27,9 @@ def _ensure_list_of_strings(value: Any, *, field_name: str) -> list[str]:
     result: list[str] = []
     for item in value:
         if not isinstance(item, str):
-            raise ConfigError(f"Expected '{field_name}' entries to be strings, got {type(item).__name__}.")
+            raise ConfigError(
+                f"Expected '{field_name}' entries to be strings, got {type(item).__name__}."
+            )
         result.append(item)
     return result
 
@@ -34,15 +38,21 @@ def _ensure_bool(value: Any, *, field_name: str, default: bool) -> bool:
     if value is None:
         return default
     if not isinstance(value, bool):
-        raise ConfigError(f"Expected '{field_name}' to be a bool, got {type(value).__name__}.")
+        raise ConfigError(
+            f"Expected '{field_name}' to be a bool, got {type(value).__name__}."
+        )
     return value
 
 
-def _ensure_string(value: Any, *, field_name: str, default: str | None = None) -> str | None:
+def _ensure_string(
+    value: Any, *, field_name: str, default: str | None = None
+) -> str | None:
     if value is None:
         return default
     if not isinstance(value, str):
-        raise ConfigError(f"Expected '{field_name}' to be a string, got {type(value).__name__}.")
+        raise ConfigError(
+            f"Expected '{field_name}' to be a string, got {type(value).__name__}."
+        )
     return value
 
 
@@ -60,7 +70,10 @@ class PythonBundledOptions:
             return None
         data = _ensure_mapping(value, field_name="python_bundled")
         return cls(
-            path=_ensure_string(data.get("path"), field_name="python_bundled.path", default="bin/python") or "bin/python",
+            path=_ensure_string(
+                data.get("path"), field_name="python_bundled.path", default="bin/python"
+            )
+            or "bin/python",
             python_version=_ensure_string(
                 data.get("python_version"),
                 field_name="python_bundled.python_version",
@@ -96,8 +109,13 @@ class PythonVenvOptions:
             return None
         data = _ensure_mapping(value, field_name="python_venv")
         return cls(
-            path=_ensure_string(data.get("path"), field_name="python_venv.path", default="venv") or "venv",
-            requirements=_ensure_list_of_strings(data.get("requirements"), field_name="python_venv.requirements"),
+            path=_ensure_string(
+                data.get("path"), field_name="python_venv.path", default="venv"
+            )
+            or "venv",
+            requirements=_ensure_list_of_strings(
+                data.get("requirements"), field_name="python_venv.requirements"
+            ),
             requirements_files=_ensure_list_of_strings(
                 data.get("requirements_files"),
                 field_name="python_venv.requirements_files",
@@ -116,10 +134,22 @@ class InstallHooks:
     def from_mapping(cls, value: Any) -> "InstallHooks":
         data = _ensure_mapping(value, field_name="installer.install_hooks")
         return cls(
-            pre_install=_ensure_list_of_strings(data.get("pre_install"), field_name="installer.install_hooks.pre_install"),
-            post_install=_ensure_list_of_strings(data.get("post_install"), field_name="installer.install_hooks.post_install"),
-            pre_uninstall=_ensure_list_of_strings(data.get("pre_uninstall"), field_name="installer.install_hooks.pre_uninstall"),
-            post_uninstall=_ensure_list_of_strings(data.get("post_uninstall"), field_name="installer.install_hooks.post_uninstall"),
+            pre_install=_ensure_list_of_strings(
+                data.get("pre_install"),
+                field_name="installer.install_hooks.pre_install",
+            ),
+            post_install=_ensure_list_of_strings(
+                data.get("post_install"),
+                field_name="installer.install_hooks.post_install",
+            ),
+            pre_uninstall=_ensure_list_of_strings(
+                data.get("pre_uninstall"),
+                field_name="installer.install_hooks.pre_uninstall",
+            ),
+            post_uninstall=_ensure_list_of_strings(
+                data.get("post_uninstall"),
+                field_name="installer.install_hooks.post_uninstall",
+            ),
         )
 
 
@@ -134,8 +164,12 @@ class PathsMapping:
         data = _ensure_mapping(value, field_name="installer.paths")
         remap_value = data.get("remap") or []
         remap: list[tuple[str, str]] = []
-        if not isinstance(remap_value, Sequence) or isinstance(remap_value, (str, bytes)):
-            raise ConfigError("Expected 'installer.paths.remap' to be a list of [src, dst] pairs.")
+        if not isinstance(remap_value, Sequence) or isinstance(
+            remap_value, (str, bytes)
+        ):
+            raise ConfigError(
+                "Expected 'installer.paths.remap' to be a list of [src, dst] pairs."
+            )
         for item in remap_value:
             if (
                 not isinstance(item, Sequence)
@@ -143,11 +177,17 @@ class PathsMapping:
                 or len(item) != 2
                 or not all(isinstance(part, str) for part in item)
             ):
-                raise ConfigError("Each 'installer.paths.remap' item must be a two-item string pair.")
+                raise ConfigError(
+                    "Each 'installer.paths.remap' item must be a two-item string pair."
+                )
             remap.append((item[0], item[1]))
         return cls(
-            include=_ensure_list_of_strings(data.get("include"), field_name="installer.paths.include"),
-            exclude=_ensure_list_of_strings(data.get("exclude"), field_name="installer.paths.exclude"),
+            include=_ensure_list_of_strings(
+                data.get("include"), field_name="installer.paths.include"
+            ),
+            exclude=_ensure_list_of_strings(
+                data.get("exclude"), field_name="installer.paths.exclude"
+            ),
             remap=remap,
         )
 
@@ -164,14 +204,20 @@ class StartMenuShortcut:
             return cls(target=value)
         if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
             items = list(value)
-            if len(items) not in (2, 3) or not all(isinstance(item, str) for item in items):
-                raise ConfigError(f"Expected '{field_name}' items to be strings or [target, name, optional icon].")
+            if len(items) not in (2, 3) or not all(
+                isinstance(item, str) for item in items
+            ):
+                raise ConfigError(
+                    f"Expected '{field_name}' items to be strings or [target, name, optional icon]."
+                )
             return cls(
                 target=items[0],
                 display_name=items[1],
                 icon=items[2] if len(items) == 3 else None,
             )
-        raise ConfigError(f"Expected '{field_name}' items to be strings or [target, name, optional icon].")
+        raise ConfigError(
+            f"Expected '{field_name}' items to be strings or [target, name, optional icon]."
+        )
 
 
 @dataclass(slots=True)
@@ -200,7 +246,9 @@ class InstallerOptions:
         if not install_directory:
             raise ConfigError("Expected 'installer.install_directory' to be set.")
         start_menu_value = data.get("start_menu") or []
-        if not isinstance(start_menu_value, Sequence) or isinstance(start_menu_value, (str, bytes)):
+        if not isinstance(start_menu_value, Sequence) or isinstance(
+            start_menu_value, (str, bytes)
+        ):
             raise ConfigError("Expected 'installer.start_menu' to be a list.")
         start_menu = [
             StartMenuShortcut.from_value(item, field_name="installer.start_menu")
@@ -233,7 +281,10 @@ class InstallerOptions:
             ),
             start_menu=start_menu,
             install_hooks=InstallHooks.from_mapping(data.get("install_hooks")),
-            dist=_ensure_string(data.get("dist"), field_name="installer.dist", default="dist") or "dist",
+            dist=_ensure_string(
+                data.get("dist"), field_name="installer.dist", default="dist"
+            )
+            or "dist",
             paths=PathsMapping.from_mapping(data.get("paths")),
         )
 
@@ -255,7 +306,9 @@ class BuildHooks:
     def from_mapping(cls, value: Any) -> "BuildHooks":
         data = _ensure_mapping(value, field_name="build_hooks")
         kwargs = {
-            field_.name: _ensure_list_of_strings(data.get(field_.name), field_name=f"build_hooks.{field_.name}")
+            field_.name: _ensure_list_of_strings(
+                data.get(field_.name), field_name=f"build_hooks.{field_.name}"
+            )
             for field_ in fields(cls)
         }
         return cls(**kwargs)
@@ -264,7 +317,9 @@ class BuildHooks:
 @dataclass(slots=True)
 class AppBuilderConfig:
     app_builder_version: str | None = "v1.0.0"
-    python_bundled: PythonBundledOptions | None = field(default_factory=PythonBundledOptions)
+    python_bundled: PythonBundledOptions | None = field(
+        default_factory=PythonBundledOptions
+    )
     python_venv: PythonVenvOptions | None = field(default_factory=PythonVenvOptions)
     installer: InstallerOptions = field(
         default_factory=lambda: InstallerOptions(
@@ -286,7 +341,9 @@ class AppBuilderConfig:
                 field_name="app_builder_version",
                 default="v1.0.0",
             ),
-            python_bundled=PythonBundledOptions.from_mapping(value.get("python_bundled")),
+            python_bundled=PythonBundledOptions.from_mapping(
+                value.get("python_bundled")
+            ),
             python_venv=PythonVenvOptions.from_mapping(value.get("python_venv")),
             installer=InstallerOptions.from_mapping(value.get("installer") or {}),
             build_hooks=BuildHooks.from_mapping(value.get("build_hooks")),
