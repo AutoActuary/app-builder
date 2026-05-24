@@ -7,6 +7,7 @@ import click
 from . import __version__
 from .build import build_release, ensure_python_environments, upload_release_to_github
 from .project import find_project_root
+from .python_runtime import ensure_bundled_python
 from .template import initialize_project
 
 
@@ -42,6 +43,17 @@ def deps() -> None:
     result = ensure_python_environments(project_root)
     click.echo(f"Bundled Python: {result.python_bundled or 'disabled'}")
     click.echo(f"Build venv: {result.python_venv or 'disabled'}")
+
+
+@main.command("python")
+def python_cmd() -> None:
+    """
+    Materialize only the configured bundled Python runtime.
+    """
+
+    project_root = find_project_root(Path.cwd())
+    bundled_python = ensure_bundled_python(project_root)
+    click.echo(f"Bundled Python: {bundled_python or 'disabled'}")
 
 
 @main.command("release")

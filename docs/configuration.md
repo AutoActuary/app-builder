@@ -19,7 +19,7 @@ Required fields can appear in examples without defaults. That means users must p
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `path` | `string` | no | `bin/python` | Project-relative directory where the bundled Python runtime is materialized. |
-| `python_version` | `string` | no | `3.11.1` | WinPython version or version prefix to download. |
+| `python_version` | `string` | no | `3.11.1` | NuGet Python package version or version prefix to materialize. |
 | `pip_version` | `string` | no | `23.2.1` | Pip version specifier installed into the bundled runtime. |
 | `requirements` | `list[string]` | no | `[]` | Inline pip requirements installed into the bundled runtime. |
 | `requirements_files` | `list[string]` | no | `[]` | Project-relative requirement file globs installed into the bundled runtime. |

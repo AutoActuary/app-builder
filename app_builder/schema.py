@@ -19,7 +19,7 @@ class PythonBundledOptions:
     )
     python_version: str = config_field(
         default="3.11.1",
-        description="WinPython version or version prefix to download.",
+        description="NuGet Python package version or version prefix to materialize.",
         example="3.12.10",
     )
     pip_version: str = config_field(

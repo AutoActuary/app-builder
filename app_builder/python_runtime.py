@@ -3,23 +3,35 @@ from __future__ import annotations
 import ast
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 import venv
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+from zipfile import ZipFile
 
 from .config import load_project_config
 from .schema import PythonBundledOptions
 
-WINPYTHON_RELEASES_API = (
-    "https://api.github.com/repos/winpython/winpython/releases?per_page=100&page={page}"
+NUGET_PYTHON_PACKAGE_ID = "python"
+NUGET_FLAT_CONTAINER_BASE_URL = "https://api.nuget.org/v3-flatcontainer"
+NUGET_PYTHON_INDEX_URL = (
+    f"{NUGET_FLAT_CONTAINER_BASE_URL}/{NUGET_PYTHON_PACKAGE_ID}/index.json"
 )
+_VERSION_PATTERN_RE = re.compile(r"^\d+(?:\.\d+)*(?:[-+][0-9A-Za-z_.-]+)?$")
+_NUGET_SOURCE_MARKER = ".app-builder-python-source.json"
+
+
+class PythonVersionNotFoundError(RuntimeError):
+    """Raised when NuGet does not offer a requested Python version."""
 
 
 def python_executable(venv_root: Path) -> Path:
@@ -80,6 +92,20 @@ def _install_pip_version(python_executable: Path, pip_version: str) -> None:
     )
 
 
+def _ensure_pip(python_executable: Path) -> None:
+    subprocess.run(
+        [
+            str(python_executable),
+            "-E",
+            "-m",
+            "ensurepip",
+            "--upgrade",
+            "--default-pip",
+        ],
+        check=True,
+    )
+
+
 def _expand_requirement_files(project_root: Path, patterns: list[str]) -> list[Path]:
     files: list[Path] = []
     for pattern in patterns:
@@ -116,78 +142,227 @@ def _create_venv(target: Path, *, python_executable: Path | None = None) -> Path
 
 
 def _matches_version_pattern(pattern: str | None, version: str) -> bool:
-    if pattern is None:
+    cleaned = _normalized_version_pattern(pattern)
+    if cleaned is None:
         return True
-    cleaned = pattern.strip()
-    if cleaned in ("", "*"):
-        return True
-    if cleaned.endswith(".*"):
-        cleaned = cleaned[:-2]
     return version == cleaned or version.startswith(f"{cleaned}.")
 
 
-def _select_winpython_download_url(
-    releases: list[Mapping[str, Any]],
+def _normalized_version_pattern(pattern: str | None) -> str | None:
+    if pattern is None:
+        return None
+    cleaned = pattern.strip()
+    if cleaned in ("", "*"):
+        return None
+    if cleaned.endswith(".*"):
+        cleaned = cleaned[:-2]
+    return cleaned
+
+
+def _is_prerelease_version(version: str) -> bool:
+    return "-" in version
+
+
+def _version_release_parts(version: str) -> tuple[int, ...] | None:
+    release = version.split("+", 1)[0].split("-", 1)[0]
+    parts = release.split(".")
+    if not parts or not all(part.isdecimal() for part in parts):
+        return None
+    return tuple(int(part) for part in parts)
+
+
+def _padded_version_parts(version: str) -> tuple[int, int, int, int]:
+    parts = _version_release_parts(version) or ()
+    padded = (*parts, 0, 0, 0, 0)
+    return (padded[0], padded[1], padded[2], padded[3])
+
+
+def _version_sort_key(version: str) -> tuple[tuple[int, int, int, int], int, str]:
+    stable = 0 if _is_prerelease_version(version) else 1
+    return (_padded_version_parts(version), stable, version)
+
+
+def _latest_versions(versions: Sequence[str]) -> list[str]:
+    return sorted(versions, key=_version_sort_key, reverse=True)
+
+
+def _requested_version_parts(pattern: str | None) -> tuple[int, ...]:
+    cleaned = _normalized_version_pattern(pattern)
+    if cleaned is None:
+        return ()
+    release = cleaned.split("+", 1)[0].split("-", 1)[0]
+    parts: list[int] = []
+    for part in release.split("."):
+        if not part.isdecimal():
+            break
+        parts.append(int(part))
+    return tuple(parts)
+
+
+def _closest_versions(
+    versions: Sequence[str],
+    requested: tuple[int, ...],
+    *,
+    index: int,
+    limit: int,
+) -> list[str]:
+    def score(version: str) -> tuple[int, tuple[int, int, int, int], int]:
+        parts = _padded_version_parts(version)
+        newest_first = (-parts[0], -parts[1], -parts[2], -parts[3])
+        return (
+            abs(parts[index] - requested[index]),
+            newest_first,
+            1 if _is_prerelease_version(version) else 0,
+        )
+
+    return sorted(versions, key=score)[:limit]
+
+
+def _suggest_nuget_python_versions(
+    versions: Sequence[str],
     python_version: str | None,
-) -> str | None:
-    for release in releases:
-        assets = release.get("assets", [])
-        if not isinstance(assets, list):
-            continue
-        for asset in assets:
-            if not isinstance(asset, Mapping):
-                continue
-            name = asset.get("name")
-            url = asset.get("browser_download_url")
-            if not isinstance(name, str) or not isinstance(url, str):
-                continue
-            lowered_name = name.lower()
-            if not lowered_name.startswith("winpython64-"):
-                continue
-            if not lowered_name.endswith("dot.exe"):
-                continue
-            asset_version = lowered_name.removeprefix("winpython64-").removesuffix(
-                "dot.exe"
-            )
-            if _matches_version_pattern(python_version, asset_version):
-                return url
-    return None
+    *,
+    limit: int = 5,
+) -> list[str]:
+    stable_versions = [
+        version for version in versions if not _is_prerelease_version(version)
+    ]
+    suggestion_pool = stable_versions or list(versions)
+    requested = _requested_version_parts(python_version)
+
+    if len(requested) >= 2:
+        same_minor = [
+            version
+            for version in suggestion_pool
+            if (_version_release_parts(version) or ())[:2] == requested[:2]
+        ]
+        if same_minor:
+            if len(requested) >= 3:
+                return _closest_versions(
+                    same_minor,
+                    requested,
+                    index=2,
+                    limit=limit,
+                )
+            return _latest_versions(same_minor)[:limit]
+
+    if requested:
+        same_major = [
+            version
+            for version in suggestion_pool
+            if (_version_release_parts(version) or ())[:1] == requested[:1]
+        ]
+        if same_major:
+            if len(requested) >= 2:
+                return _closest_versions(
+                    same_major,
+                    requested,
+                    index=1,
+                    limit=limit,
+                )
+            return _latest_versions(same_major)[:limit]
+
+    return _latest_versions(suggestion_pool)[:limit]
 
 
-def _load_winpython_release_page(page: int) -> list[Mapping[str, Any]]:
+def _load_nuget_python_versions() -> list[str]:
     request = urllib.request.Request(
-        WINPYTHON_RELEASES_API.format(page=page),
+        NUGET_PYTHON_INDEX_URL,
         headers={
-            "Accept": "application/vnd.github+json",
+            "Accept": "application/json",
             "User-Agent": "app-builder",
         },
     )
-    with urllib.request.urlopen(request) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-    if not isinstance(payload, list):
-        raise RuntimeError("Unexpected WinPython release response from GitHub.")
-    return [item for item in payload if isinstance(item, Mapping)]
+    try:
+        with urllib.request.urlopen(request) as response:
+            payload: Any = json.loads(response.read().decode("utf-8"))
+    except urllib.error.URLError as error:
+        raise RuntimeError(
+            f"Could not query NuGet Python versions from {NUGET_PYTHON_INDEX_URL}: {error}."
+        ) from error
+
+    if not isinstance(payload, dict):
+        raise RuntimeError("Unexpected NuGet Python version response: expected object.")
+    versions = payload.get("versions")
+    if not isinstance(versions, list) or not all(
+        isinstance(version, str) for version in versions
+    ):
+        raise RuntimeError(
+            "Unexpected NuGet Python version response: expected a string version list."
+        )
+    return versions
 
 
-def _get_winpython_download_url(python_version: str | None) -> str:
-    page = 1
-    while True:
-        releases = _load_winpython_release_page(page)
-        if not releases:
-            break
-        url = _select_winpython_download_url(releases, python_version)
-        if url is not None:
-            return url
-        page += 1
-    raise RuntimeError(f"Could not find a WinPython download for {python_version!r}.")
+def _select_nuget_python_version(
+    versions: Sequence[str],
+    python_version: str | None,
+) -> str:
+    valid_versions = [
+        version for version in versions if _VERSION_PATTERN_RE.match(version)
+    ]
+    matches = [
+        version
+        for version in valid_versions
+        if _matches_version_pattern(python_version, version)
+    ]
+    stable_matches = [
+        version for version in matches if not _is_prerelease_version(version)
+    ]
+    if stable_matches:
+        matches = stable_matches
+    if matches:
+        return _latest_versions(matches)[0]
+
+    suggestions = _suggest_nuget_python_versions(valid_versions, python_version)
+    suggestion_text = ""
+    if suggestions:
+        suggestion_text = f" Closest available versions: {', '.join(suggestions)}."
+    requested = (
+        "the latest available version"
+        if _normalized_version_pattern(python_version) is None
+        else f"a version matching {python_version!r}"
+    )
+    raise PythonVersionNotFoundError(
+        f"NuGet package '{NUGET_PYTHON_PACKAGE_ID}' does not provide {requested}."
+        f"{suggestion_text}"
+    )
+
+
+def _nuget_python_download_url(version: str) -> str:
+    return (
+        f"{NUGET_FLAT_CONTAINER_BASE_URL}/{NUGET_PYTHON_PACKAGE_ID}/{version}/"
+        f"{NUGET_PYTHON_PACKAGE_ID}.{version}.nupkg"
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class NuGetPythonPackage:
+    version: str
+    download_url: str
+
+
+def _resolve_nuget_python_package(python_version: str | None) -> NuGetPythonPackage:
+    versions = _load_nuget_python_versions()
+    selected_version = _select_nuget_python_version(versions, python_version)
+    return NuGetPythonPackage(
+        version=selected_version,
+        download_url=_nuget_python_download_url(selected_version),
+    )
 
 
 def _download_file(url: str, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(url, headers={"User-Agent": "app-builder"})
-    with urllib.request.urlopen(request) as response:
-        with destination.open("wb") as output:
-            shutil.copyfileobj(response, output)
+    try:
+        with urllib.request.urlopen(request) as response:
+            with destination.open("wb") as output:
+                shutil.copyfileobj(response, output)
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(
+            f"Could not download {url}: NuGet returned HTTP {error.code}."
+        ) from error
+    except urllib.error.URLError as error:
+        raise RuntimeError(f"Could not download {url}: {error}.") from error
 
 
 def _download_cache_path(url: str) -> Path:
@@ -195,66 +370,93 @@ def _download_cache_path(url: str) -> Path:
     return Path(tempfile.gettempdir(), "app-builder-downloads", filename)
 
 
-def _sevenzip_executable() -> Path:
-    packaged = Path(__file__).resolve().parent / "src-legacy" / "bin" / "7z.exe"
-    if packaged.exists():
-        return packaged
-    found = shutil.which("7z") or shutil.which("7za")
-    if found is None:
-        raise FileNotFoundError("Could not find 7z or 7za to extract WinPython.")
-    return Path(found)
+def _source_marker_path(python_root: Path) -> Path:
+    return python_root / _NUGET_SOURCE_MARKER
 
 
-def _find_extracted_python_dir(extract_root: Path) -> Path:
-    candidates = [
-        *extract_root.glob("*/python-*"),
-        *extract_root.glob("*/python"),
-        *extract_root.glob("python-*"),
-        *extract_root.glob("python"),
-    ]
-    for candidate in candidates:
-        if candidate.is_dir():
-            return candidate
-    raise RuntimeError("Could not find the extracted WinPython Python directory.")
-
-
-def _install_python_wrappers(python_root: Path) -> None:
-    wrappers_dir = (
-        Path(__file__).resolve().parent
-        / "src-legacy"
-        / "assets"
-        / "python-venv-exe-wrapper"
+def _write_nuget_source_marker(
+    python_root: Path,
+    package: NuGetPythonPackage,
+) -> None:
+    _source_marker_path(python_root).write_text(
+        json.dumps(
+            {
+                "package_id": NUGET_PYTHON_PACKAGE_ID,
+                "version": package.version,
+                "download_url": package.download_url,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
     )
-    python_wrapper = wrappers_dir / "python-venv-exe-wrapper.exe"
-    pythonw_wrapper = wrappers_dir / "pythonw-venv-exe-wrapper.exe"
-    wrapper_targets = [
-        (python_wrapper, python_root / "python.exe"),
-        (python_wrapper, python_root / "Scripts" / "python.exe"),
-        (pythonw_wrapper, python_root / "Scripts" / "pythonw.exe"),
-    ]
-    for source, target in wrapper_targets:
-        if source.exists():
+
+
+def _nuget_source_marker_matches(
+    python_root: Path,
+    python_version: str | None,
+) -> bool:
+    marker_path = _source_marker_path(python_root)
+    if not marker_path.exists():
+        return False
+    try:
+        payload: Any = json.loads(marker_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    package_id = payload.get("package_id")
+    version = payload.get("version")
+    return (
+        package_id == NUGET_PYTHON_PACKAGE_ID
+        and isinstance(version, str)
+        and _matches_version_pattern(python_version, version)
+    )
+
+
+def _safe_archive_target(root: Path, relative_parts: tuple[str, ...]) -> Path:
+    destination = root.joinpath(*relative_parts)
+    root_resolved = root.resolve()
+    destination_resolved = destination.resolve()
+    try:
+        destination_resolved.relative_to(root_resolved)
+    except ValueError as error:
+        raise RuntimeError(
+            f"NuGet Python package contains an unsafe archive path: {'/'.join(relative_parts)}."
+        ) from error
+    return destination
+
+
+def _extract_nuget_tools(package_path: Path, tools_root: Path) -> None:
+    extracted_any = False
+    with ZipFile(package_path) as zip_file:
+        for member in zip_file.infolist():
+            parts = Path(member.filename).parts
+            if not parts or parts[0].lower() != "tools":
+                continue
+            relative_parts = tuple(parts[1:])
+            if not relative_parts:
+                continue
+            extracted_any = True
+            target = _safe_archive_target(tools_root, relative_parts)
+            if member.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
+            with zip_file.open(member) as source, target.open("wb") as destination:
+                shutil.copyfileobj(source, destination)
+
+    if not extracted_any:
+        raise RuntimeError("NuGet Python package did not contain a tools/ directory.")
 
 
-def _extract_winpython(installer_path: Path, python_root: Path) -> None:
+def _extract_nuget_python_package(package_path: Path, python_root: Path) -> None:
     if python_root.exists():
         shutil.rmtree(python_root)
     with tempfile.TemporaryDirectory() as temp_dir_str:
-        extract_root = Path(temp_dir_str, "extract")
-        extract_root.mkdir()
-        subprocess.run(
-            [
-                str(_sevenzip_executable()),
-                "x",
-                "-y",
-                f"-o{extract_root}",
-                str(installer_path),
-            ],
-            check=True,
-        )
-        extracted_python = _find_extracted_python_dir(extract_root)
+        extracted_python = Path(temp_dir_str, "tools")
+        _extract_nuget_tools(package_path, extracted_python)
+        if not (extracted_python / "python.exe").exists():
+            raise RuntimeError("NuGet Python package did not contain tools/python.exe.")
         site_packages = extracted_python / "Lib" / "site-packages"
         scripts = extracted_python / "Scripts"
 
@@ -272,10 +474,10 @@ def _extract_winpython(installer_path: Path, python_root: Path) -> None:
         shutil.move(str(extracted_python), str(python_root / "python"))
 
     (python_root / "pyvenv.cfg").write_text(
+        f"home = {(python_root / 'python').resolve().as_posix()}\n"
         "include-system-site-packages = false\n",
         encoding="utf-8",
     )
-    _install_python_wrappers(python_root)
 
 
 def _python_matches(python_executable: Path, version_pattern: str | None) -> bool:
@@ -293,20 +495,38 @@ def _python_matches(python_executable: Path, version_pattern: str | None) -> boo
     return _matches_version_pattern(version_pattern, version)
 
 
-def _ensure_bundled_python(
+def establish_bundled_python(
     project_root: Path,
     options: PythonBundledOptions,
 ) -> Path:
     python_root = project_root / options.path
     python_executable = _bundled_python_executable(python_root)
-    if not _python_matches(python_executable, options.python_version):
-        download_url = _get_winpython_download_url(options.python_version)
-        installer_path = _download_cache_path(download_url)
-        if not installer_path.exists():
-            _download_file(download_url, installer_path)
-        _extract_winpython(installer_path, python_root)
+    if not (
+        _python_matches(python_executable, options.python_version)
+        and _nuget_source_marker_matches(python_root, options.python_version)
+    ):
+        package = _resolve_nuget_python_package(options.python_version)
+        package_path = _download_cache_path(package.download_url)
+        if not package_path.exists():
+            _download_file(package.download_url, package_path)
+        _extract_nuget_python_package(package_path, python_root)
+        _write_nuget_source_marker(python_root, package)
 
     python_executable = _bundled_python_executable(python_root)
+    if not _python_matches(python_executable, options.python_version):
+        raise RuntimeError(
+            f"Materialized Python at {python_executable} did not match "
+            f"configured version {options.python_version!r}."
+        )
+    return python_executable
+
+
+def _ensure_bundled_python(
+    project_root: Path,
+    options: PythonBundledOptions,
+) -> Path:
+    python_executable = establish_bundled_python(project_root, options)
+    _ensure_pip(python_executable)
     _install_pip_version(python_executable, options.pip_version)
     _install_requirements(
         python_executable,
@@ -382,6 +602,7 @@ def _copy_bundled_runtime_support(bundled_root: Path, venv_root: Path) -> None:
         "python.exe",
         "pyvenv.cfg",
         "lib",
+        _NUGET_SOURCE_MARKER,
     }
 
     def copy_included_files(source: Path = bundled_root) -> None:
@@ -419,6 +640,13 @@ def _create_venv_from_bundled_python(venv_root: Path, bundled_root: Path) -> Pat
 class PythonEnvironmentResult:
     python_bundled: Path | None
     python_venv: Path | None
+
+
+def ensure_bundled_python(project_root: Path) -> Path | None:
+    _, config = load_project_config(project_root)
+    if config.python_bundled is None:
+        return None
+    return establish_bundled_python(project_root, config.python_bundled)
 
 
 def ensure_python_environments(project_root: Path) -> PythonEnvironmentResult:

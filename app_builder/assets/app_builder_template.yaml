@@ -12,8 +12,8 @@ python_bundled:
   # materialized. Default if omitted: bin/python.
   path: bin/python
 
-  # Optional string. WinPython version or version prefix to download. Default if omitted:
-  # 3.11.1.
+  # Optional string. NuGet Python package version or version prefix to materialize.
+  # Default if omitted: 3.11.1.
   python_version: 3.12.10
 
   # Optional string. Pip version specifier installed into the bundled runtime. Default if
