@@ -71,4 +71,4 @@ class TestTemplateInitialization(unittest.TestCase):
             "| `name` | `string` | yes | required | Human-facing application name. |",
             docs,
         )
-        self.assertIn("Hook fields are `list[string | list[string]]`.", docs)
+        self.assertIn("Hook fields are `list[list[string]]`.", docs)

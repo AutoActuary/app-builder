@@ -18,7 +18,7 @@ VALID_MAPPING = {
     },
     "build_hooks": {
         "pre_dist": [
-            "scripts/pre-build.cmd",
+            ["scripts/pre-build.cmd"],
             ["python", "-m", "pytest"],
         ]
     },
@@ -54,8 +54,8 @@ class TestSchemaExport(unittest.TestCase):
             "items"
         ]
         self.assertEqual(
-            [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
-            hook_items["anyOf"],
+            {"type": "array", "items": {"type": "string"}},
+            hook_items,
         )
 
     def test_validate_mapping_uses_primary_loader_errors(self) -> None:
@@ -78,12 +78,8 @@ class TestSchemaExport(unittest.TestCase):
 
         self.assertEqual("Demo", validated["installer"]["name"])
         self.assertEqual(
-            [["python", "-m", "pytest"]],
-            [
-                item
-                for item in validated["build_hooks"]["pre_dist"]
-                if isinstance(item, list)
-            ],
+            [["scripts/pre-build.cmd"], ["python", "-m", "pytest"]],
+            validated["build_hooks"]["pre_dist"],
         )
 
     @unittest.skipUnless(

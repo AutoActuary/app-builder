@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import shlex
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -73,38 +72,6 @@ def _run_single_hook(
     env: dict[str, str],
     python_candidates: Sequence[Path],
 ) -> None:
-    if isinstance(command, list):
-        _run_argv_hook(
-            project_root,
-            command,
-            env=env,
-            python_candidates=python_candidates,
-        )
-        return
-
-    parts = _split_command_line(command)
-    if parts is None:
-        _run_shell_hook(project_root, command, env=env)
-        return
-    if not parts:
-        return
-    if _run_script_hook(
-        project_root,
-        parts,
-        env=env,
-        python_candidates=python_candidates,
-    ):
-        return
-    _run_shell_hook(project_root, command, env=env)
-
-
-def _run_argv_hook(
-    project_root: Path,
-    command: list[str],
-    *,
-    env: dict[str, str],
-    python_candidates: Sequence[Path],
-) -> None:
     if not command:
         return
     if _run_script_hook(
@@ -120,20 +87,6 @@ def _run_argv_hook(
         env=env,
         check=True,
     )
-
-
-def _split_command_line(command: str) -> list[str] | None:
-    try:
-        parts = shlex.split(command, posix=False)
-    except ValueError:
-        return None
-    return [_strip_outer_quotes(part) for part in parts]
-
-
-def _strip_outer_quotes(value: str) -> str:
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-        return value[1:-1]
-    return value
 
 
 def _run_script_hook(
@@ -178,12 +131,3 @@ def _resolve_hook_path(project_root: Path, value: str) -> Path:
     if path.is_absolute():
         return path.resolve()
     return (project_root / path).resolve()
-
-
-def _run_shell_hook(project_root: Path, command: str, *, env: dict[str, str]) -> None:
-    subprocess.run(
-        ["cmd.exe", "/c", command],
-        cwd=project_root,
-        env=env,
-        check=True,
-    )

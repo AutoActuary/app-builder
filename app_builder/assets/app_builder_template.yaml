@@ -82,20 +82,20 @@ installer:
   # Optional mapping. Installer and uninstaller hook command declarations. Default if
   # omitted: InstallHooks defaults.
   install_hooks:
-    # Optional list[string | list[string]]. Commands written into installer metadata to
-    # run before installation. Default if omitted: [].
+    # Optional list[list[string]]. Argv commands written into installer metadata to run
+    # before installation. Default if omitted: [].
     pre_install: []
 
-    # Optional list[string | list[string]]. Commands written into installer metadata to
-    # run after installation. Default if omitted: [].
+    # Optional list[list[string]]. Argv commands written into installer metadata to run
+    # after installation. Default if omitted: [].
     post_install: []
 
-    # Optional list[string | list[string]]. Commands written into installer metadata to
-    # run before uninstall. Default if omitted: [].
+    # Optional list[list[string]]. Argv commands written into installer metadata to run
+    # before uninstall. Default if omitted: [].
     pre_uninstall: []
 
-    # Optional list[string | list[string]]. Commands written into installer metadata to
-    # run after uninstall. Default if omitted: [].
+    # Optional list[list[string]]. Argv commands written into installer metadata to run
+    # after uninstall. Default if omitted: [].
     post_uninstall: []
 
   # Optional string. Project-relative output directory for release artifacts. Default if
@@ -127,42 +127,42 @@ installer:
 # Optional mapping. Build and release hook command declarations. Default if omitted:
 # BuildHooks defaults.
 build_hooks:
-  # Optional list[string | list[string]]. Commands run before dependency or release
-  # processing begins. Default if omitted: [].
+  # Optional list[list[string]]. Argv commands run before dependency or release processing
+  # begins. Default if omitted: [].
   pre_process: []
 
-  # Optional list[string | list[string]]. Commands run before bundled Python is
-  # materialized. Default if omitted: [].
+  # Optional list[list[string]]. Argv commands run before bundled Python is materialized.
+  # Default if omitted: [].
   pre_python_bundled: []
 
-  # Optional list[string | list[string]]. Commands run after bundled Python is
-  # materialized. Default if omitted: [].
+  # Optional list[list[string]]. Argv commands run after bundled Python is materialized.
+  # Default if omitted: [].
   post_python_bundled: []
 
-  # Optional list[string | list[string]]. Commands run before the virtual environment is
+  # Optional list[list[string]]. Argv commands run before the virtual environment is
   # materialized. Default if omitted: [].
   pre_python_venv: []
 
-  # Optional list[string | list[string]]. Commands run after the virtual environment is
+  # Optional list[list[string]]. Argv commands run after the virtual environment is
   # materialized. Default if omitted: [].
   post_python_venv: []
 
-  # Optional list[string | list[string]]. Commands run before the release payload is
+  # Optional list[list[string]]. Argv commands run before the release payload is
   # assembled. Default if omitted: [].
   pre_dist: []
 
-  # Optional list[string | list[string]]. Commands run after the release payload is
-  # assembled. Default if omitted: [].
+  # Optional list[list[string]]. Argv commands run after the release payload is assembled.
+  # Default if omitted: [].
   post_dist: []
 
-  # Optional list[string | list[string]]. Commands run before GitHub release upload.
-  # Default if omitted: [].
+  # Optional list[list[string]]. Argv commands run before GitHub release upload. Default
+  # if omitted: [].
   pre_github_release: []
 
-  # Optional list[string | list[string]]. Commands run after GitHub release upload.
-  # Default if omitted: [].
+  # Optional list[list[string]]. Argv commands run after GitHub release upload. Default if
+  # omitted: [].
   post_github_release: []
 
-  # Optional list[string | list[string]]. Commands run at the end of release processing.
+  # Optional list[list[string]]. Argv commands run at the end of release processing.
   # Default if omitted: [].
   post_process: []

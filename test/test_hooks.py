@@ -24,7 +24,7 @@ class TestHookCommandExecution(unittest.TestCase):
             with patch("app_builder.hooks.subprocess.run") as subprocess_run:
                 run_hook_commands(
                     project_root,
-                    ['"scripts/hook.py" --name "Demo App"'],
+                    [["scripts/hook.py", "--name", "Demo App"]],
                     environment={"CUSTOM": "1"},
                     python_candidates=[missing_venv_python, bundled_python],
                 )
@@ -87,22 +87,6 @@ class TestHookCommandExecution(unittest.TestCase):
         )
         self.assertEqual(project_root, kwargs["cwd"])
 
-    def test_string_commands_keep_cmd_execution(self) -> None:
-        with TemporaryDirectory() as temp_dir_str:
-            project_root = Path(temp_dir_str)
-
-            with patch("app_builder.hooks.subprocess.run") as subprocess_run:
-                run_hook_commands(
-                    project_root,
-                    ["echo hello"],
-                    environment={},
-                    python_candidates=[],
-                )
-
-        args, kwargs = subprocess_run.call_args
-        self.assertEqual(["cmd.exe", "/c", "echo hello"], args[0])
-        self.assertEqual(project_root, kwargs["cwd"])
-
     def test_argv_commands_bypass_shell_execution(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             project_root = Path(temp_dir_str)
@@ -142,31 +126,6 @@ class TestHookCommandExecution(unittest.TestCase):
 
         args, _ = subprocess_run.call_args
         self.assertEqual([str(explicit_python), str(script)], args[0])
-
-    def test_explicit_python_string_command_stays_a_shell_command(self) -> None:
-        with TemporaryDirectory() as temp_dir_str:
-            project_root = Path(temp_dir_str)
-            explicit_python = project_root / "custom-python" / "python.exe"
-            explicit_python.parent.mkdir()
-            explicit_python.write_text("", encoding="utf-8")
-            script = project_root / "scripts" / "hook.py"
-            script.parent.mkdir()
-            script.write_text("print('hook')\n", encoding="utf-8")
-            fallback_python = project_root / "bin" / "python" / "python" / "python.exe"
-            fallback_python.parent.mkdir(parents=True)
-            fallback_python.write_text("", encoding="utf-8")
-            command = f'"{explicit_python}" "{script}"'
-
-            with patch("app_builder.hooks.subprocess.run") as subprocess_run:
-                run_hook_commands(
-                    project_root,
-                    [command],
-                    environment={},
-                    python_candidates=[fallback_python],
-                )
-
-        args, _ = subprocess_run.call_args
-        self.assertEqual(["cmd.exe", "/c", command], args[0])
 
 
 if __name__ == "__main__":

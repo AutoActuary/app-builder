@@ -23,7 +23,8 @@ class TestConfigLoading(unittest.TestCase):
             return load_config(config_path)
 
     def test_loads_new_schema_without_pydantic(self) -> None:
-        config = self._load_yaml("""
+        config = self._load_yaml(
+            """
 app_builder_version: v1.0.0
 python_bundled: null
 python_venv: null
@@ -33,18 +34,88 @@ installer:
   paths:
     include: [src]
 build_hooks: {}
-""")
+"""
+        )
 
         self.assertEqual("Demo", config.installer.name)
         self.assertIsNone(config.python_bundled)
         self.assertIsNone(config.python_venv)
 
-    def test_missing_defaults_materialize_as_dataclasses(self) -> None:
-        config = self._load_yaml("""
+    def test_hook_commands_are_argv_lists_and_remap_pairs_are_tuples(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            config_path = temp_dir / "app_builder.yaml"
+            config_path.write_text(
+                """
+app_builder_version: v1.0.0
+python_bundled: null
+python_venv: null
 installer:
   name: Demo
   install_directory: "%localappdata%\\\\Demo"
-""")
+  install_hooks:
+    pre_install:
+      - [cmd, /c, echo, install]
+  paths:
+    include: [src]
+    remap:
+      - [README.md, docs/README.md]
+build_hooks:
+  pre_process:
+    - [python, scripts/build.py, --fast]
+""".strip(),
+                encoding="utf-8",
+            )
+            config = load_config(config_path)
+
+        self.assertEqual(
+            [["cmd", "/c", "echo", "install"]],
+            config.installer.install_hooks.pre_install,
+        )
+        self.assertEqual(
+            [["python", "scripts/build.py", "--fast"]],
+            config.build_hooks.pre_process,
+        )
+        self.assertEqual(
+            [("README.md", "docs/README.md")],
+            config.installer.paths.remap,
+        )
+
+    def test_hook_commands_reject_bare_strings(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            config_path = temp_dir / "app_builder.yaml"
+            config_path.write_text(
+                """
+app_builder_version: v1.0.0
+python_bundled: null
+python_venv: null
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+  paths:
+    include: [src]
+build_hooks:
+  pre_process:
+    - cmd /c echo invalid
+""".strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ConfigError,
+                r"config\.build_hooks\.pre_process\[0\]: expected list, got str\.",
+            ):
+                load_config(config_path)
+
+    def test_missing_defaults_materialize_as_dataclasses(self) -> None:
+        config = self._load_yaml(
+            """
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+"""
+        )
 
         self.assertIsInstance(config.python_bundled, PythonBundledOptions)
         self.assertIsInstance(config.python_venv, PythonVenvOptions)
@@ -57,76 +128,105 @@ installer:
             ConfigError,
             r"config: unknown key 'surprise'\. Expected one of: .*'installer'",
         ):
-            self._load_yaml("""
+            self._load_yaml(
+                """
 surprise: true
 installer:
   name: Demo
   install_directory: "%localappdata%\\\\Demo"
-""")
+"""
+            )
 
     def test_unknown_nested_keys_are_rejected_with_path(self) -> None:
         with self.assertRaisesRegex(
             ConfigError,
             r"config\.installer: unknown key 'extra'\. Expected one of: .*'paths'",
         ):
-            self._load_yaml("""
+            self._load_yaml(
+                """
 installer:
   name: Demo
   install_directory: "%localappdata%\\\\Demo"
   extra: value
-""")
+"""
+            )
 
     def test_non_nullable_null_is_rejected(self) -> None:
         with self.assertRaisesRegex(
             ConfigError,
             r"config\.installer: null is not allowed\. Expected mapping\.",
         ):
-            self._load_yaml("""
+            self._load_yaml(
+                """
 installer: null
-""")
+"""
+            )
 
     def test_missing_required_fields_are_rejected(self) -> None:
         with self.assertRaisesRegex(
             ConfigError,
             r"config\.installer\.name: missing required value\. Expected string\.",
         ):
-            self._load_yaml("""
+            self._load_yaml(
+                """
 installer:
   install_directory: "%localappdata%\\\\Demo"
-""")
+"""
+            )
 
-    def test_hook_commands_accept_strings_and_argv_lists(self) -> None:
-        config = self._load_yaml("""
+    def test_hook_commands_accept_argv_lists(self) -> None:
+        config = self._load_yaml(
+            """
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+build_hooks:
+  pre_dist:
+    - [scripts/pre-build.cmd]
+    - [python, -m, pytest]
+"""
+        )
+
+        self.assertEqual(
+            [["scripts/pre-build.cmd"], ["python", "-m", "pytest"]],
+            config.build_hooks.pre_dist,
+        )
+
+    def test_bare_hook_command_strings_are_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigError,
+            r"config\.build_hooks\.pre_dist\[0\]: expected list, got str\.",
+        ):
+            self._load_yaml(
+                """
 installer:
   name: Demo
   install_directory: "%localappdata%\\\\Demo"
 build_hooks:
   pre_dist:
     - scripts/pre-build.cmd
-    - [python, -m, pytest]
-""")
-
-        self.assertEqual(
-            ["scripts/pre-build.cmd", ["python", "-m", "pytest"]],
-            config.build_hooks.pre_dist,
-        )
+"""
+            )
 
     def test_bad_hook_command_shapes_are_rejected(self) -> None:
         with self.assertRaisesRegex(
             ConfigError,
-            r"config\.build_hooks\.pre_dist\[0\]: expected string or list\[string\], got dict\.",
+            r"config\.build_hooks\.pre_dist\[0\]: expected list, got dict\.",
         ):
-            self._load_yaml("""
+            self._load_yaml(
+                """
 installer:
   name: Demo
   install_directory: "%localappdata%\\\\Demo"
 build_hooks:
   pre_dist:
     - command: scripts/pre-build.cmd
-""")
+"""
+            )
 
     def test_start_menu_entries_are_strict_mappings(self) -> None:
-        config = self._load_yaml("""
+        config = self._load_yaml(
+            """
 installer:
   name: Demo
   install_directory: "%localappdata%\\\\Demo"
@@ -134,7 +234,8 @@ installer:
     - target: application-templates/program.cmd
       display_name: Demo
       icon: application-templates/icon.ico
-""")
+"""
+        )
 
         self.assertEqual(
             "application-templates/program.cmd", config.installer.start_menu[0].target
@@ -146,27 +247,31 @@ installer:
             ConfigError,
             r"config\.installer\.start_menu\[0\]: expected mapping, got str\.",
         ):
-            self._load_yaml("""
+            self._load_yaml(
+                """
 installer:
   name: Demo
   install_directory: "%localappdata%\\\\Demo"
   start_menu:
     - application-templates/program.cmd
-""")
+"""
+            )
 
     def test_bad_remap_tuple_layout_is_rejected(self) -> None:
         with self.assertRaisesRegex(
             ConfigError,
             r"config\.installer\.paths\.remap\[0\]: expected 2 tuple items, got 1\.",
         ):
-            self._load_yaml("""
+            self._load_yaml(
+                """
 installer:
   name: Demo
   install_directory: "%localappdata%\\\\Demo"
   paths:
     remap:
       - [README.md]
-""")
+"""
+            )
 
     def test_legacy_application_yaml_is_rejected(self) -> None:
         with TemporaryDirectory() as temp_dir_str:

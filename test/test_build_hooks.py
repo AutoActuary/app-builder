@@ -76,11 +76,16 @@ class TestBuildHookPythonSelection(unittest.TestCase):
             _write_config(
                 project_root,
                 """
-  pre_process: [pre-process]
-  pre_python_bundled: [pre-bundled]
-  post_python_bundled: [post-bundled]
-  pre_python_venv: [pre-venv]
-  post_python_venv: [post-venv]
+  pre_process:
+    - [pre-process]
+  pre_python_bundled:
+    - [pre-bundled]
+  post_python_bundled:
+    - [post-bundled]
+  pre_python_venv:
+    - [pre-venv]
+  post_python_venv:
+    - [post-venv]
 """,
             )
             bundled_python = project_root / "bin" / "python" / "python" / "python.exe"
@@ -114,11 +119,11 @@ class TestBuildHookPythonSelection(unittest.TestCase):
         )
         self.assertEqual(
             [
-                ["pre-process"],
-                ["pre-bundled"],
-                ["post-bundled"],
-                ["pre-venv"],
-                ["post-venv"],
+                [["pre-process"]],
+                [["pre-bundled"]],
+                [["post-bundled"]],
+                [["pre-venv"]],
+                [["post-venv"]],
             ],
             [call.args[1] for call in run_hooks.call_args_list],
         )
@@ -129,9 +134,12 @@ class TestBuildHookPythonSelection(unittest.TestCase):
             _write_config(
                 project_root,
                 """
-  pre_dist: [pre-dist]
-  post_dist: [post-dist]
-  post_process: [post-process]
+  pre_dist:
+    - [pre-dist]
+  post_dist:
+    - [post-dist]
+  post_process:
+    - [post-process]
 """,
             )
             bundled_python = project_root / "bin" / "python" / "python" / "python.exe"
@@ -160,7 +168,7 @@ class TestBuildHookPythonSelection(unittest.TestCase):
             [call.kwargs["python_candidates"] for call in run_hooks.call_args_list],
         )
         self.assertEqual(
-            [["pre-dist"], ["post-dist"], ["post-process"]],
+            [[["pre-dist"]], [["post-dist"]], [["post-process"]]],
             [call.args[1] for call in run_hooks.call_args_list],
         )
 
@@ -191,8 +199,10 @@ class TestBuildHookPythonSelection(unittest.TestCase):
             _write_config(
                 project_root,
                 """
-  pre_github_release: [pre-gh]
-  post_github_release: [post-gh]
+  pre_github_release:
+    - [pre-gh]
+  post_github_release:
+    - [post-gh]
 """,
             )
             dist_dir = project_root / "dist"
@@ -232,7 +242,7 @@ class TestBuildHookPythonSelection(unittest.TestCase):
             "https://github.com/AutoActuary/demo/releases/tag/1.2.3", html_url
         )
         self.assertEqual(
-            [["pre-gh"], ["post-gh"]],
+            [[["pre-gh"]], [["post-gh"]]],
             [call.args[1] for call in run_hooks.call_args_list],
         )
         self.assertEqual(4, len(fake_urlopen.requests))

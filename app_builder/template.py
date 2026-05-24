@@ -53,8 +53,9 @@ def render_config_reference_markdown() -> str:
         [
             "## Command Values",
             "",
-            "Hook fields are `list[string | list[string]]`. A string is run as a "
-            "command line. A list of strings is run as argv without shell splitting.",
+            "Hook fields are `list[list[string]]`. Each command is an argv list. "
+            "Use an explicit shell argv, such as `[cmd, /c, ...]`, when shell "
+            "behavior is required.",
             "",
         ]
     )

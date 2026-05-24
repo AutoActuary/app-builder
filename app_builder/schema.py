@@ -7,7 +7,7 @@ from typing import Any, TypeAlias, cast
 
 from .schema_core import ConfigError as ConfigError, config_field, materialize_config
 
-HookCommand: TypeAlias = str | list[str]
+HookCommand: TypeAlias = list[str]
 
 
 @dataclass(slots=True)
@@ -62,19 +62,19 @@ class PythonVenvOptions:
 class InstallHooks:
     pre_install: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands written into installer metadata to run before installation.",
+        description="Argv commands written into installer metadata to run before installation.",
     )
     post_install: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands written into installer metadata to run after installation.",
+        description="Argv commands written into installer metadata to run after installation.",
     )
     pre_uninstall: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands written into installer metadata to run before uninstall.",
+        description="Argv commands written into installer metadata to run before uninstall.",
     )
     post_uninstall: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands written into installer metadata to run after uninstall.",
+        description="Argv commands written into installer metadata to run after uninstall.",
     )
 
 
@@ -175,43 +175,43 @@ class InstallerOptions:
 class BuildHooks:
     pre_process: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands run before dependency or release processing begins.",
+        description="Argv commands run before dependency or release processing begins.",
     )
     pre_python_bundled: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands run before bundled Python is materialized.",
+        description="Argv commands run before bundled Python is materialized.",
     )
     post_python_bundled: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands run after bundled Python is materialized.",
+        description="Argv commands run after bundled Python is materialized.",
     )
     pre_python_venv: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands run before the virtual environment is materialized.",
+        description="Argv commands run before the virtual environment is materialized.",
     )
     post_python_venv: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands run after the virtual environment is materialized.",
+        description="Argv commands run after the virtual environment is materialized.",
     )
     pre_dist: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands run before the release payload is assembled.",
+        description="Argv commands run before the release payload is assembled.",
     )
     post_dist: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands run after the release payload is assembled.",
+        description="Argv commands run after the release payload is assembled.",
     )
     pre_github_release: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands run before GitHub release upload.",
+        description="Argv commands run before GitHub release upload.",
     )
     post_github_release: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands run after GitHub release upload.",
+        description="Argv commands run after GitHub release upload.",
     )
     post_process: list[HookCommand] = config_field(
         default_factory=list,
-        description="Commands run at the end of release processing.",
+        description="Argv commands run at the end of release processing.",
     )
 
 

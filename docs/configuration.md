@@ -59,10 +59,10 @@ Required fields can appear in examples without defaults. That means users must p
 
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `pre_install` | `list[string \| list[string]]` | no | `[]` | Commands written into installer metadata to run before installation. |
-| `post_install` | `list[string \| list[string]]` | no | `[]` | Commands written into installer metadata to run after installation. |
-| `pre_uninstall` | `list[string \| list[string]]` | no | `[]` | Commands written into installer metadata to run before uninstall. |
-| `post_uninstall` | `list[string \| list[string]]` | no | `[]` | Commands written into installer metadata to run after uninstall. |
+| `pre_install` | `list[list[string]]` | no | `[]` | Argv commands written into installer metadata to run before installation. |
+| `post_install` | `list[list[string]]` | no | `[]` | Argv commands written into installer metadata to run after installation. |
+| `pre_uninstall` | `list[list[string]]` | no | `[]` | Argv commands written into installer metadata to run before uninstall. |
+| `post_uninstall` | `list[list[string]]` | no | `[]` | Argv commands written into installer metadata to run after uninstall. |
 
 ## `config.installer.paths`
 
@@ -76,17 +76,17 @@ Required fields can appear in examples without defaults. That means users must p
 
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `pre_process` | `list[string \| list[string]]` | no | `[]` | Commands run before dependency or release processing begins. |
-| `pre_python_bundled` | `list[string \| list[string]]` | no | `[]` | Commands run before bundled Python is materialized. |
-| `post_python_bundled` | `list[string \| list[string]]` | no | `[]` | Commands run after bundled Python is materialized. |
-| `pre_python_venv` | `list[string \| list[string]]` | no | `[]` | Commands run before the virtual environment is materialized. |
-| `post_python_venv` | `list[string \| list[string]]` | no | `[]` | Commands run after the virtual environment is materialized. |
-| `pre_dist` | `list[string \| list[string]]` | no | `[]` | Commands run before the release payload is assembled. |
-| `post_dist` | `list[string \| list[string]]` | no | `[]` | Commands run after the release payload is assembled. |
-| `pre_github_release` | `list[string \| list[string]]` | no | `[]` | Commands run before GitHub release upload. |
-| `post_github_release` | `list[string \| list[string]]` | no | `[]` | Commands run after GitHub release upload. |
-| `post_process` | `list[string \| list[string]]` | no | `[]` | Commands run at the end of release processing. |
+| `pre_process` | `list[list[string]]` | no | `[]` | Argv commands run before dependency or release processing begins. |
+| `pre_python_bundled` | `list[list[string]]` | no | `[]` | Argv commands run before bundled Python is materialized. |
+| `post_python_bundled` | `list[list[string]]` | no | `[]` | Argv commands run after bundled Python is materialized. |
+| `pre_python_venv` | `list[list[string]]` | no | `[]` | Argv commands run before the virtual environment is materialized. |
+| `post_python_venv` | `list[list[string]]` | no | `[]` | Argv commands run after the virtual environment is materialized. |
+| `pre_dist` | `list[list[string]]` | no | `[]` | Argv commands run before the release payload is assembled. |
+| `post_dist` | `list[list[string]]` | no | `[]` | Argv commands run after the release payload is assembled. |
+| `pre_github_release` | `list[list[string]]` | no | `[]` | Argv commands run before GitHub release upload. |
+| `post_github_release` | `list[list[string]]` | no | `[]` | Argv commands run after GitHub release upload. |
+| `post_process` | `list[list[string]]` | no | `[]` | Argv commands run at the end of release processing. |
 
 ## Command Values
 
-Hook fields are `list[string | list[string]]`. A string is run as a command line. A list of strings is run as argv without shell splitting.
+Hook fields are `list[list[string]]`. Each command is an argv list. Use an explicit shell argv, such as `[cmd, /c, ...]`, when shell behavior is required.
