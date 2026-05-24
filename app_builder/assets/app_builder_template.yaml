@@ -16,36 +16,13 @@ python_bundled:
   # Default if omitted: 3.11.1.
   python_version: 3.12.10
 
-  # Optional string. Pip version specifier installed into the bundled runtime. Default if
-  # omitted: 23.2.1.
-  pip_version: 24.*
-
-  # Optional list[string]. Inline pip requirements installed into the bundled runtime.
-  # Default if omitted: [].
-  requirements:
-    - pyyaml>=6
-
-  # Optional list[string]. Project-relative requirement file globs installed into the
-  # bundled runtime. Default if omitted: [].
-  requirements_files:
-    - requirements.txt
-
-# Optional, nullable mapping | null. Optional virtual environment derived from bundled
-# Python when available. Set to null to disable. Default if omitted: PythonVenvOptions
-# defaults.
+# Optional, nullable mapping | null. Optional Poetry dev virtual environment derived from
+# bundled Python when available. Set to null to disable. Default if omitted:
+# PythonVenvOptions defaults.
 python_venv:
-  # Optional string. Project-relative directory where the derived virtual environment is
-  # created. Default if omitted: venv.
+  # Optional string. Project-relative directory where the Poetry dev virtual environment
+  # is created. Default if omitted: venv.
   path: venv
-
-  # Optional list[string]. Inline pip requirements installed into the virtual environment.
-  # Default if omitted: [].
-  requirements:
-    - mypy
-
-  # Optional list[string]. Project-relative requirement file globs installed into the
-  # virtual environment. Default if omitted: [].
-  requirements_files: []
 
 # Required mapping. Required installer metadata and release payload settings.
 installer:

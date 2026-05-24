@@ -10,7 +10,7 @@ Required fields can appear in examples without defaults. That means users must p
 | --- | --- | --- | --- | --- |
 | `app_builder_version` | `string \| null` | no | `v1.0.0` | Accepted as metadata only. Version dispatch is intentionally disabled for now. |
 | `python_bundled` | `mapping \| null` | no | `PythonBundledOptions defaults` | Optional bundled Python runtime. Set to null to disable. |
-| `python_venv` | `mapping \| null` | no | `PythonVenvOptions defaults` | Optional virtual environment derived from bundled Python when available. Set to null to disable. |
+| `python_venv` | `mapping \| null` | no | `PythonVenvOptions defaults` | Optional Poetry dev virtual environment derived from bundled Python when available. Set to null to disable. |
 | `installer` | `mapping` | yes | required | Required installer metadata and release payload settings. |
 | `build_hooks` | `mapping` | no | `BuildHooks defaults` | Build and release hook command declarations. |
 
@@ -20,17 +20,12 @@ Required fields can appear in examples without defaults. That means users must p
 | --- | --- | --- | --- | --- |
 | `path` | `string` | no | `bin/python` | Project-relative directory where the bundled Python runtime is materialized. |
 | `python_version` | `string` | no | `3.11.1` | NuGet Python package version or version prefix to materialize. |
-| `pip_version` | `string` | no | `23.2.1` | Pip version specifier installed into the bundled runtime. |
-| `requirements` | `list[string]` | no | `[]` | Inline pip requirements installed into the bundled runtime. |
-| `requirements_files` | `list[string]` | no | `[]` | Project-relative requirement file globs installed into the bundled runtime. |
 
 ## `config.python_venv`
 
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `path` | `string` | no | `venv` | Project-relative directory where the derived virtual environment is created. |
-| `requirements` | `list[string]` | no | `[]` | Inline pip requirements installed into the virtual environment. |
-| `requirements_files` | `list[string]` | no | `[]` | Project-relative requirement file globs installed into the virtual environment. |
+| `path` | `string` | no | `venv` | Project-relative directory where the Poetry dev virtual environment is created. |
 
 ## `config.installer`
 

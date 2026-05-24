@@ -19,6 +19,13 @@ from typing import Any
 from zipfile import ZipFile
 
 from .config import load_project_config
+from .poetry_dependencies import (
+    DEV_GROUP,
+    MAIN_GROUP,
+    PoetryLock,
+    ensure_poetry_lock,
+    install_locked_poetry_dependencies,
+)
 from .schema import PythonBundledOptions
 
 NUGET_PYTHON_PACKAGE_ID = "python"
@@ -53,46 +60,6 @@ def _bundled_python_executable(python_root: Path) -> Path:
     return bundled_python_executable(python_root)
 
 
-def _install_requirements(
-    python_executable: Path,
-    requirements: list[str],
-    requirement_files: list[Path],
-) -> None:
-    if not requirements and not requirement_files:
-        return
-    command = [
-        str(python_executable),
-        "-E",
-        "-m",
-        "pip",
-        "install",
-        "--upgrade",
-        "--no-warn-script-location",
-        "--disable-pip-version-check",
-    ]
-    command.extend(requirements)
-    for requirement_file in requirement_files:
-        command.extend(["-r", str(requirement_file)])
-    subprocess.run(command, check=True)
-
-
-def _install_pip_version(python_executable: Path, pip_version: str) -> None:
-    subprocess.run(
-        [
-            str(python_executable),
-            "-E",
-            "-m",
-            "pip",
-            "install",
-            "--upgrade",
-            f"pip=={pip_version}",
-            "--no-warn-script-location",
-            "--disable-pip-version-check",
-        ],
-        check=True,
-    )
-
-
 def _ensure_pip(python_executable: Path) -> None:
     subprocess.run(
         [
@@ -105,18 +72,6 @@ def _ensure_pip(python_executable: Path) -> None:
         ],
         check=True,
     )
-
-
-def _expand_requirement_files(project_root: Path, patterns: list[str]) -> list[Path]:
-    files: list[Path] = []
-    for pattern in patterns:
-        matched = list(project_root.glob(os.path.expandvars(pattern)))
-        if not matched:
-            raise FileNotFoundError(
-                f"No requirements file matched pattern '{pattern}'."
-            )
-        files.extend(path for path in matched if path.is_file())
-    return files
 
 
 def _create_venv(target: Path, *, python_executable: Path | None = None) -> Path:
@@ -527,14 +482,15 @@ def establish_bundled_python(
 def _ensure_bundled_python(
     project_root: Path,
     options: PythonBundledOptions,
+    poetry_lock: PoetryLock,
 ) -> Path:
     python_executable = establish_bundled_python(project_root, options)
     _ensure_pip(python_executable)
-    _install_pip_version(python_executable, options.pip_version)
-    _install_requirements(
-        python_executable,
-        options.requirements,
-        _expand_requirement_files(project_root, options.requirements_files),
+    install_locked_poetry_dependencies(
+        project_root=project_root,
+        python_executable=python_executable,
+        poetry_lock=poetry_lock,
+        groups={MAIN_GROUP},
     )
     return python_executable
 
@@ -658,25 +614,34 @@ def ensure_python_environments(project_root: Path) -> PythonEnvironmentResult:
     bundled_python: Path | None = None
     bundled_root: Path | None = None
     venv_python: Path | None = None
+    poetry_lock: PoetryLock | None = None
+
+    if config.python_bundled is not None or config.python_venv is not None:
+        poetry_lock = ensure_poetry_lock(project_root)
 
     if config.python_bundled is not None:
-        bundled_python = _ensure_bundled_python(project_root, config.python_bundled)
+        assert poetry_lock is not None
+        bundled_python = _ensure_bundled_python(
+            project_root, config.python_bundled, poetry_lock
+        )
         bundled_root = project_root / config.python_bundled.path
 
     if config.python_venv is not None:
+        assert poetry_lock is not None
         venv_root = project_root / config.python_venv.path
         if bundled_root is not None:
             venv_python = _create_venv_from_bundled_python(venv_root, bundled_root)
+            venv_groups = {DEV_GROUP}
         else:
             venv_python = _create_venv(
                 venv_root, python_executable=Path(sys.executable)
             )
-        _install_requirements(
-            venv_python,
-            config.python_venv.requirements,
-            _expand_requirement_files(
-                project_root, config.python_venv.requirements_files
-            ),
+            venv_groups = {MAIN_GROUP, DEV_GROUP}
+        install_locked_poetry_dependencies(
+            project_root=project_root,
+            python_executable=venv_python,
+            poetry_lock=poetry_lock,
+            groups=venv_groups,
         )
 
     return PythonEnvironmentResult(

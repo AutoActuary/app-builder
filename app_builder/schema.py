@@ -22,39 +22,14 @@ class PythonBundledOptions:
         description="NuGet Python package version or version prefix to materialize.",
         example="3.12.10",
     )
-    pip_version: str = config_field(
-        default="23.2.1",
-        description="Pip version specifier installed into the bundled runtime.",
-        example="24.*",
-    )
-    requirements: list[str] = config_field(
-        default_factory=list,
-        description="Inline pip requirements installed into the bundled runtime.",
-        example_factory=lambda: ["pyyaml>=6"],
-    )
-    requirements_files: list[str] = config_field(
-        default_factory=list,
-        description="Project-relative requirement file globs installed into the bundled runtime.",
-        example_factory=lambda: ["requirements.txt"],
-    )
 
 
 @dataclass(slots=True)
 class PythonVenvOptions:
     path: str = config_field(
         default="venv",
-        description="Project-relative directory where the derived virtual environment is created.",
+        description="Project-relative directory where the Poetry dev virtual environment is created.",
         example="venv",
-    )
-    requirements: list[str] = config_field(
-        default_factory=list,
-        description="Inline pip requirements installed into the virtual environment.",
-        example_factory=lambda: ["mypy"],
-    )
-    requirements_files: list[str] = config_field(
-        default_factory=list,
-        description="Project-relative requirement file globs installed into the virtual environment.",
-        example_factory=lambda: [],
     )
 
 
@@ -228,7 +203,7 @@ class AppBuilderConfig:
     )
     python_venv: PythonVenvOptions | None = config_field(
         default_factory=PythonVenvOptions,
-        description="Optional virtual environment derived from bundled Python when available. Set to null to disable.",
+        description="Optional Poetry dev virtual environment derived from bundled Python when available. Set to null to disable.",
     )
     installer: InstallerOptions = config_field(
         description="Required installer metadata and release payload settings.",

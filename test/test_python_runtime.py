@@ -11,6 +11,7 @@ from zipfile import ZipFile
 from click.testing import CliRunner
 
 from app_builder.main import main
+from app_builder.poetry_dependencies import DEV_GROUP, MAIN_GROUP, PoetryLock
 from app_builder.python_runtime import (
     NuGetPythonPackage,
     PythonVersionNotFoundError,
@@ -25,6 +26,7 @@ from app_builder.python_runtime import (
     _venv_matches_bundled_python,
     _write_nuget_source_marker,
     _write_base_site_packages,
+    ensure_python_environments,
 )
 
 
@@ -163,6 +165,68 @@ class TestBundledPythonCli(unittest.TestCase):
         ensure_bundled.assert_called_once_with(project_root.resolve())
         ensure_all.assert_not_called()
         self.assertIn(str(bundled_python), result.output)
+
+
+class TestPoetryDependencyPlacement(unittest.TestCase):
+    def test_main_group_installs_to_bundled_python_and_dev_group_to_venv(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            (project_root / "app_builder.yaml").write_text(
+                """
+python_bundled:
+  path: bin/python
+python_venv:
+  path: venv
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+""".strip(),
+                encoding="utf-8",
+            )
+            bundled_python = project_root / "bin" / "python" / "python" / "python.exe"
+            venv_python = project_root / "venv" / "Scripts" / "python.exe"
+            poetry_lock = PoetryLock(packages=())
+
+            with (
+                patch(
+                    "app_builder.python_runtime.ensure_poetry_lock",
+                    return_value=poetry_lock,
+                ) as ensure_lock,
+                patch(
+                    "app_builder.python_runtime.establish_bundled_python",
+                    return_value=bundled_python,
+                ),
+                patch("app_builder.python_runtime._ensure_pip"),
+                patch(
+                    "app_builder.python_runtime._create_venv_from_bundled_python",
+                    return_value=venv_python,
+                ),
+                patch(
+                    "app_builder.python_runtime.install_locked_poetry_dependencies"
+                ) as install_locked,
+            ):
+                result = ensure_python_environments(project_root)
+
+        self.assertEqual(bundled_python, result.python_bundled)
+        self.assertEqual(venv_python, result.python_venv)
+        ensure_lock.assert_called_once_with(project_root)
+        self.assertEqual(
+            [
+                {
+                    "project_root": project_root,
+                    "python_executable": bundled_python,
+                    "poetry_lock": poetry_lock,
+                    "groups": {MAIN_GROUP},
+                },
+                {
+                    "project_root": project_root,
+                    "python_executable": venv_python,
+                    "poetry_lock": poetry_lock,
+                    "groups": {DEV_GROUP},
+                },
+            ],
+            [call.kwargs for call in install_locked.call_args_list],
+        )
 
 
 class TestBundledPythonVenvSupport(unittest.TestCase):
