@@ -10,6 +10,7 @@
 - Optional `pydantic` adapters exist for richer schema tooling when that dependency is present.
 - The release flow is explicit: build hooks, optional NuGet-sourced Python, optional Autory-style venv, payload packaging, installer bundle creation, and optional GitHub release upload.
 - Python dependencies are declared in `pyproject.toml` and resolved by Poetry; `app_builder.yaml` no longer carries pip requirement lists.
+- `python_venv` can stand alone: when `python_bundled` is disabled, app-builder materializes a self-contained NuGet Python under `venv/python` and ExeWrap-backed `venv/Scripts/python.exe` shims.
 
 ## Commands
 

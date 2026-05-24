@@ -26,6 +26,7 @@ Required fields can appear in examples without defaults. That means users must p
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `path` | `string` | no | `venv` | Project-relative directory where the Poetry dev virtual environment is created. |
+| `python_version` | `string` | no | `3.11.1` | NuGet Python package version or version prefix used when the virtual environment is self-contained because python_bundled is disabled. |
 
 ## `config.installer`
 

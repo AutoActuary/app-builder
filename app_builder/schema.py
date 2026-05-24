@@ -31,6 +31,11 @@ class PythonVenvOptions:
         description="Project-relative directory where the Poetry dev virtual environment is created.",
         example="venv",
     )
+    python_version: str = config_field(
+        default="3.11.1",
+        description="NuGet Python package version or version prefix used when the virtual environment is self-contained because python_bundled is disabled.",
+        example="3.12.10",
+    )
 
 
 @dataclass(slots=True)

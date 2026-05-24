@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
-import venv
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,6 +27,7 @@ from .poetry_dependencies import (
     install_locked_poetry_dependencies,
 )
 from .schema import PythonBundledOptions
+from .schema import PythonVenvOptions
 
 NUGET_PYTHON_PACKAGE_ID = "python"
 NUGET_FLAT_CONTAINER_BASE_URL = "https://api.nuget.org/v3-flatcontainer"
@@ -36,6 +37,12 @@ NUGET_PYTHON_INDEX_URL = (
 _VERSION_PATTERN_RE = re.compile(r"^\d+(?:\.\d+)*(?:[-+][0-9A-Za-z_.-]+)?$")
 _NUGET_SOURCE_MARKER = ".app-builder-python-source.json"
 _NUGET_PACKAGE_PAYLOAD_ROOT = "tools"
+EXE_WRAP_LATEST_RELEASE_API_URL = (
+    "https://api.github.com/repos/AutoActuary/ExeWrap/releases/latest"
+)
+_EXE_WRAP_CONFIG_START_MARKER = b"8c0e8d4c-32af-4fd8-9c68-6a0f97efeb6a"
+_EXE_WRAP_CONSOLE_LAUNCHER = "ExeWrap-console.exe"
+_EXE_WRAP_WINDOWED_LAUNCHER = "ExeWrap-windowed.exe"
 
 
 class PythonVersionNotFoundError(RuntimeError):
@@ -72,29 +79,6 @@ def _ensure_pip(python_executable: Path) -> None:
         ],
         check=True,
     )
-
-
-def _create_venv(target: Path, *, python_executable: Path | None = None) -> Path:
-    target_python = _python_executable(target)
-    if target_python.exists():
-        return target_python
-    if target.exists():
-        shutil.rmtree(target)
-    if python_executable is None:
-        builder = venv.EnvBuilder(
-            with_pip=True,
-            clear=False,
-            symlinks=False,
-            upgrade=False,
-        )
-        builder.create(str(target))
-        return target_python
-
-    subprocess.run(
-        [str(python_executable), "-m", "venv", str(target), "--copies"],
-        check=True,
-    )
-    return target_python
 
 
 def _matches_version_pattern(pattern: str | None, version: str) -> bool:
@@ -297,6 +281,13 @@ class NuGetPythonPackage:
     download_url: str
 
 
+@dataclass(frozen=True, slots=True)
+class ExeWrapPackage:
+    asset_name: str
+    download_url: str
+    digest: str | None
+
+
 def _resolve_nuget_python_package(python_version: str | None) -> NuGetPythonPackage:
     versions = _load_nuget_python_versions()
     selected_version = _select_nuget_python_version(versions, python_version)
@@ -326,6 +317,193 @@ def _download_cache_path(url: str) -> Path:
     if not filename:
         filename = f"{NUGET_PYTHON_PACKAGE_ID}.nupkg"
     return Path(tempfile.gettempdir(), "app-builder-downloads", filename)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as input_file:
+        for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _expected_sha256(digest: str | None) -> str | None:
+    if digest is None:
+        return None
+    if not digest.startswith("sha256:"):
+        return None
+    return digest.split(":", 1)[1].lower()
+
+
+def _ensure_downloaded_file(url: str, digest: str | None = None) -> Path:
+    path = _download_cache_path(url)
+    expected = _expected_sha256(digest)
+    if path.exists() and expected is not None and _sha256_file(path) != expected:
+        path.unlink()
+    if not path.exists():
+        _download_file(url, path)
+    if expected is not None and _sha256_file(path) != expected:
+        raise RuntimeError(
+            f"Downloaded file {path} did not match expected sha256 digest."
+        )
+    return path
+
+
+def _exe_wrap_platform_tag() -> str:
+    machine = platform.machine().lower()
+    if machine in {"amd64", "x86_64"}:
+        return "windows-x64"
+    if machine in {"arm64", "aarch64"}:
+        return "windows-arm64"
+    if machine in {"x86", "i386", "i686"}:
+        return "windows-x86"
+    raise RuntimeError(
+        f"ExeWrap does not publish a Windows launcher for architecture {machine!r}."
+    )
+
+
+def _load_latest_exe_wrap_release() -> Mapping[str, Any]:
+    request = urllib.request.Request(
+        EXE_WRAP_LATEST_RELEASE_API_URL,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "app-builder",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request) as response:
+            payload: Any = json.loads(response.read().decode("utf-8"))
+    except urllib.error.URLError as error:
+        raise RuntimeError(
+            f"Could not query latest ExeWrap release from {EXE_WRAP_LATEST_RELEASE_API_URL}: {error}."
+        ) from error
+    if not isinstance(payload, Mapping):
+        raise RuntimeError("Unexpected ExeWrap release response: expected object.")
+    return payload
+
+
+def _select_exe_wrap_package(
+    release: Mapping[str, Any],
+    platform_tag: str,
+) -> ExeWrapPackage:
+    assets = release.get("assets")
+    if not isinstance(assets, list):
+        raise RuntimeError("Unexpected ExeWrap release response: expected assets list.")
+    expected_suffix = f"-{platform_tag}.zip"
+    for asset in assets:
+        if not isinstance(asset, Mapping):
+            continue
+        name = asset.get("name")
+        download_url = asset.get("browser_download_url")
+        digest = asset.get("digest")
+        if (
+            isinstance(name, str)
+            and name.endswith(expected_suffix)
+            and isinstance(download_url, str)
+            and (digest is None or isinstance(digest, str))
+        ):
+            return ExeWrapPackage(
+                asset_name=name,
+                download_url=download_url,
+                digest=digest,
+            )
+    tag_name = release.get("tag_name")
+    release_name = tag_name if isinstance(tag_name, str) else "latest"
+    raise RuntimeError(
+        f"ExeWrap release {release_name} does not contain a {platform_tag} zip asset."
+    )
+
+
+def _resolve_exe_wrap_package() -> ExeWrapPackage:
+    return _select_exe_wrap_package(
+        _load_latest_exe_wrap_release(),
+        _exe_wrap_platform_tag(),
+    )
+
+
+def _exe_wrap_package_path() -> Path:
+    package = _resolve_exe_wrap_package()
+    return _ensure_downloaded_file(package.download_url, package.digest)
+
+
+def _extract_exe_wrap_launcher(
+    package_path: Path,
+    launcher_name: str,
+    destination: Path,
+) -> None:
+    with ZipFile(package_path) as zip_file:
+        for member in zip_file.infolist():
+            if Path(member.filename).name != launcher_name or member.is_dir():
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with zip_file.open(member) as source, destination.open("wb") as output:
+                shutil.copyfileobj(source, output)
+            return
+    raise RuntimeError(
+        f"ExeWrap package {package_path} did not contain {launcher_name}."
+    )
+
+
+def _exe_wrap_python_config(target_exe_name: str) -> bytes:
+    return (
+        "{\n"
+        '  "command": [\n'
+        f'    "@{{exe_dir:parent:join("python"):join("{target_exe_name}")}}",\n'
+        "    @{args}\n"
+        "  ]\n"
+        "}\n"
+    ).encode("utf-8")
+
+
+def _stamp_exe_wrap_launcher(
+    base_launcher: Path,
+    output_path: Path,
+    config: bytes,
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(
+        base_launcher.read_bytes() + _EXE_WRAP_CONFIG_START_MARKER + config
+    )
+
+
+def _exe_wrap_launcher_matches(output_path: Path, config: bytes) -> bool:
+    if not output_path.exists():
+        return False
+    payload = output_path.read_bytes()
+    marker_index = payload.rfind(_EXE_WRAP_CONFIG_START_MARKER)
+    if marker_index < 0:
+        return False
+    embedded_config = payload[marker_index + len(_EXE_WRAP_CONFIG_START_MARKER) :]
+    return embedded_config == config
+
+
+def _install_exe_wrap_python_launchers(
+    venv_root: Path,
+    *,
+    package_path: Path | None = None,
+) -> None:
+    if package_path is None:
+        package_path = _exe_wrap_package_path()
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+        console_launcher = temp_dir / _EXE_WRAP_CONSOLE_LAUNCHER
+        windowed_launcher = temp_dir / _EXE_WRAP_WINDOWED_LAUNCHER
+        _extract_exe_wrap_launcher(
+            package_path, _EXE_WRAP_CONSOLE_LAUNCHER, console_launcher
+        )
+        _extract_exe_wrap_launcher(
+            package_path, _EXE_WRAP_WINDOWED_LAUNCHER, windowed_launcher
+        )
+        _stamp_exe_wrap_launcher(
+            console_launcher,
+            _python_executable(venv_root),
+            _exe_wrap_python_config("python.exe"),
+        )
+        _stamp_exe_wrap_launcher(
+            windowed_launcher,
+            venv_root / "Scripts" / "pythonw.exe",
+            _exe_wrap_python_config("pythonw.exe"),
+        )
 
 
 def _source_marker_path(python_root: Path) -> Path:
@@ -496,11 +674,19 @@ def _ensure_bundled_python(
 
 
 def _read_pyvenv_executable(venv_root: Path) -> Path | None:
+    return _read_pyvenv_path(venv_root, "executable")
+
+
+def _read_pyvenv_home(venv_root: Path) -> Path | None:
+    return _read_pyvenv_path(venv_root, "home")
+
+
+def _read_pyvenv_path(venv_root: Path, key: str) -> Path | None:
     pyvenv_cfg = venv_root / "pyvenv.cfg"
     if not pyvenv_cfg.exists():
         return None
     for line in pyvenv_cfg.read_text(encoding="utf-8").splitlines():
-        if line.lower().startswith("executable ="):
+        if line.lower().startswith(f"{key.lower()} ="):
             return Path(line.split("=", 1)[1].strip())
     return None
 
@@ -596,6 +782,53 @@ def _create_venv_from_bundled_python(venv_root: Path, bundled_root: Path) -> Pat
     return _python_executable(venv_root)
 
 
+def _self_contained_venv_python_executable(venv_root: Path) -> Path:
+    return venv_root / "python" / "python.exe"
+
+
+def _self_contained_venv_matches(
+    venv_root: Path,
+    python_version: str | None,
+) -> bool:
+    home = _read_pyvenv_home(venv_root)
+    expected_home = venv_root / "python"
+    return (
+        home is not None
+        and home.resolve() == expected_home.resolve()
+        and _python_matches(
+            _self_contained_venv_python_executable(venv_root),
+            python_version,
+        )
+        and _nuget_source_marker_matches(venv_root, python_version)
+        and _exe_wrap_launcher_matches(
+            _python_executable(venv_root),
+            _exe_wrap_python_config("python.exe"),
+        )
+        and _exe_wrap_launcher_matches(
+            venv_root / "Scripts" / "pythonw.exe",
+            _exe_wrap_python_config("pythonw.exe"),
+        )
+    )
+
+
+def _create_self_contained_venv(
+    venv_root: Path,
+    options: PythonVenvOptions,
+) -> Path:
+    if _self_contained_venv_matches(venv_root, options.python_version):
+        return _python_executable(venv_root)
+    if venv_root.exists():
+        shutil.rmtree(venv_root)
+
+    package = _resolve_nuget_python_package(options.python_version)
+    package_path = _ensure_downloaded_file(package.download_url)
+    _extract_nuget_python_package(package_path, venv_root)
+    _write_nuget_source_marker(venv_root, package)
+    _ensure_pip(_self_contained_venv_python_executable(venv_root))
+    _install_exe_wrap_python_launchers(venv_root)
+    return _python_executable(venv_root)
+
+
 @dataclass(slots=True)
 class PythonEnvironmentResult:
     python_bundled: Path | None
@@ -633,8 +866,9 @@ def ensure_python_environments(project_root: Path) -> PythonEnvironmentResult:
             venv_python = _create_venv_from_bundled_python(venv_root, bundled_root)
             venv_groups = {DEV_GROUP}
         else:
-            venv_python = _create_venv(
-                venv_root, python_executable=Path(sys.executable)
+            venv_python = _create_self_contained_venv(
+                venv_root,
+                config.python_venv,
             )
             venv_groups = {MAIN_GROUP, DEV_GROUP}
         install_locked_poetry_dependencies(

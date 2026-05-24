@@ -142,10 +142,12 @@ def _run_dependency_stages(project_root: Path) -> PythonEnvironmentResult:
         project_root,
         config.build_hooks.pre_python_bundled,
         environment=hook_env,
-        python_candidates=_host_hook_python_candidates(),
+        python_candidates=_configured_bundled_hook_python_candidates(
+            project_root, config
+        ),
     )
     env_result = materialize_python_environments(project_root)
-    bundled_candidates = _hook_python_candidates(env_result.python_bundled)
+    bundled_candidates = _bundled_hook_python_candidates(env_result)
     run_hook_commands(
         project_root,
         config.build_hooks.post_python_bundled,
@@ -177,6 +179,29 @@ def _hook_python_candidates(*candidates: Path | None) -> list[Path]:
     return [candidate for candidate in candidates if candidate is not None] + [
         Path(sys.executable)
     ]
+
+
+def _bundled_hook_python_candidates(
+    env_result: PythonEnvironmentResult,
+) -> list[Path]:
+    return _hook_python_candidates(env_result.python_bundled, env_result.python_venv)
+
+
+def _configured_bundled_hook_python_candidates(
+    project_root: Path,
+    config: AppBuilderConfig,
+) -> list[Path]:
+    bundled_python: Path | None = None
+    if config.python_bundled is not None:
+        bundled_python = bundled_python_executable(
+            project_root / config.python_bundled.path
+        )
+
+    venv_python: Path | None = None
+    if config.python_venv is not None:
+        venv_python = python_executable(project_root / config.python_venv.path)
+
+    return _hook_python_candidates(bundled_python, venv_python)
 
 
 def _runtime_hook_python_candidates(

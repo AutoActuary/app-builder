@@ -110,9 +110,9 @@ class TestBuildHookPythonSelection(unittest.TestCase):
         self.assertEqual(
             [
                 [host_python],
-                [host_python],
-                [bundled_python, host_python],
-                [bundled_python, host_python],
+                [bundled_python, venv_python, host_python],
+                [bundled_python, venv_python, host_python],
+                [bundled_python, venv_python, host_python],
                 [venv_python, bundled_python, host_python],
             ],
             [call.kwargs["python_candidates"] for call in run_hooks.call_args_list],
@@ -126,6 +126,66 @@ class TestBuildHookPythonSelection(unittest.TestCase):
                 [["post-venv"]],
             ],
             [call.args[1] for call in run_hooks.call_args_list],
+        )
+
+    def test_bundled_stage_hooks_fall_back_to_venv_when_no_bundled_python(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            (project_root / "app_builder.yaml").write_text(
+                """
+app_builder_version: v1.0.0
+python_bundled: null
+python_venv:
+  path: venv
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+  dist: dist
+  paths:
+    include: []
+build_hooks:
+  pre_process:
+    - [pre-process]
+  pre_python_bundled:
+    - [pre-bundled]
+  post_python_bundled:
+    - [post-bundled]
+  pre_python_venv:
+    - [pre-venv]
+  post_python_venv:
+    - [post-venv]
+""".strip(),
+                encoding="utf-8",
+            )
+            venv_python = python_executable(project_root / "venv")
+            env_result = PythonEnvironmentResult(
+                python_bundled=None,
+                python_venv=venv_python,
+            )
+
+            with (
+                patch(
+                    "app_builder.build.materialize_python_environments",
+                    return_value=env_result,
+                ),
+                patch("app_builder.build.run_hook_commands") as run_hooks,
+            ):
+                self.assertEqual(
+                    env_result, build_module._run_dependency_stages(project_root)
+                )
+
+        host_python = Path(sys.executable)
+        self.assertEqual(
+            [
+                [host_python],
+                [venv_python, host_python],
+                [venv_python, host_python],
+                [venv_python, host_python],
+                [venv_python, host_python],
+            ],
+            [call.kwargs["python_candidates"] for call in run_hooks.call_args_list],
         )
 
     def test_release_build_hooks_use_most_advanced_materialized_python(self) -> None:

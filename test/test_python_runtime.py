@@ -13,25 +13,40 @@ from click.testing import CliRunner
 from app_builder.main import main
 from app_builder.poetry_dependencies import DEV_GROUP, MAIN_GROUP, PoetryLock
 from app_builder.python_runtime import (
+    ExeWrapPackage,
     NuGetPythonPackage,
     PythonVersionNotFoundError,
     _copy_bundled_runtime_support,
+    _create_self_contained_venv,
     _download_cache_path,
+    _exe_wrap_launcher_matches,
+    _exe_wrap_python_config,
     _extract_nuget_python_package,
+    _install_exe_wrap_python_launchers,
     _matches_version_pattern,
     _nuget_source_marker_matches,
     _nuget_python_download_url,
     _read_base_site_packages,
     _select_nuget_python_version,
+    _select_exe_wrap_package,
+    _self_contained_venv_matches,
+    _self_contained_venv_python_executable,
     _venv_matches_bundled_python,
     _write_nuget_source_marker,
     _write_base_site_packages,
     ensure_python_environments,
 )
+from app_builder.schema import PythonVenvOptions
 
 
 def _nuget_payload_member(relative_path: str) -> str:
     return "/".join(("tools", relative_path))
+
+
+def _write_fake_exe_wrap_package(package_path: Path) -> None:
+    with ZipFile(package_path, "w") as package:
+        package.writestr("ExeWrap-console.exe", b"console-launcher")
+        package.writestr("ExeWrap-windowed.exe", b"windowed-launcher")
 
 
 class TestNuGetPythonSelection(unittest.TestCase):
@@ -140,6 +155,61 @@ class TestNuGetPythonExtraction(unittest.TestCase):
             )
 
 
+class TestExeWrapPythonLaunchers(unittest.TestCase):
+    def test_selects_exe_wrap_release_asset_for_platform(self) -> None:
+        package = _select_exe_wrap_package(
+            {
+                "tag_name": "v1.1.0",
+                "assets": [
+                    {
+                        "name": "ExeWrap-v1.1.0-windows-x86.zip",
+                        "browser_download_url": "https://example.invalid/x86.zip",
+                    },
+                    {
+                        "name": "ExeWrap-v1.1.0-windows-x64.zip",
+                        "browser_download_url": "https://example.invalid/x64.zip",
+                        "digest": "sha256:abc123",
+                    },
+                ],
+            },
+            "windows-x64",
+        )
+
+        self.assertEqual(
+            ExeWrapPackage(
+                asset_name="ExeWrap-v1.1.0-windows-x64.zip",
+                download_url="https://example.invalid/x64.zip",
+                digest="sha256:abc123",
+            ),
+            package,
+        )
+
+    def test_stamps_scripts_python_launchers_with_venv_python_targets(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            package_path = temp_dir / "ExeWrap.zip"
+            venv_root = temp_dir / "venv"
+            _write_fake_exe_wrap_package(package_path)
+
+            _install_exe_wrap_python_launchers(venv_root, package_path=package_path)
+
+            python_launcher = venv_root / "Scripts" / "python.exe"
+            pythonw_launcher = venv_root / "Scripts" / "pythonw.exe"
+            self.assertTrue(
+                _exe_wrap_launcher_matches(
+                    python_launcher, _exe_wrap_python_config("python.exe")
+                )
+            )
+            self.assertTrue(
+                _exe_wrap_launcher_matches(
+                    pythonw_launcher, _exe_wrap_python_config("pythonw.exe")
+                )
+            )
+            self.assertIn(b"console-launcher", python_launcher.read_bytes())
+            self.assertIn(b"windowed-launcher", pythonw_launcher.read_bytes())
+            self.assertIn(b"@{args}", python_launcher.read_bytes())
+
+
 class TestBundledPythonCli(unittest.TestCase):
     def test_python_command_materializes_only_bundled_runtime(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
@@ -227,6 +297,160 @@ installer:
             ],
             [call.kwargs for call in install_locked.call_args_list],
         )
+
+    def test_venv_only_materializes_self_contained_python_for_all_groups(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            (project_root / "app_builder.yaml").write_text(
+                """
+python_bundled: null
+python_venv:
+  path: venv
+  python_version: 3.12.10
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+""".strip(),
+                encoding="utf-8",
+            )
+            venv_python = project_root / "venv" / "Scripts" / "python.exe"
+            poetry_lock = PoetryLock(packages=())
+
+            with (
+                patch(
+                    "app_builder.python_runtime.ensure_poetry_lock",
+                    return_value=poetry_lock,
+                ),
+                patch(
+                    "app_builder.python_runtime._create_self_contained_venv",
+                    return_value=venv_python,
+                ) as create_venv,
+                patch(
+                    "app_builder.python_runtime.install_locked_poetry_dependencies"
+                ) as install_locked,
+            ):
+                result = ensure_python_environments(project_root)
+
+        self.assertIsNone(result.python_bundled)
+        self.assertEqual(venv_python, result.python_venv)
+        create_venv.assert_called_once()
+        self.assertEqual(project_root / "venv", create_venv.call_args.args[0])
+        self.assertEqual("3.12.10", create_venv.call_args.args[1].python_version)
+        install_locked.assert_called_once_with(
+            project_root=project_root,
+            python_executable=venv_python,
+            poetry_lock=poetry_lock,
+            groups={MAIN_GROUP, DEV_GROUP},
+        )
+
+
+class TestSelfContainedVenvSupport(unittest.TestCase):
+    def test_creates_self_contained_venv_from_nuget_python_layout(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            package_path = temp_dir / "python.3.12.10.nupkg"
+            venv_root = temp_dir / "venv"
+            with ZipFile(package_path, "w") as package:
+                package.writestr(_nuget_payload_member("python.exe"), "exe")
+                package.writestr(_nuget_payload_member("pythonw.exe"), "exe")
+                package.writestr(_nuget_payload_member("python312.dll"), "dll")
+                package.writestr(_nuget_payload_member("Lib/os.py"), "stdlib")
+                package.writestr(
+                    _nuget_payload_member("Lib/site-packages/pip/__init__.py"),
+                    "pip",
+                )
+                package.writestr(_nuget_payload_member("Scripts/pip.exe"), "pip")
+
+            with (
+                patch(
+                    "app_builder.python_runtime._resolve_nuget_python_package",
+                    return_value=NuGetPythonPackage(
+                        version="3.12.10",
+                        download_url="https://example.invalid/python.3.12.10.nupkg",
+                    ),
+                ),
+                patch(
+                    "app_builder.python_runtime._ensure_downloaded_file",
+                    return_value=package_path,
+                ),
+                patch("app_builder.python_runtime._ensure_pip") as ensure_pip,
+                patch(
+                    "app_builder.python_runtime._install_exe_wrap_python_launchers"
+                ) as install_launchers,
+            ):
+                python = _create_self_contained_venv(
+                    venv_root,
+                    PythonVenvOptions(path="venv", python_version="3.12.10"),
+                )
+
+            self.assertEqual(venv_root / "Scripts" / "python.exe", python)
+            self.assertTrue((venv_root / "python" / "python.exe").exists())
+            self.assertTrue((venv_root / "python" / "pythonw.exe").exists())
+            self.assertTrue((venv_root / "python" / "Lib" / "os.py").exists())
+            self.assertTrue(
+                (venv_root / "Lib" / "site-packages" / "pip" / "__init__.py").exists()
+            )
+            self.assertFalse(
+                (
+                    venv_root
+                    / "python"
+                    / "Lib"
+                    / "site-packages"
+                    / "pip"
+                    / "__init__.py"
+                ).exists()
+            )
+            self.assertIn(
+                "home =",
+                (venv_root / "pyvenv.cfg").read_text(encoding="utf-8"),
+            )
+            self.assertTrue(_nuget_source_marker_matches(venv_root, "3.12"))
+            ensure_pip.assert_called_once_with(
+                _self_contained_venv_python_executable(venv_root)
+            )
+            install_launchers.assert_called_once_with(venv_root)
+
+    def test_self_contained_venv_validation_checks_wrappers(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            venv_root = Path(temp_dir_str) / "venv"
+            real_python = _self_contained_venv_python_executable(venv_root)
+            real_python.parent.mkdir(parents=True)
+            real_python.write_text("python", encoding="utf-8")
+            (venv_root / "Scripts").mkdir()
+            (venv_root / "pyvenv.cfg").write_text(
+                f"home = {(venv_root / 'python').resolve().as_posix()}\n",
+                encoding="utf-8",
+            )
+            _write_nuget_source_marker(
+                venv_root,
+                NuGetPythonPackage(
+                    version="3.12.10",
+                    download_url="https://example.invalid/python.3.12.10.nupkg",
+                ),
+            )
+            (venv_root / "Scripts" / "python.exe").write_bytes(
+                b"base" + _exe_wrap_python_config("python.exe")
+            )
+            (venv_root / "Scripts" / "pythonw.exe").write_bytes(
+                b"base" + _exe_wrap_python_config("pythonw.exe")
+            )
+
+            with patch("app_builder.python_runtime._python_matches", return_value=True):
+                self.assertFalse(_self_contained_venv_matches(venv_root, "3.12"))
+
+            (venv_root / "Scripts" / "python.exe").write_bytes(
+                b"base"
+                + b"8c0e8d4c-32af-4fd8-9c68-6a0f97efeb6a"
+                + _exe_wrap_python_config("python.exe")
+            )
+            (venv_root / "Scripts" / "pythonw.exe").write_bytes(
+                b"base"
+                + b"8c0e8d4c-32af-4fd8-9c68-6a0f97efeb6a"
+                + _exe_wrap_python_config("pythonw.exe")
+            )
+
+            with patch("app_builder.python_runtime._python_matches", return_value=True):
+                self.assertTrue(_self_contained_venv_matches(venv_root, "3.12"))
 
 
 class TestBundledPythonVenvSupport(unittest.TestCase):

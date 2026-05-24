@@ -24,6 +24,11 @@ python_venv:
   # is created. Default if omitted: venv.
   path: venv
 
+  # Optional string. NuGet Python package version or version prefix used when the virtual
+  # environment is self-contained because python_bundled is disabled. Default if omitted:
+  # 3.11.1.
+  python_version: 3.12.10
+
 # Required mapping. Required installer metadata and release payload settings.
 installer:
   # Required string. Human-facing application name.
