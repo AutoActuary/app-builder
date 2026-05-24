@@ -67,6 +67,14 @@ def _bundled_python_executable(python_root: Path) -> Path:
     return bundled_python_executable(python_root)
 
 
+def _self_contained_venv_launcher_executable(venv_root: Path) -> Path:
+    return venv_root / "Scripts" / "python.exe"
+
+
+def _self_contained_venv_windowed_launcher_executable(venv_root: Path) -> Path:
+    return venv_root / "Scripts" / "pythonw.exe"
+
+
 def _ensure_pip(python_executable: Path) -> None:
     subprocess.run(
         [
@@ -496,12 +504,12 @@ def _install_exe_wrap_python_launchers(
         )
         _stamp_exe_wrap_launcher(
             console_launcher,
-            _python_executable(venv_root),
+            _self_contained_venv_launcher_executable(venv_root),
             _exe_wrap_python_config("python.exe"),
         )
         _stamp_exe_wrap_launcher(
             windowed_launcher,
-            venv_root / "Scripts" / "pythonw.exe",
+            _self_contained_venv_windowed_launcher_executable(venv_root),
             _exe_wrap_python_config("pythonw.exe"),
         )
 
@@ -801,11 +809,11 @@ def _self_contained_venv_matches(
         )
         and _nuget_source_marker_matches(venv_root, python_version)
         and _exe_wrap_launcher_matches(
-            _python_executable(venv_root),
+            _self_contained_venv_launcher_executable(venv_root),
             _exe_wrap_python_config("python.exe"),
         )
         and _exe_wrap_launcher_matches(
-            venv_root / "Scripts" / "pythonw.exe",
+            _self_contained_venv_windowed_launcher_executable(venv_root),
             _exe_wrap_python_config("pythonw.exe"),
         )
     )
@@ -816,7 +824,7 @@ def _create_self_contained_venv(
     options: PythonVenvOptions,
 ) -> Path:
     if _self_contained_venv_matches(venv_root, options.python_version):
-        return _python_executable(venv_root)
+        return _self_contained_venv_launcher_executable(venv_root)
     if venv_root.exists():
         shutil.rmtree(venv_root)
 
@@ -826,7 +834,7 @@ def _create_self_contained_venv(
     _write_nuget_source_marker(venv_root, package)
     _ensure_pip(_self_contained_venv_python_executable(venv_root))
     _install_exe_wrap_python_launchers(venv_root)
-    return _python_executable(venv_root)
+    return _self_contained_venv_launcher_executable(venv_root)
 
 
 @dataclass(slots=True)
