@@ -10,7 +10,6 @@ from app_builder.schema_export import (
     validate_app_builder_mapping,
 )
 
-
 VALID_MAPPING = {
     "installer": {
         "name": "Demo",
