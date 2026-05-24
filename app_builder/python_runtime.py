@@ -366,17 +366,11 @@ def _download_file(url: str, destination: Path) -> None:
         raise RuntimeError(f"Could not download {url}: {error}.") from error
 
 
-def _download_package_to_temp(
-    package: NuGetPythonPackage,
-    temp_root: Path,
-) -> Path:
-    url = package.download_url
+def _download_cache_path(url: str) -> Path:
     filename = Path(urllib.parse.urlsplit(url).path).name
     if not filename:
-        filename = f"{NUGET_PYTHON_PACKAGE_ID}.{package.version}.nupkg"
-    package_path = temp_root / filename
-    _download_file(url, package_path)
-    return package_path
+        filename = f"{NUGET_PYTHON_PACKAGE_ID}.nupkg"
+    return Path(tempfile.gettempdir(), "app-builder-downloads", filename)
 
 
 def _source_marker_path(python_root: Path) -> Path:
@@ -515,10 +509,11 @@ def establish_bundled_python(
         and _nuget_source_marker_matches(python_root, options.python_version)
     ):
         package = _resolve_nuget_python_package(options.python_version)
-        with tempfile.TemporaryDirectory() as temp_dir_str:
-            package_path = _download_package_to_temp(package, Path(temp_dir_str))
-            _extract_nuget_python_package(package_path, python_root)
-            _write_nuget_source_marker(python_root, package)
+        package_path = _download_cache_path(package.download_url)
+        if not package_path.exists():
+            _download_file(package.download_url, package_path)
+        _extract_nuget_python_package(package_path, python_root)
+        _write_nuget_source_marker(python_root, package)
 
     python_executable = _bundled_python_executable(python_root)
     if not _python_matches(python_executable, options.python_version):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,7 +15,7 @@ from app_builder.python_runtime import (
     NuGetPythonPackage,
     PythonVersionNotFoundError,
     _copy_bundled_runtime_support,
-    _download_package_to_temp,
+    _download_cache_path,
     _extract_nuget_python_package,
     _matches_version_pattern,
     _nuget_source_marker_matches,
@@ -70,19 +71,15 @@ class TestNuGetPythonSelection(unittest.TestCase):
 
 
 class TestNuGetPythonExtraction(unittest.TestCase):
-    def test_download_package_uses_supplied_temporary_directory(self) -> None:
-        with TemporaryDirectory() as temp_dir_str:
-            temp_dir = Path(temp_dir_str)
-            package = NuGetPythonPackage(
-                version="3.12.10",
-                download_url=_nuget_python_download_url("3.12.10"),
-            )
-
-            with patch("app_builder.python_runtime._download_file") as download:
-                package_path = _download_package_to_temp(package, temp_dir)
-
-            self.assertEqual(temp_dir / "python.3.12.10.nupkg", package_path)
-            download.assert_called_once_with(package.download_url, package_path)
+    def test_download_cache_path_uses_os_temp_download_cache(self) -> None:
+        self.assertEqual(
+            Path(
+                tempfile.gettempdir(),
+                "app-builder-downloads",
+                "python.3.12.10.nupkg",
+            ),
+            _download_cache_path(_nuget_python_download_url("3.12.10")),
+        )
 
     def test_source_marker_records_nuget_package_origin(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
