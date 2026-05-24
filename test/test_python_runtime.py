@@ -14,6 +14,7 @@ from app_builder.python_runtime import (
     NuGetPythonPackage,
     PythonVersionNotFoundError,
     _copy_bundled_runtime_support,
+    _download_package_to_temp,
     _extract_nuget_python_package,
     _matches_version_pattern,
     _nuget_source_marker_matches,
@@ -24,6 +25,10 @@ from app_builder.python_runtime import (
     _write_nuget_source_marker,
     _write_base_site_packages,
 )
+
+
+def _nuget_payload_member(relative_path: str) -> str:
+    return "/".join(("tools", relative_path))
 
 
 class TestNuGetPythonSelection(unittest.TestCase):
@@ -65,6 +70,20 @@ class TestNuGetPythonSelection(unittest.TestCase):
 
 
 class TestNuGetPythonExtraction(unittest.TestCase):
+    def test_download_package_uses_supplied_temporary_directory(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            package = NuGetPythonPackage(
+                version="3.12.10",
+                download_url=_nuget_python_download_url("3.12.10"),
+            )
+
+            with patch("app_builder.python_runtime._download_file") as download:
+                package_path = _download_package_to_temp(package, temp_dir)
+
+            self.assertEqual(temp_dir / "python.3.12.10.nupkg", package_path)
+            download.assert_called_once_with(package.download_url, package_path)
+
     def test_source_marker_records_nuget_package_origin(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             python_root = Path(temp_dir_str) / "bin" / "python"
@@ -82,17 +101,20 @@ class TestNuGetPythonExtraction(unittest.TestCase):
             self.assertTrue(_nuget_source_marker_matches(python_root, "3.12.10"))
             self.assertFalse(_nuget_source_marker_matches(python_root, "3.11"))
 
-    def test_extracts_nuget_tools_into_bundled_python_layout(self) -> None:
+    def test_extracts_nuget_payload_into_bundled_python_layout(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
             package_path = temp_dir / "python.3.12.10.nupkg"
             python_root = temp_dir / "bin" / "python"
 
             with ZipFile(package_path, "w") as package:
-                package.writestr("tools/python.exe", "exe")
-                package.writestr("tools/python312.dll", "dll")
-                package.writestr("tools/Lib/os.py", "stdlib")
-                package.writestr("tools/Lib/site-packages/pip/__init__.py", "pip")
+                package.writestr(_nuget_payload_member("python.exe"), "exe")
+                package.writestr(_nuget_payload_member("python312.dll"), "dll")
+                package.writestr(_nuget_payload_member("Lib/os.py"), "stdlib")
+                package.writestr(
+                    _nuget_payload_member("Lib/site-packages/pip/__init__.py"),
+                    "pip",
+                )
                 package.writestr("ignored.txt", "ignored")
 
             _extract_nuget_python_package(package_path, python_root)
@@ -159,6 +181,7 @@ class TestBundledPythonVenvSupport(unittest.TestCase):
                 bundled_root / "Lib" / "site-packages" / "package.txt",
                 bundled_root / "python" / "python.exe",
                 bundled_root / "tools" / "helper.dll",
+                bundled_root / "support" / "helper.dll",
             ]:
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 file_path.write_text("x", encoding="utf-8")
@@ -167,7 +190,8 @@ class TestBundledPythonVenvSupport(unittest.TestCase):
             _copy_bundled_runtime_support(bundled_root, venv_root)
 
             self.assertTrue((venv_root / "Scripts" / "pip.exe").exists())
-            self.assertTrue((venv_root / "tools" / "helper.dll").exists())
+            self.assertTrue((venv_root / "support" / "helper.dll").exists())
+            self.assertFalse((venv_root / "tools" / "helper.dll").exists())
             self.assertFalse((venv_root / "Scripts" / "python.exe").exists())
             self.assertFalse(
                 (venv_root / "Lib" / "site-packages" / "package.txt").exists()

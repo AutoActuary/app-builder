@@ -28,6 +28,7 @@ NUGET_PYTHON_INDEX_URL = (
 )
 _VERSION_PATTERN_RE = re.compile(r"^\d+(?:\.\d+)*(?:[-+][0-9A-Za-z_.-]+)?$")
 _NUGET_SOURCE_MARKER = ".app-builder-python-source.json"
+_NUGET_PACKAGE_PAYLOAD_ROOT = "tools"
 
 
 class PythonVersionNotFoundError(RuntimeError):
@@ -365,9 +366,17 @@ def _download_file(url: str, destination: Path) -> None:
         raise RuntimeError(f"Could not download {url}: {error}.") from error
 
 
-def _download_cache_path(url: str) -> Path:
+def _download_package_to_temp(
+    package: NuGetPythonPackage,
+    temp_root: Path,
+) -> Path:
+    url = package.download_url
     filename = Path(urllib.parse.urlsplit(url).path).name
-    return Path(tempfile.gettempdir(), "app-builder-downloads", filename)
+    if not filename:
+        filename = f"{NUGET_PYTHON_PACKAGE_ID}.{package.version}.nupkg"
+    package_path = temp_root / filename
+    _download_file(url, package_path)
+    return package_path
 
 
 def _source_marker_path(python_root: Path) -> Path:
@@ -426,18 +435,18 @@ def _safe_archive_target(root: Path, relative_parts: tuple[str, ...]) -> Path:
     return destination
 
 
-def _extract_nuget_tools(package_path: Path, tools_root: Path) -> None:
+def _extract_nuget_python_payload(package_path: Path, payload_root: Path) -> None:
     extracted_any = False
     with ZipFile(package_path) as zip_file:
         for member in zip_file.infolist():
             parts = Path(member.filename).parts
-            if not parts or parts[0].lower() != "tools":
+            if not parts or parts[0].lower() != _NUGET_PACKAGE_PAYLOAD_ROOT:
                 continue
             relative_parts = tuple(parts[1:])
             if not relative_parts:
                 continue
             extracted_any = True
-            target = _safe_archive_target(tools_root, relative_parts)
+            target = _safe_archive_target(payload_root, relative_parts)
             if member.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue
@@ -446,17 +455,17 @@ def _extract_nuget_tools(package_path: Path, tools_root: Path) -> None:
                 shutil.copyfileobj(source, destination)
 
     if not extracted_any:
-        raise RuntimeError("NuGet Python package did not contain a tools/ directory.")
+        raise RuntimeError("NuGet Python package did not contain a Python payload.")
 
 
 def _extract_nuget_python_package(package_path: Path, python_root: Path) -> None:
     if python_root.exists():
         shutil.rmtree(python_root)
     with tempfile.TemporaryDirectory() as temp_dir_str:
-        extracted_python = Path(temp_dir_str, "tools")
-        _extract_nuget_tools(package_path, extracted_python)
+        extracted_python = Path(temp_dir_str, "python-payload")
+        _extract_nuget_python_payload(package_path, extracted_python)
         if not (extracted_python / "python.exe").exists():
-            raise RuntimeError("NuGet Python package did not contain tools/python.exe.")
+            raise RuntimeError("NuGet Python package did not contain python.exe.")
         site_packages = extracted_python / "Lib" / "site-packages"
         scripts = extracted_python / "Scripts"
 
@@ -506,11 +515,10 @@ def establish_bundled_python(
         and _nuget_source_marker_matches(python_root, options.python_version)
     ):
         package = _resolve_nuget_python_package(options.python_version)
-        package_path = _download_cache_path(package.download_url)
-        if not package_path.exists():
-            _download_file(package.download_url, package_path)
-        _extract_nuget_python_package(package_path, python_root)
-        _write_nuget_source_marker(python_root, package)
+        with tempfile.TemporaryDirectory() as temp_dir_str:
+            package_path = _download_package_to_temp(package, Path(temp_dir_str))
+            _extract_nuget_python_package(package_path, python_root)
+            _write_nuget_source_marker(python_root, package)
 
     python_executable = _bundled_python_executable(python_root)
     if not _python_matches(python_executable, options.python_version):
@@ -603,6 +611,7 @@ def _copy_bundled_runtime_support(bundled_root: Path, venv_root: Path) -> None:
         "pyvenv.cfg",
         "lib",
         _NUGET_SOURCE_MARKER,
+        _NUGET_PACKAGE_PAYLOAD_ROOT,
     }
 
     def copy_included_files(source: Path = bundled_root) -> None:
