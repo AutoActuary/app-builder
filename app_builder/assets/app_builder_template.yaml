@@ -1,80 +1,168 @@
 # app_builder.yaml
-# This file is both a real config and a living example of the 1.x structure.
-# Trim it down aggressively for your app; every section is optional unless marked otherwise.
-
-# Optional str: currently ignored. Versioned app-builder dispatch will be added later.
+# Generated from app_builder.schema metadata.
+# Required and common optional fields contain examples; replace them for your app.
+# Optional, nullable string | null. Accepted as metadata only. Version dispatch is
+# intentionally disabled for now. Default if omitted: v1.0.0.
 app_builder_version: v1.0.0
 
-# Optional Dict: Download and materialize a portable WinPython environment
-# that ships with the app.
+# Optional, nullable mapping | null. Optional bundled Python runtime. Set to null to
+# disable. Default if omitted: PythonBundledOptions defaults.
 python_bundled:
+  # Optional string. Project-relative directory where the bundled Python runtime is
+  # materialized. Default if omitted: bin/python.
   path: bin/python
+
+  # Optional string. WinPython version or version prefix to download. Default if omitted:
+  # 3.11.1.
   python_version: 3.12.10
+
+  # Optional string. Pip version specifier installed into the bundled runtime. Default if
+  # omitted: 23.2.1.
   pip_version: 24.*
+
+  # Optional list[string]. Inline pip requirements installed into the bundled runtime.
+  # Default if omitted: [].
   requirements:
     - pyyaml>=6
+
+  # Optional list[string]. Project-relative requirement file globs installed into the
+  # bundled runtime. Default if omitted: [].
   requirements_files:
     - requirements.txt
 
-# Optional Dict: Create a venv derived from the bundled Python.
-# The venv keeps its own scripts but reads the bundled base site-packages,
-# matching the venv layout used by Autory.
+# Optional, nullable mapping | null. Optional virtual environment derived from bundled
+# Python when available. Set to null to disable. Default if omitted: PythonVenvOptions
+# defaults.
 python_venv:
+  # Optional string. Project-relative directory where the derived virtual environment is
+  # created. Default if omitted: venv.
   path: venv
+
+  # Optional list[string]. Inline pip requirements installed into the virtual environment.
+  # Default if omitted: [].
   requirements:
     - mypy
+
+  # Optional list[string]. Project-relative requirement file globs installed into the
+  # virtual environment. Default if omitted: [].
   requirements_files: []
 
+# Required mapping. Required installer metadata and release payload settings.
 installer:
-  # Required str: Human-facing app name.
+  # Required string. Human-facing application name.
   name: MyApp
 
-  # Required str: Installation directory, with Windows %ENV_VAR% expansion.
-  install_directory: "%localappdata%\\MyCompany\\MyApp"
+  # Required string. Windows install directory. Percent-style environment variables are
+  # expanded at build time.
+  install_directory: '%localappdata%\MyCompany\MyApp'
 
-  # Optional paths used by generated installer metadata.
+  # Optional string. Project-relative ASCII banner used by generated installer assets.
+  # Default if omitted: application-templates/asciibanner.txt.
   ascii_banner: application-templates/asciibanner.txt
+
+  # Optional string. Project-relative icon used by generated installer assets. Default if
+  # omitted: application-templates/icon.ico.
   icon: application-templates/icon.ico
+
+  # Optional boolean. Whether generated installer scripts should pause before exiting.
+  # Default if omitted: true.
   pause_on_exit: true
+
+  # Optional boolean. Whether the installer bundle should include an uninstall script.
+  # Default if omitted: true.
   add_uninstaller: true
 
-  # Optional shortcuts for the Windows start menu.
+  # Optional list[mapping]. Windows Start Menu shortcut declarations. Default if omitted:
+  # [].
   start_menu:
-    - application-templates/program.cmd
-    - [docs/index.html, "MyApp Docs", application-templates/icon.ico]
+    - target: application-templates/program.cmd
+      display_name: MyApp
+      icon: application-templates/icon.ico
 
-  # Optional install / uninstall hooks.
+  # Optional mapping. Installer and uninstaller hook command declarations. Default if
+  # omitted: InstallHooks defaults.
   install_hooks:
+    # Optional list[string | list[string]]. Commands written into installer metadata to
+    # run before installation. Default if omitted: [].
     pre_install: []
+
+    # Optional list[string | list[string]]. Commands written into installer metadata to
+    # run after installation. Default if omitted: [].
     post_install: []
+
+    # Optional list[string | list[string]]. Commands written into installer metadata to
+    # run before uninstall. Default if omitted: [].
     pre_uninstall: []
+
+    # Optional list[string | list[string]]. Commands written into installer metadata to
+    # run after uninstall. Default if omitted: [].
     post_uninstall: []
 
-  # Optional output directory for release artifacts.
+  # Optional string. Project-relative output directory for release artifacts. Default if
+  # omitted: dist.
   dist: dist
 
-  # Required in practice: what gets packaged.
+  # Optional mapping. Payload include, exclude, and remap rules. Default if omitted:
+  # PathsMapping defaults.
   paths:
+    # Optional list[string]. Project-relative files or globs included in the release
+    # payload. Default if omitted: [].
     include:
       - src
       - app_builder.yaml
       - application-templates
+
+    # Optional list[string]. Project-relative files or globs excluded from the release
+    # payload. Default if omitted: [].
     exclude:
-      - "**/__pycache__"
+      - '**/__pycache__'
       - dist
       - venv
+
+    # Optional list[tuple[string, string]]. Two-item source and destination pairs for
+    # relocating payload files. Default if omitted: [].
     remap:
       - [README.md, docs/README.md]
 
-# Optional build pipeline hooks.
+# Optional mapping. Build and release hook command declarations. Default if omitted:
+# BuildHooks defaults.
 build_hooks:
+  # Optional list[string | list[string]]. Commands run before dependency or release
+  # processing begins. Default if omitted: [].
   pre_process: []
+
+  # Optional list[string | list[string]]. Commands run before bundled Python is
+  # materialized. Default if omitted: [].
   pre_python_bundled: []
+
+  # Optional list[string | list[string]]. Commands run after bundled Python is
+  # materialized. Default if omitted: [].
   post_python_bundled: []
+
+  # Optional list[string | list[string]]. Commands run before the virtual environment is
+  # materialized. Default if omitted: [].
   pre_python_venv: []
+
+  # Optional list[string | list[string]]. Commands run after the virtual environment is
+  # materialized. Default if omitted: [].
   post_python_venv: []
+
+  # Optional list[string | list[string]]. Commands run before the release payload is
+  # assembled. Default if omitted: [].
   pre_dist: []
+
+  # Optional list[string | list[string]]. Commands run after the release payload is
+  # assembled. Default if omitted: [].
   post_dist: []
+
+  # Optional list[string | list[string]]. Commands run before GitHub release upload.
+  # Default if omitted: [].
   pre_github_release: []
+
+  # Optional list[string | list[string]]. Commands run after GitHub release upload.
+  # Default if omitted: [].
   post_github_release: []
+
+  # Optional list[string | list[string]]. Commands run at the end of release processing.
+  # Default if omitted: [].
   post_process: []

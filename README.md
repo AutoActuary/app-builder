@@ -29,6 +29,7 @@ Run `app-builder init` inside a git repository to generate:
 - `application-templates/program.cmd`
 
 The generated YAML file is intentionally heavily commented and is meant to double as real config, template, and documentation base.
+It is rendered from the same dataclass metadata as the [configuration reference](docs/configuration.md), and the packaged YAML snapshot is tested for drift.
 
 ## Testing
 

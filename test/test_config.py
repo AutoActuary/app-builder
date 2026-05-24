@@ -6,16 +6,25 @@ from tempfile import TemporaryDirectory
 
 from app_builder.config import load_config
 from app_builder.fileset import build_remap_table, collect_files
-from app_builder.schema import ConfigError
+from app_builder.schema import (
+    AppBuilderConfig,
+    ConfigError,
+    PythonBundledOptions,
+    PythonVenvOptions,
+)
 
 
 class TestConfigLoading(unittest.TestCase):
-    def test_loads_new_schema_without_pydantic(self) -> None:
+    def _load_yaml(self, text: str) -> AppBuilderConfig:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
             config_path = temp_dir / "app_builder.yaml"
-            config_path.write_text(
-                """
+            config_path.write_text(text.strip(), encoding="utf-8")
+            return load_config(config_path)
+
+    def test_loads_new_schema_without_pydantic(self) -> None:
+        config = self._load_yaml(
+            """
 app_builder_version: v1.0.0
 python_bundled: null
 python_venv: null
@@ -25,14 +34,161 @@ installer:
   paths:
     include: [src]
 build_hooks: {}
-""".strip(),
-                encoding="utf-8",
-            )
-            config = load_config(config_path)
+"""
+        )
 
         self.assertEqual("Demo", config.installer.name)
         self.assertIsNone(config.python_bundled)
         self.assertIsNone(config.python_venv)
+
+    def test_missing_defaults_materialize_as_dataclasses(self) -> None:
+        config = self._load_yaml(
+            """
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+"""
+        )
+
+        self.assertIsInstance(config.python_bundled, PythonBundledOptions)
+        self.assertIsInstance(config.python_venv, PythonVenvOptions)
+        self.assertEqual([], config.build_hooks.pre_dist)
+        self.assertEqual([], config.installer.paths.include)
+        self.assertEqual([], config.installer.install_hooks.post_install)
+
+    def test_unknown_top_level_keys_are_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigError,
+            r"config: unknown key 'surprise'\. Expected one of: .*'installer'",
+        ):
+            self._load_yaml(
+                """
+surprise: true
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+"""
+            )
+
+    def test_unknown_nested_keys_are_rejected_with_path(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigError,
+            r"config\.installer: unknown key 'extra'\. Expected one of: .*'paths'",
+        ):
+            self._load_yaml(
+                """
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+  extra: value
+"""
+            )
+
+    def test_non_nullable_null_is_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigError,
+            r"config\.installer: null is not allowed\. Expected mapping\.",
+        ):
+            self._load_yaml(
+                """
+installer: null
+"""
+            )
+
+    def test_missing_required_fields_are_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigError,
+            r"config\.installer\.name: missing required value\. Expected string\.",
+        ):
+            self._load_yaml(
+                """
+installer:
+  install_directory: "%localappdata%\\\\Demo"
+"""
+            )
+
+    def test_hook_commands_accept_strings_and_argv_lists(self) -> None:
+        config = self._load_yaml(
+            """
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+build_hooks:
+  pre_dist:
+    - scripts/pre-build.cmd
+    - [python, -m, pytest]
+"""
+        )
+
+        self.assertEqual(
+            ["scripts/pre-build.cmd", ["python", "-m", "pytest"]],
+            config.build_hooks.pre_dist,
+        )
+
+    def test_bad_hook_command_shapes_are_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigError,
+            r"config\.build_hooks\.pre_dist\[0\]: expected string or list\[string\], got dict\.",
+        ):
+            self._load_yaml(
+                """
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+build_hooks:
+  pre_dist:
+    - command: scripts/pre-build.cmd
+"""
+            )
+
+    def test_start_menu_entries_are_strict_mappings(self) -> None:
+        config = self._load_yaml(
+            """
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+  start_menu:
+    - target: application-templates/program.cmd
+      display_name: Demo
+      icon: application-templates/icon.ico
+"""
+        )
+
+        self.assertEqual(
+            "application-templates/program.cmd", config.installer.start_menu[0].target
+        )
+        self.assertEqual("Demo", config.installer.start_menu[0].display_name)
+
+    def test_legacy_start_menu_shorthand_is_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigError,
+            r"config\.installer\.start_menu\[0\]: expected mapping, got str\.",
+        ):
+            self._load_yaml(
+                """
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+  start_menu:
+    - application-templates/program.cmd
+"""
+            )
+
+    def test_bad_remap_tuple_layout_is_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigError,
+            r"config\.installer\.paths\.remap\[0\]: expected 2 tuple items, got 1\.",
+        ):
+            self._load_yaml(
+                """
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+  paths:
+    remap:
+      - [README.md]
+"""
+            )
 
     def test_legacy_application_yaml_is_rejected(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
@@ -41,13 +197,16 @@ build_hooks: {}
             config_path.write_text(
                 """
 app-builder: v0.20.0
-application:
+Application:
   name: Legacy
 """.strip(),
                 encoding="utf-8",
             )
 
-            with self.assertRaises(ConfigError):
+            with self.assertRaisesRegex(
+                ConfigError,
+                r"config: legacy application\.yaml layout is not supported\.",
+            ):
                 load_config(config_path)
 
 

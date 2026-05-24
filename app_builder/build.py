@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
@@ -15,8 +16,11 @@ from .hooks import run_hook_commands
 from .project import detect_version, expand_windows_envvars
 from .python_runtime import (
     PythonEnvironmentResult,
+    bundled_python_executable,
     ensure_python_environments as materialize_python_environments,
+    python_executable,
 )
+from .schema import AppBuilderConfig
 
 
 @dataclass(slots=True)
@@ -35,13 +39,15 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
     hook_env = _build_hook_environment(
         config.installer.name, config.installer.install_directory, project_root
     )
-    python_for_hooks = env_result.python_venv or env_result.python_bundled
+    python_candidates = _runtime_hook_python_candidates(
+        project_root, config, env_result
+    )
 
     run_hook_commands(
         project_root,
         config.build_hooks.pre_dist,
         environment=hook_env,
-        python_for_hooks=python_for_hooks,
+        python_candidates=python_candidates,
     )
 
     dist_dir = project_root / config.installer.dist
@@ -101,13 +107,13 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
         project_root,
         config.build_hooks.post_dist,
         environment=hook_env,
-        python_for_hooks=python_for_hooks,
+        python_candidates=python_candidates,
     )
     run_hook_commands(
         project_root,
         config.build_hooks.post_process,
         environment=hook_env,
-        python_for_hooks=python_for_hooks,
+        python_candidates=python_candidates,
     )
     return ReleaseResult(
         version=version,
@@ -130,35 +136,70 @@ def _run_dependency_stages(project_root: Path) -> PythonEnvironmentResult:
         project_root,
         config.build_hooks.pre_process,
         environment=hook_env,
-        python_for_hooks=None,
+        python_candidates=_host_hook_python_candidates(),
     )
     run_hook_commands(
         project_root,
         config.build_hooks.pre_python_bundled,
         environment=hook_env,
-        python_for_hooks=None,
+        python_candidates=_host_hook_python_candidates(),
     )
     env_result = materialize_python_environments(project_root)
-    python_for_hooks = env_result.python_bundled
+    bundled_candidates = _hook_python_candidates(env_result.python_bundled)
     run_hook_commands(
         project_root,
         config.build_hooks.post_python_bundled,
         environment=hook_env,
-        python_for_hooks=python_for_hooks,
+        python_candidates=bundled_candidates,
     )
     run_hook_commands(
         project_root,
         config.build_hooks.pre_python_venv,
         environment=hook_env,
-        python_for_hooks=python_for_hooks,
+        python_candidates=bundled_candidates,
     )
     run_hook_commands(
         project_root,
         config.build_hooks.post_python_venv,
         environment=hook_env,
-        python_for_hooks=env_result.python_venv or python_for_hooks,
+        python_candidates=_hook_python_candidates(
+            env_result.python_venv, env_result.python_bundled
+        ),
     )
     return env_result
+
+
+def _host_hook_python_candidates() -> list[Path]:
+    return [Path(sys.executable)]
+
+
+def _hook_python_candidates(*candidates: Path | None) -> list[Path]:
+    return [candidate for candidate in candidates if candidate is not None] + [
+        Path(sys.executable)
+    ]
+
+
+def _runtime_hook_python_candidates(
+    project_root: Path,
+    config: AppBuilderConfig,
+    env_result: PythonEnvironmentResult | None = None,
+) -> list[Path]:
+    if env_result is not None:
+        return _hook_python_candidates(
+            env_result.python_venv, env_result.python_bundled
+        )
+
+    venv_python: Path | None = None
+    if config.python_venv is not None:
+        venv_python = python_executable(project_root / config.python_venv.path)
+
+    bundled_python: Path | None = None
+    if config.python_bundled is not None:
+        bundled_python = bundled_python_executable(
+            project_root / config.python_bundled.path
+        )
+
+    return _hook_python_candidates(venv_python, bundled_python)
 
 
 def _write_payload_archive(
@@ -249,11 +290,12 @@ def upload_release_to_github(
     hook_env = _build_hook_environment(
         config.installer.name, config.installer.install_directory, project_root
     )
+    python_candidates = _runtime_hook_python_candidates(project_root, config)
     run_hook_commands(
         project_root,
         config.build_hooks.pre_github_release,
         environment=hook_env,
-        python_for_hooks=None,
+        python_candidates=python_candidates,
     )
 
     remote_url = subprocess.run(
@@ -315,7 +357,7 @@ def upload_release_to_github(
         project_root,
         config.build_hooks.post_github_release,
         environment=hook_env,
-        python_for_hooks=None,
+        python_candidates=python_candidates,
     )
     return html_url
 

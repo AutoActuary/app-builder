@@ -22,14 +22,22 @@ WINPYTHON_RELEASES_API = (
 )
 
 
-def _python_executable(venv_root: Path) -> Path:
+def python_executable(venv_root: Path) -> Path:
     scripts_dir = "Scripts" if os.name == "nt" else "bin"
     exe_name = "python.exe" if os.name == "nt" else "python"
     return venv_root / scripts_dir / exe_name
 
 
-def _bundled_python_executable(python_root: Path) -> Path:
+def bundled_python_executable(python_root: Path) -> Path:
     return python_root / "python" / "python.exe"
+
+
+def _python_executable(venv_root: Path) -> Path:
+    return python_executable(venv_root)
+
+
+def _bundled_python_executable(python_root: Path) -> Path:
+    return bundled_python_executable(python_root)
 
 
 def _install_requirements(
