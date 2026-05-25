@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -68,7 +69,8 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
     manifest = {
         "name": config.installer.name,
         "version": version,
-        "install_directory": expand_windows_envvars(config.installer.install_directory),
+        "install_directory": config.installer.install_directory,
+        "add_uninstaller": config.installer.add_uninstaller,
         "payload_archive": payload_archive.name,
         "start_menu": [
             {
@@ -274,60 +276,55 @@ def upload_release_to_github(
         python_candidates=python_candidates,
     )
 
-    remote_url = subprocess.run(
-        ["git", "config", "--get", "remote.origin.url"],
-        cwd=project_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    owner, repo = _parse_github_remote(remote_url)
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        raise RuntimeError("Set GITHUB_TOKEN before using 'app-builder release-gh'.")
-
-    import urllib.request
-
-    body = json.dumps(
-        {
-            "tag_name": release.version,
-            "name": release.version,
-            "draft": draft,
-        }
-    ).encode("utf-8")
-    request = urllib.request.Request(
-        f"https://api.github.com/repos/{owner}/{repo}/releases",
-        data=body,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "User-Agent": "app-builder",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(request) as response:
-        release_payload = json.loads(response.read().decode("utf-8"))
-    upload_url = release_payload["upload_url"].split("{", 1)[0]
-    html_url = str(release_payload["html_url"])
-    for artifact in (
+    gh_executable = _resolve_github_cli()
+    artifacts = [
         release.payload_archive,
         release.installer_archive,
         release.manifest_path,
-    ):
-        upload_request = urllib.request.Request(
-            f"{upload_url}?name={artifact.name}",
-            data=artifact.read_bytes(),
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
-                "User-Agent": "app-builder",
-                "Content-Type": "application/octet-stream",
-            },
-            method="POST",
+    ]
+    view_result = _run_gh(
+        project_root,
+        gh_executable,
+        ["release", "view", release.version, "--json", "url", "--jq", ".url"],
+        check=False,
+    )
+    if view_result.returncode == 0:
+        html_url = view_result.stdout.strip()
+        _run_gh(
+            project_root,
+            gh_executable,
+            [
+                "release",
+                "upload",
+                release.version,
+                *(str(artifact) for artifact in artifacts),
+                "--clobber",
+            ],
+            check=True,
         )
-        with urllib.request.urlopen(upload_request):
-            pass
+    else:
+        create_args = [
+            "release",
+            "create",
+            release.version,
+            *(str(artifact) for artifact in artifacts),
+            "--title",
+            release.version,
+            "--notes",
+            "",
+        ]
+        if draft:
+            create_args.append("--draft")
+        _run_gh(project_root, gh_executable, create_args, check=True)
+        html_url = _run_gh(
+            project_root,
+            gh_executable,
+            ["release", "view", release.version, "--json", "url", "--jq", ".url"],
+            check=True,
+        ).stdout.strip()
+
+    if not html_url:
+        html_url = release.version
 
     run_hook_commands(
         project_root,
@@ -338,16 +335,38 @@ def upload_release_to_github(
     return html_url
 
 
-def _parse_github_remote(remote_url: str) -> tuple[str, str]:
-    cleaned = remote_url.removesuffix(".git")
-    if cleaned.startswith("git@github.com:"):
-        owner_repo = cleaned.split(":", 1)[1]
-    elif "github.com/" in cleaned:
-        owner_repo = cleaned.split("github.com/", 1)[1]
-    else:
-        raise RuntimeError(f"Unsupported GitHub remote URL: {remote_url}")
-    owner, repo = owner_repo.split("/", 1)
-    return owner, repo
+def _resolve_github_cli() -> str:
+    gh_executable = shutil.which("gh.exe") or shutil.which("gh")
+    if gh_executable is None:
+        raise RuntimeError(
+            "GitHub releases require GitHub CLI (`gh.exe`) on PATH. "
+            "Install gh.exe and authenticate with `gh auth login` before running "
+            "`app-builder release-gh`."
+        )
+    return gh_executable
+
+
+def _run_gh(
+    project_root: Path,
+    gh_executable: str,
+    args: list[str],
+    *,
+    check: bool,
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        [gh_executable, *args],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+    )
+    if check and result.returncode != 0:
+        stderr = result.stderr.strip()
+        stdout = result.stdout.strip()
+        detail = stderr or stdout or f"exit code {result.returncode}"
+        raise RuntimeError(
+            "GitHub CLI command failed: " f"{' '.join(['gh', *args])}\n{detail}"
+        )
+    return result
 
 
 def _slugify(value: str) -> str:

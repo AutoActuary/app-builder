@@ -6,7 +6,7 @@ from importlib.resources import files
 EXE_WRAP_CONFIG_START_MARKER = b"8c0e8d4c-32af-4fd8-9c68-6a0f97efeb6a"
 EXE_WRAP_CONFIG_END_MARKER = b"ce3beca3-7ed2-40a4-9133-f82198be1d7b"
 EXE_WRAP_CONSOLE_X64_SHA256 = (
-    "e272dcbb319cd4e1c18da20211cb8f6e17b9c2b386b1eb68c63e53ac17d9540a"
+    "f1a68e6b71dbe0db7db3e8c151dcb66c10d77469a219f1cb4fb365fe3a78cf10"
 )
 
 

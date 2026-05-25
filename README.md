@@ -11,7 +11,9 @@
 - The release flow is explicit: build hooks, optional NuGet-sourced Python, optional Autory-style venv, payload packaging, ExeWrap-backed installer exe creation, and optional GitHub release upload.
 - Python dependencies are declared in `pyproject.toml` and resolved by Poetry; `app_builder.yaml` no longer carries pip requirement lists.
 - `python_venv` can stand alone: when `python_bundled` is disabled, app-builder materializes a self-contained NuGet Python under `venv/python` and ExeWrap-backed `venv/Scripts/python.exe` shims.
-- Release builds now emit a first-layer ExeWrap installer `.exe` with a stored ZIP payload appended after the ExeWrap config end marker. The bootstrap command uses PowerShell to extract itself with `tar.exe` into a random temp directory, run `install.cmd`, and clean up in `finally`.
+- Release builds now emit a first-layer ExeWrap installer `.exe` with a stored ZIP payload appended after the ExeWrap config end marker. The vendored launcher carries an `asInvoker` manifest so Windows does not apply filename-based installer elevation heuristics. The bootstrap command uses PowerShell to extract itself with `tar.exe` into a random temp directory, run `install.cmd`, and clean up in `finally`; the generated installer then installs the payload into the configured install directory and writes an uninstall path when enabled.
+- First-class `bin/...` runtime/tool features are retired except for Python. Use explicit hooks for project-specific tools or setup outside the Python runtime path.
+- `release-gh` uses GitHub CLI (`gh.exe`) for GitHub Releases. If `gh.exe` is not installed and authenticated, GitHub release creation is unavailable.
 
 ## Commands
 

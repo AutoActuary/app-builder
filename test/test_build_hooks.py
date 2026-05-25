@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
 import unittest
-import urllib.parse
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
 from unittest.mock import patch
 
 from app_builder import build as build_module
@@ -35,38 +32,6 @@ build_hooks:
 """.strip(),
         encoding="utf-8",
     )
-
-
-class _FakeHttpResponse:
-    def __init__(self, payload: bytes = b"{}") -> None:
-        self._payload = payload
-
-    def __enter__(self) -> "_FakeHttpResponse":
-        return self
-
-    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
-        return None
-
-    def read(self) -> bytes:
-        return self._payload
-
-
-class _FakeUrlopen:
-    def __init__(self) -> None:
-        self.requests: list[Any] = []
-
-    def __call__(self, request: Any) -> _FakeHttpResponse:
-        self.requests.append(request)
-        if len(self.requests) == 1:
-            return _FakeHttpResponse(
-                json.dumps(
-                    {
-                        "upload_url": "https://uploads.example/releases/1/assets{?name,label}",
-                        "html_url": "https://github.com/AutoActuary/demo/releases/tag/1.2.3",
-                    }
-                ).encode("utf-8")
-            )
-        return _FakeHttpResponse()
 
 
 class TestBuildHookPythonSelection(unittest.TestCase):
@@ -279,19 +244,46 @@ build_hooks:
                 installer_archive=installer_archive,
                 manifest_path=manifest_path,
             )
-            fake_urlopen = _FakeUrlopen()
+            gh_calls: list[list[str]] = []
+            view_count = 0
+
+            def fake_run(
+                args: list[str],
+                *,
+                cwd: Path,
+                capture_output: bool,
+                text: bool,
+            ) -> subprocess.CompletedProcess[str]:
+                nonlocal view_count
+                self.assertEqual(project_root, cwd)
+                self.assertTrue(capture_output)
+                self.assertTrue(text)
+                gh_calls.append(args)
+                if args[1:3] == ["release", "view"]:
+                    view_count += 1
+                    if view_count == 1:
+                        return subprocess.CompletedProcess(
+                            args=args,
+                            returncode=1,
+                            stdout="",
+                            stderr="release not found",
+                        )
+                    return subprocess.CompletedProcess(
+                        args=args,
+                        returncode=0,
+                        stdout="https://github.com/AutoActuary/demo/releases/tag/1.2.3\n",
+                        stderr="",
+                    )
+                return subprocess.CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout="",
+                    stderr="",
+                )
 
             with (
-                patch.dict(os.environ, {"GITHUB_TOKEN": "token"}),
-                patch(
-                    "app_builder.build.subprocess.run",
-                    return_value=subprocess.CompletedProcess(
-                        args=["git", "config", "--get", "remote.origin.url"],
-                        returncode=0,
-                        stdout="https://github.com/AutoActuary/demo.git\n",
-                    ),
-                ),
-                patch("urllib.request.urlopen", side_effect=fake_urlopen),
+                patch("app_builder.build.shutil.which", return_value="gh.exe"),
+                patch("app_builder.build.subprocess.run", side_effect=fake_run),
                 patch("app_builder.build.run_hook_commands") as run_hooks,
             ):
                 html_url = build_module.upload_release_to_github(
@@ -305,26 +297,36 @@ build_hooks:
             [[["pre-gh"]], [["post-gh"]]],
             [call.args[1] for call in run_hooks.call_args_list],
         )
-        self.assertEqual(4, len(fake_urlopen.requests))
-        create_body = json.loads(fake_urlopen.requests[0].data.decode("utf-8"))
+        create_call = gh_calls[1]
+        self.assertEqual(["gh.exe", "release", "create", "1.2.3"], create_call[:4])
+        self.assertIn(str(payload_archive), create_call)
+        self.assertIn(str(installer_archive), create_call)
+        self.assertIn(str(manifest_path), create_call)
+        self.assertIn("--draft", create_call)
         self.assertEqual(
-            {"tag_name": "1.2.3", "name": "1.2.3", "draft": True},
-            create_body,
+            ["gh.exe", "release", "view", "1.2.3", "--json", "url", "--jq", ".url"],
+            gh_calls[2],
         )
-        uploaded_names = [
-            urllib.parse.parse_qs(urllib.parse.urlparse(request.full_url).query)[
-                "name"
-            ][0]
-            for request in fake_urlopen.requests[1:]
-        ]
-        self.assertEqual(
-            [
-                payload_archive.name,
-                installer_archive.name,
-                manifest_path.name,
-            ],
-            uploaded_names,
-        )
+
+    def test_github_release_requires_gh_cli(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            _write_config(project_root, "  pre_github_release: []")
+            release = build_module.ReleaseResult(
+                version="1.2.3",
+                payload_archive=project_root / "payload.zip",
+                installer_archive=project_root / "installer.exe",
+                manifest_path=project_root / "manifest.json",
+            )
+
+            with (
+                patch("app_builder.build.shutil.which", return_value=None),
+                patch("app_builder.build.run_hook_commands"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "gh.exe"):
+                    build_module.upload_release_to_github(
+                        project_root, release=release, draft=False
+                    )
 
 
 if __name__ == "__main__":

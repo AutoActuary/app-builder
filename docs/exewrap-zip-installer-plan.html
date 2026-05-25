@@ -232,9 +232,9 @@
     <header>
       <h1>ExeWrap ZIP Installer Scaffold Plan</h1>
       <p class="lede">
-        This plan turns the old app-builder two-layer 7zip SFX installer into a cleaner 1.x scaffold:
-        ExeWrap becomes the first executable layer, the top archive becomes a stored ZIP with corrected offsets,
-        and the second layer can keep the proven 7zip payload flow until the installer script itself is rewritten.
+        This plan turns the old app-builder two-layer 7zip SFX installer into a cleaner 1.x installer:
+        ExeWrap is the first executable layer, the top archive is a stored ZIP with corrected offsets,
+        and PowerShell owns the manifest-driven install/uninstall behavior.
       </p>
       <div class="meta">
         <span class="pill">Branch: <code>codex/app-builder-1x-rebuild</code></span>
@@ -248,13 +248,12 @@
       <h2>Executive Shape</h2>
       <div class="callout">
         <strong>Recommendation:</strong>
-        build this as silo scaffolding first. Do not make it the default release path until the ZIP overlay writer,
-        7zip payload builder, and installer top-layer assembly have focused tests and a Windows smoke test.
+        keep this as the default 1.x release path: the ZIP overlay writer, ExeWrap first layer, and generated
+        PowerShell installer scripts are now the active installer direction.
       </div>
       <p>
-        The current 1.x branch is not yet at the final install/uninstall workflow. That is a feature, not a blocker:
-        the archive and executable layers can be made correct now, while the actual installer script remains a later
-        integration point.
+        The current 1.x branch now installs the payload into the configured install directory, writes an uninstall path,
+        creates Start Menu shortcuts from manifest data, and runs configured install/uninstall hooks.
       </p>
       <p>
         I use the repository name <code>ExeWrap</code> throughout this document; it refers to the WrapExe/ExeWrap
@@ -262,8 +261,8 @@
       </p>
       <p>
         The clean split is: Python owns build-time artifact assembly, ExeWrap owns the outer executable launcher,
-        PowerShell owns the small bootstrap script, Windows <code>tar.exe</code> owns first-layer extraction, and
-        bundled <code>7z.exe</code> owns second-layer payload extraction.
+        PowerShell owns both the small bootstrap script and the generated installer scripts, and Windows
+        <code>tar.exe</code> owns archive extraction.
       </p>
     </section>
 
@@ -374,22 +373,23 @@ install dir: application payload, bin, shortcuts, uninstall script</pre>
     "-ExecutionPolicy",
     "Bypass",
     "-Command",
-    "$ErrorActionPreference = 'Stop'; $exitCode = 0; $extractDir = Join-Path $env:TEMP ('app-builder-' + [guid]::NewGuid().ToString('N')); try { New-Item -ItemType Directory -LiteralPath $extractDir | Out-Null; tar.exe -xf '@{exe_path}' -C $extractDir; if ($LASTEXITCODE -ne 0) { $exitCode = $LASTEXITCODE; throw \"tar.exe failed with exit code $exitCode\" }; &amp; (Join-Path $extractDir 'install.cmd'); $exitCode = $LASTEXITCODE } catch { if ($exitCode -eq 0) { $exitCode = 1 }; Write-Error $_ -ErrorAction Continue } finally { if (Test-Path -LiteralPath $extractDir) { Remove-Item -LiteralPath $extractDir -Recurse -Force -ErrorAction SilentlyContinue } }; exit $exitCode"
+    "$ErrorActionPreference = 'Stop'; $exitCode = 0; $extractDir = Join-Path $env:TEMP ('app-builder-' + [guid]::NewGuid().ToString('N')); try { New-Item -ItemType Directory -Path $extractDir | Out-Null; tar.exe -xf '@{exe_path}' -C $extractDir; if ($LASTEXITCODE -ne 0) { $exitCode = $LASTEXITCODE; throw \"tar.exe failed with exit code $exitCode\" }; &amp; (Join-Path $extractDir 'install.cmd'); $exitCode = $LASTEXITCODE } catch { if ($exitCode -eq 0) { $exitCode = 1 }; Write-Error $_ -ErrorAction Continue } finally { if (Test-Path -LiteralPath $extractDir) { Remove-Item -LiteralPath $extractDir -Recurse -Force -ErrorAction SilentlyContinue } }; exit $exitCode"
   ]
 }
 [config end marker]
 [stored ZIP top layer with corrected central directory offsets]</pre>
       <pre>top-layer ZIP contents
   install.cmd
+  install.ps1
   uninstall.cmd
+  uninstall.ps1
   manifest.json
-  payload archive (current 1.x zip; future 7z payload)
-  bin/7z.exe / bin/7z.dll (future 7z payload pass)
+  payload archive
   assets/...</pre>
       <p>
-        The top ZIP is stored, not compressed. The current scaffold carries the existing 1.x payload zip; the eventual
-        payload archive will be compressed by 7zip, so the top layer should stay fast, transparent, and friendly to
-        Windows tools. Storing also makes the "rename to .zip and extract" fallback less surprising.
+        The top ZIP is stored, not compressed. The payload archive is the release payload built by app-builder, so the
+        top layer should stay fast, transparent, and friendly to Windows tools. Storing also makes the "rename to .zip
+        and extract" fallback less surprising.
       </p>
       <p>
         The ExeWrap config should create a unique directory under <code>%TEMP%</code>, extract itself with
@@ -407,9 +407,8 @@ install dir: application payload, bin, shortcuts, uninstall script</pre>
       </p>
       <div class="callout">
         <strong>Important boundary:</strong>
-        ExeWrap is only the first-layer launcher. PowerShell is the first-layer bootstrap language. The second-layer
-        installer behavior can remain 7zip based for now. A cleaner installer script can be planned separately after
-        the artifact assembly is trustworthy.
+        ExeWrap is only the first-layer launcher. PowerShell is the bootstrap and installer language. First-class
+        <code>bin/...</code> runtime/tool features are retired except for Python, so 7zip is not a 1.x product blocker.
       </div>
     </section>
 
@@ -504,11 +503,11 @@ install dir: application payload, bin, shortcuts, uninstall script</pre>
           <tr>
             <td class="path">app_builder/sevenzip.py</td>
             <td>
-              Owns 7zip invocation, quiet output filtering, listfile creation, compression settings, append mode,
-              and temp-scoped resolution of <code>7z.exe</code> plus <code>7z.dll</code>.
+              Optional future module only if ZIP payloads prove insufficient. It would own 7zip invocation, quiet
+              output filtering, locked-file staging, and temp-scoped 7zip asset handling.
             </td>
             <td>
-              Retires the old <code>file_pattern_7zip.py</code> shape without losing the behaviors that mattered.
+              Not required for the 1.x end-to-end milestone.
             </td>
           </tr>
           <tr>
@@ -524,19 +523,17 @@ install dir: application payload, bin, shortcuts, uninstall script</pre>
           <tr>
             <td class="path">app_builder/installer_bundle.py</td>
             <td>
-              Creates the top-layer ZIP entries, installer manifest, and final ExeWrap installer EXE around the current
-              payload archive. Later this is where the payload archive swaps to <code>payload.7z</code>.
+              Creates the top-layer ZIP entries, installer manifest, final ExeWrap installer EXE, and generated
+              PowerShell install/uninstall scripts.
             </td>
             <td>
-              Owns the active first-layer installer artifact while the second-layer install behavior remains
-              placeholder.
+              Owns the active installer artifact and user-side install/uninstall behavior.
             </td>
           </tr>
           <tr>
             <td class="path">app_builder/install_scripts.py</td>
             <td>
-              Renders the minimal current <code>install.cmd</code> and <code>uninstall.cmd</code> from structured
-              manifest data. Later this becomes the home for a cleaner script rewrite.
+              Optional future split if installer script rendering grows too large for <code>installer_bundle.py</code>.
             </td>
             <td>
               Avoids reviving <code>functions.bat</code> and the old implicit hook search.
@@ -547,10 +544,11 @@ install dir: application payload, bin, shortcuts, uninstall script</pre>
     </section>
 
     <section>
-      <h2>7zip Base Behavior</h2>
+      <h2>Payload Compression Follow-Up</h2>
       <p>
-        The second layer should be a real 7zip payload builder, not a thin wrapper around the old code. It needs the
-        legacy base behaviors, but expressed as small tested units.
+        The 1.x end-to-end path uses a ZIP payload and does not need 7zip to be feature complete. If migrated apps later
+        prove they need 7zip-specific compression or locked-file behavior, add it as an optional payload backend with
+        the tested behaviors below.
       </p>
       <table>
         <thead>
@@ -610,8 +608,9 @@ install dir: application payload, bin, shortcuts, uninstall script</pre>
           <tr>
             <td>No project tool pollution</td>
             <td>
-              Copy app-builder-owned 7zip assets through a temp directory when assembling artifacts. The only place
-              <code>bin/7z.exe</code> appears is inside the generated top-layer installer ZIP for user-side extraction.
+              Copy any app-builder-owned compression assets through a temp directory when assembling artifacts. Do not
+              create persistent project <code>tools</code> directories or ship non-Python <code>bin/...</code> runtime
+              tools as first-class 1.x features.
             </td>
             <td>
               Test that building an installer does not create or modify <code>tools/</code>, <code>tools/releases</code>,
@@ -642,24 +641,24 @@ install dir: application payload, bin, shortcuts, uninstall script</pre>
           <code>fileset.py</code> behavior, but destination validation belongs before any compressor runs.
         </li>
         <li>
-          <strong>Implement the new 7zip runner.</strong>
-          Add temp-scoped 7zip asset resolution, quiet command execution, locked-file staging, remap staging, and
-          append support. This is the most intricate piece and should be reviewed like production code.
+          <strong>Retire 7zip as a 1.x blocker.</strong>
+          Keep the ZIP payload path for 1.x. Revisit a dedicated 7zip runner only if real migrated apps need locked-file
+          staging or compression behavior the ZIP path cannot cover.
         </li>
         <li>
-          <strong>Create installer bundle scaffolding.</strong>
+          <strong>Create installer bundle behavior.</strong>
           Build the current payload archive, <code>manifest.json</code>, installer scripts, top-layer stored ZIP, and
-          the final ExeWrap installer EXE. Later this swaps the payload archive to <code>payload.7z</code>.
+          the final ExeWrap installer EXE.
         </li>
         <li>
           <strong>Wire into <code>build_release</code>.</strong>
-          Replace the placeholder installer zip now with the ExeWrap <code>.exe</code> carrying the existing payload
-          zip and placeholder install script. The full user-side install behavior waits for the 7zip/script pass.
+          Replace the old installer zip with the ExeWrap <code>.exe</code> carrying the payload archive and
+          real generated install/uninstall scripts.
         </li>
         <li>
-          <strong>Rewrite installer scripts later.</strong>
-          The old batch scripts are full of historical baggage. The first integration can carry a minimal command
-          script that calls 7zip and manifest-driven steps. A cleaner script engine can follow in a separate PR.
+          <strong>Keep installer scripts generated and explicit.</strong>
+          The old batch scripts are full of historical baggage. The 1.x path uses small <code>.cmd</code> wrappers and
+          generated PowerShell scripts instead.
         </li>
       </ol>
     </section>
@@ -700,12 +699,13 @@ install dir: application payload, bin, shortcuts, uninstall script</pre>
           <tr>
             <td>7zip runner</td>
             <td>
-              Compression command shape, quiet output, append behavior, temp listfile encoding, locked-file staging,
-              remap staging, no leaked temp directories, no project <code>tools/</code> writes.
+              Optional future coverage only if a 7zip backend is restored: compression command shape, quiet output,
+              append behavior, temp listfile encoding, locked-file staging, remap staging, no leaked temp directories,
+              no project <code>tools/</code> writes.
             </td>
           </tr>
           <tr>
-            <td>Installer scaffold</td>
+            <td>Installer behavior</td>
             <td>
               Top-layer ZIP contents, payload extraction content, manifest consistency, generated ExeWrap command,
               user-side temp directory naming through PowerShell GUID generation, cleanup behavior through
@@ -777,7 +777,7 @@ install dir: application payload, bin, shortcuts, uninstall script</pre>
           resurrected as part of this work.
         </li>
         <li>
-          Code signing and SmartScreen reputation matter for a public installer, but they do not block this scaffold.
+          Code signing and SmartScreen reputation matter for a public installer, but they do not block this milestone.
           Keep the artifact writer deterministic enough that signing can be added later.
         </li>
       </ul>
@@ -811,9 +811,8 @@ install dir: application payload, bin, shortcuts, uninstall script</pre>
           <tr>
             <td>Should 7zip be downloaded or packaged?</td>
             <td>
-              For the first scaffold, reuse app-builder's existing bundled 7zip assets as package resources, copying
-              them through temp staging. Later, replace with verified downloads if licensing/distribution review
-              prefers that.
+              Neither for the 1.x end-to-end path. ZIP payloads are the active implementation. Revisit 7zip only as an
+              optional backend if real apps need it.
             </td>
           </tr>
           <tr>
@@ -849,7 +848,7 @@ install dir: application payload, bin, shortcuts, uninstall script</pre>
             <td>Should this replace <code>installer.zip</code> immediately?</td>
             <td>
               Yes for the first-layer artifact. Emit an ExeWrap <code>.exe</code> that carries the existing payload zip
-              and placeholder install script. The full user-side install waits for the later 7zip/script pass.
+              and generated PowerShell install/uninstall scripts.
             </td>
           </tr>
         </tbody>

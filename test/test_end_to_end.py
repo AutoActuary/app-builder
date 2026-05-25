@@ -52,6 +52,7 @@ build_hooks: {}
             manifest = json.loads(release.manifest_path.read_text(encoding="utf-8"))
             self.assertEqual("Demo App", manifest["name"])
             self.assertEqual("1.2.3", manifest["version"])
+            self.assertEqual(r"%localappdata%\DemoApp", manifest["install_directory"])
 
             with ZipFile(release.payload_archive) as payload_zip:
                 self.assertEqual(
@@ -61,4 +62,7 @@ build_hooks: {}
 
             with ZipFile(release.installer_archive) as installer_zip:
                 self.assertIn("install.cmd", installer_zip.namelist())
+                self.assertIn("install.ps1", installer_zip.namelist())
+                self.assertIn("uninstall.cmd", installer_zip.namelist())
+                self.assertIn("uninstall.ps1", installer_zip.namelist())
                 self.assertIn(release.payload_archive.name, installer_zip.namelist())
