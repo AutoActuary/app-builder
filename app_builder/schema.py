@@ -50,11 +50,11 @@ class InstallHooks:
     )
     pre_uninstall: list[HookCommand] = config_field(
         default_factory=list,
-        description="Argv commands written into installer metadata to run before uninstall.",
+        description="Argv commands written into installer metadata to run before uninstall while the installed app directory is still present.",
     )
     post_uninstall: list[HookCommand] = config_field(
         default_factory=list,
-        description="Argv commands written into installer metadata to run after uninstall.",
+        description="Argv commands written into installer metadata to run after the install directory has been removed. Entrypoints inside the install directory must be self-contained .cmd, .ps1, or .exe files because app-builder stages only argv[0] to temp before removal.",
     )
 
 

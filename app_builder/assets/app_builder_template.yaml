@@ -73,11 +73,14 @@ installer:
     post_install: []
 
     # Optional list[list[string]]. Argv commands written into installer metadata to run
-    # before uninstall. Default if omitted: [].
+    # before uninstall while the installed app directory is still present. Default if
+    # omitted: [].
     pre_uninstall: []
 
     # Optional list[list[string]]. Argv commands written into installer metadata to run
-    # after uninstall. Default if omitted: [].
+    # after the install directory has been removed. Entrypoints inside the install
+    # directory must be self-contained .cmd, .ps1, or .exe files because app-builder
+    # stages only argv[0] to temp before removal. Default if omitted: [].
     post_uninstall: []
 
   # Optional string. Project-relative output directory for release artifacts. Default if

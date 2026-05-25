@@ -8,6 +8,7 @@ from zipfile import ZIP_STORED, ZipFile
 from .exewrap import stamp_exe_wrap_config
 
 _INSTALLED_MANIFEST_NAME = "app-builder-manifest.json"
+_POWERSHELL_HERE_STRING_END = "'@"
 
 
 def create_exewrap_zip_installer(
@@ -34,38 +35,30 @@ def create_exewrap_zip_installer(
     with TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
         install_cmd = temp_dir / "install.cmd"
-        install_ps1 = temp_dir / "install.ps1"
         uninstall_cmd = temp_dir / "uninstall.cmd"
-        uninstall_ps1 = temp_dir / "uninstall.ps1"
+        manifest_json = _read_manifest_json_for_embedding(manifest_path)
         install_cmd.write_text(
-            _render_install_command(pause_on_exit),
-            encoding="utf-8",
-        )
-        install_ps1.write_text(
-            _render_install_powershell(
-                manifest_name=manifest_path.name,
+            _render_install_command(
+                manifest_json=manifest_json,
                 uninstall_enabled=add_uninstaller,
+                pause_on_exit=pause_on_exit,
             ),
             encoding="utf-8",
         )
         if add_uninstaller:
             uninstall_cmd.write_text(
-                _render_uninstall_command(pause_on_exit),
-                encoding="utf-8",
-            )
-            uninstall_ps1.write_text(
-                _render_uninstall_powershell(manifest_name=manifest_path.name),
+                _render_uninstall_command(
+                    manifest_json=manifest_json,
+                    pause_on_exit=pause_on_exit,
+                ),
                 encoding="utf-8",
             )
 
         with ZipFile(output_path, "a", compression=ZIP_STORED) as zip_file:
             zip_file.write(payload_archive, payload_archive.name)
-            zip_file.write(manifest_path, manifest_path.name)
             zip_file.write(install_cmd, install_cmd.name)
-            zip_file.write(install_ps1, install_ps1.name)
             if add_uninstaller:
                 zip_file.write(uninstall_cmd, uninstall_cmd.name)
-                zip_file.write(uninstall_ps1, uninstall_ps1.name)
 
 
 def _render_bootstrap_config() -> bytes:
@@ -112,35 +105,65 @@ def _render_powershell_bootstrap() -> str:
     )
 
 
-def _render_install_command(pause_on_exit: bool) -> str:
-    pause_block = 'if not "%exit_code%"=="0" pause\n' if pause_on_exit else ""
+def _read_manifest_json_for_embedding(manifest_path: Path) -> str:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_json = json.dumps(manifest, indent=2)
+    if _contains_powershell_here_string_terminator(manifest_json):
+        raise ValueError(
+            f"{manifest_path} cannot be embedded in the installer script because "
+            "it contains a PowerShell here-string terminator."
+        )
+    return manifest_json
+
+
+def _contains_powershell_here_string_terminator(value: str) -> bool:
+    normalized = value.replace("\r\n", "\n").replace("\r", "\n")
+    return any(line == _POWERSHELL_HERE_STRING_END for line in normalized.split("\n"))
+
+
+def _render_cmd_powershell_header(pause_on_exit: bool) -> str:
+    pause_block = 'if not "%ERRORLEVEL%"=="0" pause\n' if pause_on_exit else ""
     return (
+        "<# :\n"
         "@echo off\n"
-        "setlocal\n"
-        'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1"\n'
-        'set "exit_code=%ERRORLEVEL%"\n'
+        'set "_cmd=%~f0"\n'
+        'powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "iex (Get-Content -LiteralPath $env:_cmd -Raw)"\n'
         f"{pause_block}"
-        "exit /b %exit_code%\n"
+        "exit /b %ERRORLEVEL%\n"
+        "#>\n"
     )
 
 
-def _render_uninstall_command(pause_on_exit: bool) -> str:
-    pause_block = 'if not "%exit_code%"=="0" pause\n' if pause_on_exit else ""
-    return (
-        "@echo off\n"
-        "setlocal\n"
-        'set "script_dir=%~dp0"\n'
-        'cd /d "%TEMP%"\n'
-        'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%script_dir%uninstall.ps1"\n'
-        'set "exit_code=%ERRORLEVEL%"\n'
-        f"{pause_block}"
-        "exit /b %exit_code%\n"
+def _embedded_manifest_assignment(manifest_json: str) -> str:
+    if _contains_powershell_here_string_terminator(manifest_json):
+        raise ValueError(
+            "Manifest JSON cannot be embedded because it contains a PowerShell "
+            "here-string terminator."
+        )
+    return f"\n$EmbeddedManifestJson = @'\n{manifest_json}\n'@\n"
+
+
+def _render_install_command(
+    *,
+    manifest_json: str,
+    uninstall_enabled: bool,
+    pause_on_exit: bool,
+) -> str:
+    return _render_cmd_powershell_header(pause_on_exit) + _render_install_powershell(
+        manifest_json=manifest_json,
+        uninstall_enabled=uninstall_enabled,
+    )
+
+
+def _render_uninstall_command(*, manifest_json: str, pause_on_exit: bool) -> str:
+    return _render_cmd_powershell_header(pause_on_exit) + _render_uninstall_powershell(
+        manifest_json=manifest_json
     )
 
 
 def _render_install_powershell(
     *,
-    manifest_name: str,
+    manifest_json: str,
     uninstall_enabled: bool,
 ) -> str:
     uninstall_copy_block = ""
@@ -149,8 +172,6 @@ def _render_install_powershell(
         uninstall_copy_block = (
             "Copy-Item -LiteralPath (Join-Path $ScriptRoot 'uninstall.cmd') "
             "-Destination (Join-Path $InstallDir 'uninstall.cmd') -Force\n"
-            "Copy-Item -LiteralPath (Join-Path $ScriptRoot 'uninstall.ps1') "
-            "-Destination (Join-Path $InstallDir 'uninstall.ps1') -Force\n"
         )
         uninstall_shortcut_block = (
             "$UninstallCommand = Join-Path $InstallDir 'uninstall.cmd'\n"
@@ -164,12 +185,11 @@ def _render_install_powershell(
         )
     return (
         _powershell_common_functions()
-        + f"\n$ManifestName = '{manifest_name}'\n"
+        + _embedded_manifest_assignment(manifest_json)
         + f"$InstalledManifestName = '{_INSTALLED_MANIFEST_NAME}'\n"
         + """
-$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ManifestPath = Join-Path $ScriptRoot $ManifestName
-$Manifest = Read-AppBuilderManifest $ManifestPath
+$ScriptRoot = Split-Path -Parent $env:_cmd
+$Manifest = Read-AppBuilderManifestJson $EmbeddedManifestJson
 $InstallDir = Resolve-AppBuilderPath ([string]$Manifest.install_directory) $null
 $PayloadPath = Join-Path $ScriptRoot ([string]$Manifest.payload_archive)
 $StagingDir = Join-Path $env:TEMP ('app-builder-install-' + [guid]::NewGuid().ToString('N'))
@@ -203,7 +223,7 @@ try {
     Move-Item -LiteralPath $StagingDir -Destination $InstallDir
     $MovedStaging = $true
 
-    Copy-Item -LiteralPath $ManifestPath -Destination (Join-Path $InstallDir $InstalledManifestName) -Force
+    Set-Content -LiteralPath (Join-Path $InstallDir $InstalledManifestName) -Value $EmbeddedManifestJson -Encoding UTF8
 """
         + uninstall_copy_block
         + """
@@ -234,38 +254,38 @@ try {
     )
 
 
-def _render_uninstall_powershell(*, manifest_name: str) -> str:
+def _render_uninstall_powershell(*, manifest_json: str) -> str:
     return (
         _powershell_common_functions()
-        + f"\n$ManifestName = '{manifest_name}'\n"
+        + _embedded_manifest_assignment(manifest_json)
         + f"$InstalledManifestName = '{_INSTALLED_MANIFEST_NAME}'\n"
         + """
-$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$InstalledManifestPath = Join-Path $ScriptRoot $InstalledManifestName
-$TopLayerManifestPath = Join-Path $ScriptRoot $ManifestName
-if (Test-Path -LiteralPath $InstalledManifestPath) {
-    $ManifestPath = $InstalledManifestPath
-} else {
-    $ManifestPath = $TopLayerManifestPath
-}
-$Manifest = Read-AppBuilderManifest $ManifestPath
+$ScriptRoot = Split-Path -Parent $env:_cmd
+$Manifest = Read-AppBuilderManifestJson $EmbeddedManifestJson
 $InstallDir = Resolve-AppBuilderPath ([string]$Manifest.install_directory) $null
 $StartMenuDir = Get-AppBuilderStartMenuDirectory $Manifest
+$PostUninstallDir = Join-Path $env:TEMP ('app-builder-post-uninstall-' + [guid]::NewGuid().ToString('N'))
+$StartedCleanup = $false
 
 Write-Host ('Uninstalling {0} from {1}' -f $Manifest.name, $InstallDir)
 Set-AppBuilderEnvironment $Manifest $InstallDir $StartMenuDir
 
-Invoke-AppBuilderHookList $Manifest.install_hooks.pre_uninstall $InstallDir
-if (Test-Path -LiteralPath $StartMenuDir) {
-    Remove-Item -LiteralPath $StartMenuDir -Recurse -Force
-}
-Invoke-AppBuilderHookList $Manifest.install_hooks.post_uninstall $InstallDir
+try {
+    $PostUninstallCommands = Copy-AppBuilderPostUninstallEntrypoints $Manifest.install_hooks.post_uninstall $InstallDir $PostUninstallDir
+    Invoke-AppBuilderHookList $Manifest.install_hooks.pre_uninstall $InstallDir
+    if (Test-Path -LiteralPath $StartMenuDir) {
+        Remove-Item -LiteralPath $StartMenuDir -Recurse -Force
+    }
 
-Set-Location $env:TEMP
-if (Test-Path -LiteralPath $InstallDir) {
-    Start-AppBuilderDirectoryCleanup $InstallDir
+    Set-Location $env:TEMP
+    Start-AppBuilderPostUninstallCleanup $InstallDir $PostUninstallCommands $PostUninstallDir
+    $StartedCleanup = $true
+} finally {
+    if ((-not $StartedCleanup) -and (Test-Path -LiteralPath $PostUninstallDir)) {
+        Remove-Item -LiteralPath $PostUninstallDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
-Write-Host 'Uninstalled.'
+Write-Host 'Uninstall cleanup started.'
 """
     )
 
@@ -274,12 +294,12 @@ def _powershell_common_functions() -> str:
     return r"""Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
-function Read-AppBuilderManifest {
-    param([string]$Path)
-    if (-not (Test-Path -LiteralPath $Path)) {
-        throw "Manifest not found: $Path"
+function Read-AppBuilderManifestJson {
+    param([string]$Json)
+    if ([string]::IsNullOrWhiteSpace($Json)) {
+        throw "Manifest JSON is empty."
     }
-    return Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json
+    return $Json | ConvertFrom-Json
 }
 
 function Resolve-AppBuilderPath {
@@ -393,6 +413,58 @@ function Invoke-AppBuilderHookList {
     }
 }
 
+function Test-AppBuilderPathInside {
+    param([string]$Path, [string]$Directory)
+    $FullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $FullDirectory = [System.IO.Path]::GetFullPath($Directory).TrimEnd('\')
+    return $FullPath.Equals($FullDirectory, [System.StringComparison]::OrdinalIgnoreCase) -or $FullPath.StartsWith($FullDirectory + '\', [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Copy-AppBuilderPostUninstallEntrypoints {
+    param($Commands, [string]$InstallDir, [string]$DestinationDir)
+    $PreparedCommands = @()
+    if ($null -eq $Commands) {
+        return ,$PreparedCommands
+    }
+    $AllowedExtensions = @('.cmd', '.ps1', '.exe')
+    $Index = 0
+    foreach ($Command in @($Commands)) {
+        if ($null -eq $Command) {
+            continue
+        }
+        $Argv = @()
+        foreach ($Item in @($Command)) {
+            $Argv += [string]$Item
+        }
+        if ($Argv.Count -eq 0) {
+            continue
+        }
+        $OriginalProgram = $Argv[0]
+        $Program = Resolve-HookProgram $OriginalProgram $InstallDir
+        if (Test-Path -LiteralPath $Program) {
+            $ProgramPath = [System.IO.Path]::GetFullPath($Program)
+            if (Test-AppBuilderPathInside $ProgramPath $InstallDir) {
+                $Extension = [System.IO.Path]::GetExtension($ProgramPath).ToLowerInvariant()
+                if (-not $AllowedExtensions.Contains($Extension)) {
+                    throw "post_uninstall entrypoints inside the install directory must be self-contained .cmd, .ps1, or .exe files: $OriginalProgram"
+                }
+                New-Item -ItemType Directory -Path $DestinationDir -Force | Out-Null
+                $SafeName = ('{0:D3}-{1}' -f $Index, (Split-Path -Leaf $ProgramPath))
+                $StagedProgram = Join-Path $DestinationDir $SafeName
+                Copy-Item -LiteralPath $ProgramPath -Destination $StagedProgram -Force
+                $Argv[0] = $StagedProgram
+            } else {
+                $Argv[0] = $ProgramPath
+            }
+        } elseif ($OriginalProgram.Contains('\') -or $OriginalProgram.Contains('/') -or [System.IO.Path]::IsPathRooted([Environment]::ExpandEnvironmentVariables($OriginalProgram))) {
+            throw "post_uninstall entrypoint must exist before the install directory is removed: $OriginalProgram"
+        }
+        $PreparedCommands += ,$Argv
+        $Index += 1
+    }
+    return ,$PreparedCommands
+}
+
 function New-AppBuilderShortcut {
     param(
         [string]$ShortcutPath,
@@ -432,24 +504,129 @@ function New-AppBuilderStartMenuShortcuts {
     }
 }
 
-function Start-AppBuilderDirectoryCleanup {
+function Remove-AppBuilderInstallDirectory {
     param([string]$Directory)
     if (-not (Test-Path -LiteralPath $Directory)) {
         return
     }
-    if ($Directory.Contains('"')) {
-        throw "Cannot clean up a path containing a double quote: $Directory"
+    $LastError = $null
+    for ($Attempt = 0; $Attempt -lt 20; $Attempt += 1) {
+        try {
+            Remove-Item -LiteralPath $Directory -Recurse -Force -ErrorAction Stop
+        } catch {
+            $LastError = $_
+        }
+        if (-not (Test-Path -LiteralPath $Directory)) {
+            return
+        }
+        Start-Sleep -Milliseconds 500
     }
-    $CleanupDir = Join-Path $env:TEMP ('app-builder-cleanup-' + [guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Path $CleanupDir -Force | Out-Null
-    $CleanupScript = Join-Path $CleanupDir 'cleanup.cmd'
-    $Lines = @(
-        '@echo off',
-        'ping 127.0.0.1 -n 2 >nul',
-        ('rmdir /s /q "' + $Directory + '"'),
-        ('rmdir /s /q "' + $CleanupDir + '"')
-    )
-    Set-Content -LiteralPath $CleanupScript -Value $Lines -Encoding ASCII
-    Start-Process -FilePath 'cmd.exe' -ArgumentList @('/D', '/C', "`"$CleanupScript`"") -WindowStyle Hidden
+    if ($LastError) {
+        throw "Failed to remove install directory ${Directory}: $LastError"
+    }
+    throw "Failed to remove install directory ${Directory}."
+}
+
+function Start-AppBuilderPostUninstallCleanup {
+    param([string]$InstallDir, $Commands, [string]$PostUninstallDir)
+    $Payload = [ordered]@{
+        install_directory = $InstallDir
+        post_uninstall_directory = $PostUninstallDir
+        commands = @($Commands)
+        environment = [ordered]@{
+            app_builder_name = $env:app_builder_name
+            app_builder_version = $env:app_builder_version
+            app_builder_install_directory = $env:app_builder_install_directory
+            app_builder_project_root = $env:app_builder_project_root
+            app_builder_start_menu = $env:app_builder_start_menu
+        }
+    }
+    $PayloadJson = $Payload | ConvertTo-Json -Depth 20 -Compress
+    $PayloadBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($PayloadJson))
+    $CleanupScript = @'
+$ErrorActionPreference = 'Stop'
+
+function Remove-DirectoryWithRetry {
+    param([string]$Directory)
+    if (-not (Test-Path -LiteralPath $Directory)) {
+        return
+    }
+    $LastError = $null
+    for ($Attempt = 0; $Attempt -lt 40; $Attempt += 1) {
+        try {
+            Remove-Item -LiteralPath $Directory -Recurse -Force -ErrorAction Stop
+        } catch {
+            $LastError = $_
+        }
+        if (-not (Test-Path -LiteralPath $Directory)) {
+            return
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    if ($LastError) {
+        throw "Failed to remove install directory ${Directory}: $LastError"
+    }
+    throw "Failed to remove install directory ${Directory}."
+}
+
+function Invoke-PostUninstallHook {
+    param($Command, [string]$WorkingDirectory)
+    if ($null -eq $Command) {
+        return
+    }
+    $Argv = @()
+    foreach ($Item in @($Command)) {
+        $Argv += [string]$Item
+    }
+    if ($Argv.Count -eq 0) {
+        return
+    }
+    $Program = $Argv[0]
+    $Arguments = @()
+    if ($Argv.Count -gt 1) {
+        $Arguments = $Argv[1..($Argv.Count - 1)]
+    }
+    $Extension = [System.IO.Path]::GetExtension($Program).ToLowerInvariant()
+    $global:LASTEXITCODE = 0
+    if ((Test-Path -LiteralPath $Program) -and $Extension -eq '.ps1') {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Program @Arguments
+    } elseif ((Test-Path -LiteralPath $Program) -and $Extension -eq '.py') {
+        & python.exe $Program @Arguments
+    } else {
+        & $Program @Arguments
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "post_uninstall command failed with exit code ${LASTEXITCODE}: $($Argv -join ' ')"
+    }
+}
+
+$PayloadJson = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__APP_BUILDER_PAYLOAD__'))
+$Payload = $PayloadJson | ConvertFrom-Json
+foreach ($Property in $Payload.environment.PSObject.Properties) {
+    [Environment]::SetEnvironmentVariable($Property.Name, [string]$Property.Value, 'Process')
+}
+$Succeeded = $false
+try {
+    Set-Location $env:TEMP
+    Start-Sleep -Milliseconds 500
+    Remove-DirectoryWithRetry ([string]$Payload.install_directory)
+    foreach ($Command in @($Payload.commands)) {
+        Invoke-PostUninstallHook $Command ([string]$Payload.post_uninstall_directory)
+    }
+    $Succeeded = $true
+} catch {
+    if (-not [string]::IsNullOrWhiteSpace([string]$Payload.post_uninstall_directory)) {
+        New-Item -ItemType Directory -Path ([string]$Payload.post_uninstall_directory) -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path ([string]$Payload.post_uninstall_directory) 'error.txt') -Value ([string]$_) -Encoding UTF8
+    }
+    throw
+} finally {
+    if ($Succeeded -and (Test-Path -LiteralPath ([string]$Payload.post_uninstall_directory))) {
+        Remove-Item -LiteralPath ([string]$Payload.post_uninstall_directory) -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+'@.Replace('__APP_BUILDER_PAYLOAD__', $PayloadBase64)
+    $EncodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($CleanupScript))
+    Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $EncodedCommand) -WindowStyle Hidden
 }
 """

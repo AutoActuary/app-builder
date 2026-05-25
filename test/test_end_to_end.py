@@ -62,7 +62,8 @@ build_hooks: {}
 
             with ZipFile(release.installer_archive) as installer_zip:
                 self.assertIn("install.cmd", installer_zip.namelist())
-                self.assertIn("install.ps1", installer_zip.namelist())
                 self.assertIn("uninstall.cmd", installer_zip.namelist())
-                self.assertIn("uninstall.ps1", installer_zip.namelist())
                 self.assertIn(release.payload_archive.name, installer_zip.namelist())
+                self.assertNotIn("install.ps1", installer_zip.namelist())
+                self.assertNotIn("uninstall.ps1", installer_zip.namelist())
+                self.assertNotIn(release.manifest_path.name, installer_zip.namelist())

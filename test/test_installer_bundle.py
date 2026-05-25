@@ -16,6 +16,7 @@ from app_builder.exewrap import (
     vendored_console_launcher_bytes,
 )
 from app_builder.installer_bundle import (
+    _contains_powershell_here_string_terminator,
     _render_bootstrap_config,
     create_exewrap_zip_installer,
 )
@@ -63,6 +64,15 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
         self.assertIn("Remove-Item -LiteralPath $extractDir", script)
         self.assertIn("exit $exitCode", script)
 
+    def test_manifest_embedding_rejects_powershell_here_string_terminator(
+        self,
+    ) -> None:
+        self.assertTrue(_contains_powershell_here_string_terminator("'@"))
+        self.assertTrue(_contains_powershell_here_string_terminator("{\n'@\n}"))
+        self.assertFalse(
+            _contains_powershell_here_string_terminator('{"value": "\\n\'@\\n"}')
+        )
+
     def test_installer_exe_contains_exewrap_config_and_stored_zip(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
@@ -97,25 +107,29 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 self.assertEqual(
                     {
                         "demo-1.0.zip",
-                        "demo-1.0-manifest.json",
                         "install.cmd",
-                        "install.ps1",
                         "uninstall.cmd",
-                        "uninstall.ps1",
                     },
                     set(installer_zip.namelist()),
                 )
                 for info in installer_zip.infolist():
                     self.assertEqual(ZIP_STORED, info.compress_type)
+                self.assertNotIn("demo-1.0-manifest.json", installer_zip.namelist())
                 self.assertIn(
-                    "powershell.exe -NoProfile -ExecutionPolicy Bypass",
+                    "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass",
                     installer_zip.read("install.cmd").decode("utf-8"),
                 )
-                install_ps1 = installer_zip.read("install.ps1").decode("utf-8")
-                self.assertIn("tar.exe -xf $PayloadPath -C $StagingDir", install_ps1)
-                self.assertIn("New-AppBuilderStartMenuShortcuts", install_ps1)
-                self.assertIn("Invoke-AppBuilderHookList", install_ps1)
-                self.assertIn("app-builder-manifest.json", install_ps1)
+                install_cmd = installer_zip.read("install.cmd").decode("utf-8")
+                self.assertIn("$EmbeddedManifestJson = @'", install_cmd)
+                self.assertIn('"name": "Demo"', install_cmd)
+                self.assertIn("tar.exe -xf $PayloadPath -C $StagingDir", install_cmd)
+                self.assertIn("New-AppBuilderStartMenuShortcuts", install_cmd)
+                self.assertIn("Invoke-AppBuilderHookList", install_cmd)
+                self.assertIn("app-builder-manifest.json", install_cmd)
+                uninstall_cmd = installer_zip.read("uninstall.cmd").decode("utf-8")
+                self.assertIn("Copy-AppBuilderPostUninstallEntrypoints", uninstall_cmd)
+                self.assertIn("Remove-AppBuilderInstallDirectory", uninstall_cmd)
+                self.assertNotIn("Start-AppBuilderDirectoryCleanup", uninstall_cmd)
 
     def test_installer_can_omit_uninstaller(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
@@ -139,6 +153,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             with ZipFile(installer) as installer_zip:
                 self.assertNotIn("uninstall.cmd", installer_zip.namelist())
                 self.assertNotIn("uninstall.ps1", installer_zip.namelist())
+                self.assertNotIn("install.ps1", installer_zip.namelist())
 
     @unittest.skipIf(os.name != "nt", "generated installer scripts target Windows")
     def test_generated_scripts_install_and_uninstall_payload_on_windows(self) -> None:
@@ -152,14 +167,23 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             extraction_dir.mkdir()
 
             hook_cmd = temp_dir / "post-install.cmd"
+            post_uninstall_cmd = temp_dir / "post-uninstall.cmd"
+            post_uninstall_marker = temp_dir / "post-uninstall.txt"
             hook_cmd.write_text(
                 "@echo off\n"
                 'echo post-install>"%app_builder_install_directory%\\post-install.txt"\n',
                 encoding="utf-8",
             )
+            post_uninstall_cmd.write_text(
+                "@echo off\n"
+                'if exist "%app_builder_install_directory%\\hello.cmd" exit /b 8\n'
+                'echo post-uninstall>"%~1"\n',
+                encoding="utf-8",
+            )
             with ZipFile(payload, "w") as payload_zip:
                 payload_zip.writestr("hello.cmd", "@echo off\necho hello\n")
                 payload_zip.write(hook_cmd, "post-install.cmd")
+                payload_zip.write(post_uninstall_cmd, "post-uninstall.cmd")
             manifest.write_text(
                 json.dumps(
                     {
@@ -172,7 +196,9 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                             "pre_install": [],
                             "post_install": [["post-install.cmd"]],
                             "pre_uninstall": [],
-                            "post_uninstall": [],
+                            "post_uninstall": [
+                                ["post-uninstall.cmd", str(post_uninstall_marker)]
+                            ],
                         },
                     }
                 ),
@@ -208,12 +234,20 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 (install_dir / "post-install.txt").read_text(encoding="utf-8").strip(),
             )
             self.assertTrue((install_dir / "uninstall.cmd").exists())
+            self.assertTrue((install_dir / "app-builder-manifest.json").exists())
 
             subprocess.run(
                 ["cmd.exe", "/D", "/C", "call", str(install_dir / "uninstall.cmd")],
                 check=True,
             )
             deadline = time.monotonic() + 10
-            while install_dir.exists() and time.monotonic() < deadline:
+            while (
+                install_dir.exists() or not post_uninstall_marker.exists()
+            ) and time.monotonic() < deadline:
                 time.sleep(0.1)
             self.assertFalse(install_dir.exists())
+            self.assertTrue(post_uninstall_marker.exists())
+            self.assertEqual(
+                "post-uninstall",
+                post_uninstall_marker.read_text(encoding="utf-8").strip(),
+            )

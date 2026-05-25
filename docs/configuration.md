@@ -57,8 +57,8 @@ Required fields can appear in examples without defaults. That means users must p
 | --- | --- | --- | --- | --- |
 | `pre_install` | `list[list[string]]` | no | `[]` | Argv commands written into installer metadata to run before installation. |
 | `post_install` | `list[list[string]]` | no | `[]` | Argv commands written into installer metadata to run after installation. |
-| `pre_uninstall` | `list[list[string]]` | no | `[]` | Argv commands written into installer metadata to run before uninstall. |
-| `post_uninstall` | `list[list[string]]` | no | `[]` | Argv commands written into installer metadata to run after uninstall. |
+| `pre_uninstall` | `list[list[string]]` | no | `[]` | Argv commands written into installer metadata to run before uninstall while the installed app directory is still present. |
+| `post_uninstall` | `list[list[string]]` | no | `[]` | Argv commands written into installer metadata to run after the install directory has been removed. Entrypoints inside the install directory must be self-contained .cmd, .ps1, or .exe files because app-builder stages only argv[0] to temp before removal. |
 
 ## `config.installer.paths`
 
