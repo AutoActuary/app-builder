@@ -6,13 +6,13 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from tempfile import TemporaryDirectory
 from typing import Mapping
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from .config import load_project_config
 from .fileset import build_remap_table, collect_files
 from .hooks import run_hook_commands
+from .installer_bundle import create_exewrap_zip_installer
 from .project import detect_version, expand_windows_envvars
 from .python_runtime import (
     PythonEnvironmentResult,
@@ -91,10 +91,10 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
     )
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
-    installer_archive = (
-        dist_dir / f"{_slugify(config.installer.name)}-{version}-installer.zip"
+    installer_archive = dist_dir / (
+        f"{_slugify(config.installer.name)}-{version}-installer.exe"
     )
-    _write_installer_archive(
+    create_exewrap_zip_installer(
         installer_archive,
         payload_archive=payload_archive,
         manifest_path=manifest_path,
@@ -239,55 +239,6 @@ def _write_payload_archive(
         ):
             zip_file.write(source, destination.as_posix())
         zip_file.writestr("version.txt", version)
-
-
-def _write_installer_archive(
-    installer_archive: Path,
-    *,
-    payload_archive: Path,
-    manifest_path: Path,
-    app_name: str,
-    pause_on_exit: bool,
-    add_uninstaller: bool,
-) -> None:
-    with TemporaryDirectory() as temp_dir_str:
-        temp_dir = Path(temp_dir_str)
-        install_cmd = temp_dir / "install.cmd"
-        uninstall_cmd = temp_dir / "uninstall.cmd"
-        install_cmd.write_text(
-            _render_install_script(
-                app_name, payload_archive.name, manifest_path.name, pause_on_exit
-            ),
-            encoding="utf-8",
-        )
-        uninstall_cmd.write_text(
-            _render_uninstall_script(app_name, pause_on_exit), encoding="utf-8"
-        )
-        with ZipFile(installer_archive, "w", compression=ZIP_DEFLATED) as zip_file:
-            zip_file.write(payload_archive, payload_archive.name)
-            zip_file.write(manifest_path, manifest_path.name)
-            zip_file.write(install_cmd, install_cmd.name)
-            if add_uninstaller:
-                zip_file.write(uninstall_cmd, uninstall_cmd.name)
-
-
-def _render_install_script(
-    app_name: str, payload_name: str, manifest_name: str, pause_on_exit: bool
-) -> str:
-    pause_block = "pause\n" if pause_on_exit else ""
-    return (
-        "@echo off\n"
-        f"echo Installing {app_name}\n"
-        f"echo Payload archive: {payload_name}\n"
-        f"echo Manifest: {manifest_name}\n"
-        "echo Extract this zip bundle and follow your deployment policy.\n"
-        f"{pause_block}"
-    )
-
-
-def _render_uninstall_script(app_name: str, pause_on_exit: bool) -> str:
-    pause_block = "pause\n" if pause_on_exit else ""
-    return f"@echo off\necho Uninstall {app_name} according to your deployment policy.\n{pause_block}"
 
 
 def _build_hook_environment(

@@ -47,6 +47,7 @@ build_hooks: {}
             self.assertTrue(release.payload_archive.exists())
             self.assertTrue(release.installer_archive.exists())
             self.assertTrue(release.manifest_path.exists())
+            self.assertEqual(".exe", release.installer_archive.suffix)
 
             manifest = json.loads(release.manifest_path.read_text(encoding="utf-8"))
             self.assertEqual("Demo App", manifest["name"])

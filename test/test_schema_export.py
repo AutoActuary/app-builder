@@ -10,7 +10,7 @@ from app_builder.schema_export import (
     validate_app_builder_mapping,
 )
 
-VALID_MAPPING = {
+VALID_MAPPING: dict[str, Any] = {
     "installer": {
         "name": "Demo",
         "install_directory": r"%localappdata%\Demo",

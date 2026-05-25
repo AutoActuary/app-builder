@@ -268,7 +268,7 @@ build_hooks:
             dist_dir = project_root / "dist"
             dist_dir.mkdir()
             payload_archive = dist_dir / "demo-1.2.3.zip"
-            installer_archive = dist_dir / "demo-1.2.3-installer.zip"
+            installer_archive = dist_dir / "demo-1.2.3-installer.exe"
             manifest_path = dist_dir / "demo-1.2.3-manifest.json"
             payload_archive.write_bytes(b"payload")
             installer_archive.write_bytes(b"installer")
