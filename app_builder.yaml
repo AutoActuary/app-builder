@@ -11,8 +11,7 @@ installer:
   paths:
     include:
       - app_builder
-      - cli
-      - assets
+      - pyproject.toml
       - requirements.txt
       - mypy.ini
       - README.md

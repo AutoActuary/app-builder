@@ -17,6 +17,12 @@
 
 ## Commands
 
+Install the module in editable form while developing:
+
+```text
+python -m pip install -e .
+```
+
 ```text
 app-builder init
 app-builder python

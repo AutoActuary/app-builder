@@ -7,7 +7,7 @@ import yaml
 
 from .schema import AppBuilderConfig, ConfigError, load_app_builder_config
 
-CONFIG_FILENAMES = ("app_builder.yaml", "app-builder.yaml", "application.yaml")
+CONFIG_FILENAMES = ("app_builder.yaml", "app-builder.yaml")
 
 
 def load_config(config_path: Path) -> AppBuilderConfig:
