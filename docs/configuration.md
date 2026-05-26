@@ -86,3 +86,5 @@ Required fields can appear in examples without defaults. That means users must p
 ## Command Values
 
 Hook fields are `list[list[string]]`. Each command is an argv list. Use an explicit shell argv, such as `[cmd, /c, ...]`, when shell behavior is required.
+
+When a hook command's `argv[0]` is a `.py` file, app-builder runs it with a project-owned Python from `python_bundled` or `python_venv`. It does not fall back to system Python. Use an explicit argv such as `[python, script.py]` only when the target machine is expected to provide Python.

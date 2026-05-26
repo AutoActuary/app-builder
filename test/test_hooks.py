@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -38,7 +37,7 @@ class TestHookCommandExecution(unittest.TestCase):
         self.assertEqual("1", kwargs["env"]["CUSTOM"])
         self.assertTrue(kwargs["check"])
 
-    def test_python_file_hook_falls_back_to_app_builder_python(self) -> None:
+    def test_python_file_hook_requires_project_owned_python(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             project_root = Path(temp_dir_str)
             script = project_root / "hook.py"
@@ -46,16 +45,15 @@ class TestHookCommandExecution(unittest.TestCase):
             missing_python = project_root / "venv" / "Scripts" / "python.exe"
 
             with patch("app_builder.hooks.subprocess.run") as subprocess_run:
-                run_hook_commands(
-                    project_root,
-                    [["hook.py"]],
-                    environment={},
-                    python_candidates=[missing_python],
-                )
+                with self.assertRaisesRegex(RuntimeError, "project-owned Python"):
+                    run_hook_commands(
+                        project_root,
+                        [["hook.py"]],
+                        environment={},
+                        python_candidates=[missing_python],
+                    )
 
-        args, _ = subprocess_run.call_args
-        self.assertEqual(str(Path(sys.executable)), args[0][0])
-        self.assertEqual(str(script.resolve()), args[0][1])
+        subprocess_run.assert_not_called()
 
     def test_powershell_file_hook_uses_execution_policy_bypass(self) -> None:
         with TemporaryDirectory() as temp_dir_str:

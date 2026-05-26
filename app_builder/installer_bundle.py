@@ -361,15 +361,14 @@ function Select-HookPython {
     param([string]$WorkingDirectory)
     $Candidates = @(
         (Join-Path $WorkingDirectory 'venv\Scripts\python.exe'),
-        (Join-Path $WorkingDirectory 'bin\python\python\python.exe'),
-        'python.exe'
+        (Join-Path $WorkingDirectory 'bin\python\python\python.exe')
     )
     foreach ($Candidate in $Candidates) {
         if (Test-Path -LiteralPath $Candidate) {
             return $Candidate
         }
     }
-    return 'python.exe'
+    throw "Cannot run Python hook from a .py entrypoint because app-builder could not find project-owned Python in venv\Scripts\python.exe or bin\python\python\python.exe. Use an explicit command such as ['python', 'script.py'] if the target machine is expected to provide Python."
 }
 
 function Invoke-AppBuilderHook {
@@ -591,7 +590,7 @@ function Invoke-PostUninstallHook {
     if ((Test-Path -LiteralPath $Program) -and $Extension -eq '.ps1') {
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Program @Arguments
     } elseif ((Test-Path -LiteralPath $Program) -and $Extension -eq '.py') {
-        & python.exe $Program @Arguments
+        throw "post_uninstall .py entrypoints are not auto-dispatched to system Python. Use a self-contained .cmd, .ps1, or .exe entrypoint, or call an explicit Python executable in the hook argv."
     } else {
         & $Program @Arguments
     }

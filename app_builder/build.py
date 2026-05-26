@@ -4,7 +4,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Mapping
@@ -138,7 +137,7 @@ def _run_dependency_stages(project_root: Path) -> PythonEnvironmentResult:
         project_root,
         config.build_hooks.pre_process,
         environment=hook_env,
-        python_candidates=_host_hook_python_candidates(),
+        python_candidates=_runtime_hook_python_candidates(project_root, config),
     )
     run_hook_commands(
         project_root,
@@ -173,14 +172,8 @@ def _run_dependency_stages(project_root: Path) -> PythonEnvironmentResult:
     return env_result
 
 
-def _host_hook_python_candidates() -> list[Path]:
-    return [Path(sys.executable)]
-
-
 def _hook_python_candidates(*candidates: Path | None) -> list[Path]:
-    return [candidate for candidate in candidates if candidate is not None] + [
-        Path(sys.executable)
-    ]
+    return [candidate for candidate in candidates if candidate is not None]
 
 
 def _bundled_hook_python_candidates(
@@ -336,14 +329,120 @@ def upload_release_to_github(
 
 
 def _resolve_github_cli() -> str:
-    gh_executable = shutil.which("gh.exe") or shutil.which("gh")
-    if gh_executable is None:
-        raise RuntimeError(
-            "GitHub releases require GitHub CLI (`gh.exe`) on PATH. "
-            "Install gh.exe and authenticate with `gh auth login` before running "
-            "`app-builder release-gh`."
+    for candidate in _github_cli_candidates():
+        if candidate.is_file():
+            return str(candidate)
+    raise RuntimeError(_github_cli_missing_message())
+
+
+def _github_cli_candidates() -> list[Path]:
+    candidates: list[Path] = []
+    candidates.extend(_where_github_cli_paths())
+    candidates.extend(
+        Path(candidate)
+        for candidate in (shutil.which("gh.exe"), shutil.which("gh"))
+        if candidate
+    )
+    candidates.extend(_known_github_cli_paths())
+    return _existing_unique_paths(candidates)
+
+
+def _where_github_cli_paths() -> list[Path]:
+    where_executable = shutil.which("where.exe")
+    if where_executable is None:
+        return []
+
+    candidates: list[Path] = []
+    for executable_name in ("gh.exe", "gh"):
+        result = subprocess.run(
+            [where_executable, executable_name],
+            capture_output=True,
+            text=True,
+            check=False,
         )
-    return gh_executable
+        if result.returncode != 0:
+            continue
+        candidates.extend(
+            Path(line.strip()) for line in result.stdout.splitlines() if line.strip()
+        )
+    return candidates
+
+
+def _known_github_cli_paths() -> list[Path]:
+    candidates: list[Path] = []
+    for env_name in ("ProgramFiles", "ProgramFiles(x86)"):
+        base = os.environ.get(env_name)
+        if base:
+            candidates.append(Path(base) / "GitHub CLI" / "gh.exe")
+            candidates.extend(
+                _glob_existing_paths(Path(base) / "WinGet" / "Packages", "GitHub.cli_*")
+            )
+
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        local_root = Path(local_app_data)
+        candidates.append(local_root / "Programs" / "GitHub CLI" / "gh.exe")
+        candidates.append(local_root / "GitHub CLI" / "gh.exe")
+        candidates.extend(
+            _glob_existing_paths(
+                local_root / "Microsoft" / "WinGet" / "Packages", "GitHub.cli_*"
+            )
+        )
+
+    program_data = os.environ.get("ProgramData")
+    if program_data:
+        candidates.append(Path(program_data) / "chocolatey" / "bin" / "gh.exe")
+
+    user_profile = os.environ.get("USERPROFILE")
+    if user_profile:
+        user_root = Path(user_profile)
+        candidates.append(user_root / "scoop" / "shims" / "gh.exe")
+        candidates.append(
+            user_root / "scoop" / "apps" / "gh" / "current" / "bin" / "gh.exe"
+        )
+
+    return candidates
+
+
+def _glob_existing_paths(root: Path, package_pattern: str) -> list[Path]:
+    if not root.is_dir():
+        return []
+    candidates: list[Path] = []
+    for package_root in root.glob(package_pattern):
+        candidates.append(package_root / "gh.exe")
+        candidates.extend(package_root.glob("**/gh.exe"))
+    return candidates
+
+
+def _existing_unique_paths(candidates: list[Path]) -> list[Path]:
+    unique_candidates: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = os.path.normcase(os.path.abspath(os.fspath(candidate)))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_candidates.append(candidate)
+    return unique_candidates
+
+
+def _github_cli_missing_message() -> str:
+    return (
+        "GitHub releases require GitHub CLI (`gh.exe`). app-builder searched "
+        "PATH, where.exe results, and common GitHub CLI install locations but "
+        "could not find it.\n\n"
+        "Install GitHub CLI, then authenticate before running `app-builder "
+        "release-gh`:\n"
+        "  winget install --id GitHub.cli\n"
+        "  gh auth login\n\n"
+        "Other install options:\n"
+        "  choco install gh\n"
+        "  scoop install gh\n"
+        "  Download the MSI from https://cli.github.com/\n\n"
+        "If gh.exe is already installed, add its directory to PATH or install it "
+        "in one of the standard locations such as `C:\\Program Files\\GitHub "
+        "CLI\\gh.exe`."
+    )
 
 
 def _run_gh(

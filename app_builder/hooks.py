@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -23,7 +22,6 @@ def _normalize_python_candidates(
         candidates.extend(
             Path(candidate) for candidate in python_candidates if candidate
         )
-    candidates.append(Path(sys.executable))
 
     unique_candidates: list[Path] = []
     seen: set[str] = set()
@@ -40,7 +38,15 @@ def _select_python(python_candidates: Sequence[Path]) -> str:
     for candidate in python_candidates:
         if candidate.exists():
             return str(candidate)
-    return str(Path(sys.executable))
+    candidates = ", ".join(str(candidate) for candidate in python_candidates)
+    detail = f" Checked: {candidates}." if candidates else ""
+    raise RuntimeError(
+        "Cannot run Python hook from a .py entrypoint because app-builder could "
+        "not find a project-owned Python interpreter. Enable or materialize "
+        "python_bundled/python_venv, or use an explicit command such as "
+        "['python', 'script.py'] if the target machine is expected to provide "
+        f"Python.{detail}"
+    )
 
 
 def run_hook_commands(

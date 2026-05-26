@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -71,14 +70,13 @@ class TestBuildHookPythonSelection(unittest.TestCase):
                     env_result, build_module._run_dependency_stages(project_root)
                 )
 
-        host_python = Path(sys.executable)
         self.assertEqual(
             [
-                [host_python],
-                [bundled_python, venv_python, host_python],
-                [bundled_python, venv_python, host_python],
-                [bundled_python, venv_python, host_python],
-                [venv_python, bundled_python, host_python],
+                [venv_python, bundled_python],
+                [bundled_python, venv_python],
+                [bundled_python, venv_python],
+                [bundled_python, venv_python],
+                [venv_python, bundled_python],
             ],
             [call.kwargs["python_candidates"] for call in run_hooks.call_args_list],
         )
@@ -141,14 +139,13 @@ build_hooks:
                     env_result, build_module._run_dependency_stages(project_root)
                 )
 
-        host_python = Path(sys.executable)
         self.assertEqual(
             [
-                [host_python],
-                [venv_python, host_python],
-                [venv_python, host_python],
-                [venv_python, host_python],
-                [venv_python, host_python],
+                [venv_python],
+                [venv_python],
+                [venv_python],
+                [venv_python],
+                [venv_python],
             ],
             [call.kwargs["python_candidates"] for call in run_hooks.call_args_list],
         )
@@ -186,7 +183,6 @@ build_hooks:
         expected_candidates = [
             venv_python,
             bundled_python,
-            Path(sys.executable),
         ]
         self.assertEqual(
             [expected_candidates, expected_candidates, expected_candidates],
@@ -211,7 +207,6 @@ build_hooks:
             [
                 python_executable(project_root / "venv"),
                 project_root / "bin" / "python" / "python" / "python.exe",
-                Path(sys.executable),
             ],
             candidates,
         )
@@ -281,8 +276,11 @@ build_hooks:
                     stderr="",
                 )
 
+            gh_executable = r"C:\Tools\GitHub CLI\gh.exe"
             with (
-                patch("app_builder.build.shutil.which", return_value="gh.exe"),
+                patch(
+                    "app_builder.build._resolve_github_cli", return_value=gh_executable
+                ),
                 patch("app_builder.build.subprocess.run", side_effect=fake_run),
                 patch("app_builder.build.run_hook_commands") as run_hooks,
             ):
@@ -298,13 +296,22 @@ build_hooks:
             [call.args[1] for call in run_hooks.call_args_list],
         )
         create_call = gh_calls[1]
-        self.assertEqual(["gh.exe", "release", "create", "1.2.3"], create_call[:4])
+        self.assertEqual([gh_executable, "release", "create", "1.2.3"], create_call[:4])
         self.assertIn(str(payload_archive), create_call)
         self.assertIn(str(installer_archive), create_call)
         self.assertIn(str(manifest_path), create_call)
         self.assertIn("--draft", create_call)
         self.assertEqual(
-            ["gh.exe", "release", "view", "1.2.3", "--json", "url", "--jq", ".url"],
+            [
+                gh_executable,
+                "release",
+                "view",
+                "1.2.3",
+                "--json",
+                "url",
+                "--jq",
+                ".url",
+            ],
             gh_calls[2],
         )
 
@@ -320,13 +327,33 @@ build_hooks:
             )
 
             with (
+                patch("app_builder.build._where_github_cli_paths", return_value=[]),
                 patch("app_builder.build.shutil.which", return_value=None),
+                patch("app_builder.build._known_github_cli_paths", return_value=[]),
                 patch("app_builder.build.run_hook_commands"),
             ):
-                with self.assertRaisesRegex(RuntimeError, "gh.exe"):
+                with self.assertRaisesRegex(
+                    RuntimeError, "winget install --id GitHub.cli"
+                ):
                     build_module.upload_release_to_github(
                         project_root, release=release, draft=False
                     )
+
+    def test_github_cli_resolver_uses_known_locations(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            gh_executable = Path(temp_dir_str) / "GitHub CLI" / "gh.exe"
+            gh_executable.parent.mkdir()
+            gh_executable.write_text("", encoding="utf-8")
+
+            with (
+                patch("app_builder.build._where_github_cli_paths", return_value=[]),
+                patch("app_builder.build.shutil.which", return_value=None),
+                patch(
+                    "app_builder.build._known_github_cli_paths",
+                    return_value=[gh_executable],
+                ),
+            ):
+                self.assertEqual(str(gh_executable), build_module._resolve_github_cli())
 
 
 if __name__ == "__main__":
