@@ -277,6 +277,20 @@ installer:
       - [README.md]
 """)
 
+    def test_bad_payload_format_is_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigError,
+            r"config\.installer\.payload_format: expected one of: 'zip', '7z'\.",
+        ):
+            self._load_yaml("""
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+  payload_format: rar
+  paths:
+    include: []
+""")
+
     def test_legacy_application_yaml_is_rejected(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)

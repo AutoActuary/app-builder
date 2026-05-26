@@ -32,6 +32,7 @@ app_builder = [
     "py.typed",
     "assets/app_builder_template.yaml",
     "assets/*.ico",
+    "assets/7zip/*",
     "assets/templates/*",
     "assets/exewrap/*",
 ]

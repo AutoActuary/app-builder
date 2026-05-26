@@ -15,6 +15,7 @@
 - Automatic `.py` hook dispatch uses only project-owned Python from `python_bundled` or `python_venv`; app-builder does not assume system Python exists on the developer or user machine. Use an explicit argv such as `[python, script.py]` only when that assumption is intentional.
 - Release builds now emit a first-layer ExeWrap installer `.exe` with a stored ZIP payload appended after the ExeWrap config end marker. The vendored launcher carries an `asInvoker` manifest so Windows does not apply filename-based installer elevation heuristics. The bootstrap command uses PowerShell to extract itself with `tar.exe` into a random temp directory, run `install.cmd`, and clean up in `finally`; the generated installer then installs the payload into the configured install directory and writes an uninstall path when enabled.
 - `installer.icon` is the single icon field: app-builder embeds it into generated ExeWrap `.exe` files and also uses it as the default Start Menu shortcut icon.
+- `installer.payload_format` selects the inner payload archive. `zip` is the default; `7z` uses the vendored 7-Zip runtime, stages remapped and Windows-locked files safely, suppresses routine 7z noise, and includes `bin/7z.exe`/`bin/7z.dll` in the installer top layer for user-side extraction.
 - First-class `bin/...` runtime/tool features are retired except for Python. Use explicit hooks for project-specific tools or setup outside the Python runtime path.
 - `release-gh` uses GitHub CLI (`gh.exe`) for GitHub Releases. app-builder searches PATH, `where.exe` results, and common GitHub CLI install locations; if it still cannot find `gh.exe`, install it with `winget install --id GitHub.cli` and authenticate with `gh auth login`.
 - Config string values support `${...}` interpolation before schema validation. Supported namespaces are `ENV.*`, `GIT.*`, `APP.VERSION`, and `CONFIG.*`; interpolation is string-only and fails loudly for missing values, circular `CONFIG.*` references, or references to lists and mappings.
@@ -46,6 +47,8 @@ Run `app-builder init` inside a git repository to generate:
 
 The generated YAML file is intentionally heavily commented and is meant to double as real config, template, and documentation base.
 It is rendered from the same dataclass metadata as the [configuration reference](docs/configuration.md), and the packaged YAML snapshot is tested for drift.
+
+The release pipeline, including config interpolation, icon embedding, ZIP and 7z payloads, and GitHub release artifact selection, is documented in [docs/release-pipeline.md](docs/release-pipeline.md).
 
 ## Config interpolation
 

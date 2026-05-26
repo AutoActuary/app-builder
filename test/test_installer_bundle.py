@@ -150,7 +150,13 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 install_cmd = installer_zip.read("install.cmd").decode("utf-8")
                 self.assertIn("$EmbeddedManifestJson = @'", install_cmd)
                 self.assertIn('"name": "Demo"', install_cmd)
-                self.assertIn("tar.exe -xf $PayloadPath -C $StagingDir", install_cmd)
+                self.assertIn(
+                    "Expand-AppBuilderPayloadArchive $PayloadPath $StagingDir $ScriptRoot",
+                    install_cmd,
+                )
+                self.assertIn("tar.exe -xf $PayloadPath -C $Destination", install_cmd)
+                self.assertIn("bin\\7z.exe", install_cmd)
+                self.assertIn("Bundled 7z.exe is missing", install_cmd)
                 self.assertIn("Get-AppBuilderExistingInstallKind", install_cmd)
                 self.assertIn("Test-AppBuilderLegacyInstall", install_cmd)
                 self.assertIn("Invoke-AppBuilderLegacyPreUninstall", install_cmd)
@@ -167,6 +173,38 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 self.assertIn("Copy-AppBuilderPostUninstallEntrypoints", uninstall_cmd)
                 self.assertIn("Remove-AppBuilderInstallDirectory", uninstall_cmd)
                 self.assertNotIn("Start-AppBuilderDirectoryCleanup", uninstall_cmd)
+
+    def test_installer_can_include_extra_top_layer_files(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            payload = temp_dir / "demo.7z"
+            manifest = temp_dir / "manifest.json"
+            installer = temp_dir / "installer.exe"
+            sevenzip_exe = temp_dir / "7z.exe"
+            sevenzip_dll = temp_dir / "7z.dll"
+            payload.write_text("payload", encoding="utf-8")
+            manifest.write_text("{}", encoding="utf-8")
+            sevenzip_exe.write_text("exe", encoding="utf-8")
+            sevenzip_dll.write_text("dll", encoding="utf-8")
+
+            create_exewrap_zip_installer(
+                installer,
+                payload_archive=payload,
+                manifest_path=manifest,
+                app_name="Demo",
+                pause_on_exit=False,
+                add_uninstaller=True,
+                top_layer_files={
+                    sevenzip_exe: "bin/7z.exe",
+                    sevenzip_dll: "bin/7z.dll",
+                },
+                launcher=b"fake-launcher",
+            )
+
+            with ZipFile(installer) as installer_zip:
+                self.assertIn("demo.7z", installer_zip.namelist())
+                self.assertEqual("exe", installer_zip.read("bin/7z.exe").decode())
+                self.assertEqual("dll", installer_zip.read("bin/7z.dll").decode())
 
     @unittest.skipIf(os.name != "nt", "Windows icon resource update")
     def test_installer_exe_embeds_configured_icon(self) -> None:
