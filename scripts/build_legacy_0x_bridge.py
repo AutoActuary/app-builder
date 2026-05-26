@@ -4,8 +4,10 @@ import argparse
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -159,7 +161,19 @@ def _remove_tree_within(root: Path, target: Path) -> None:
     target_resolved = target.resolve()
     if root_resolved == target_resolved or root_resolved not in target_resolved.parents:
         raise RuntimeError(f"Refusing to remove outside {root_resolved}: {target_resolved}")
-    shutil.rmtree(target_resolved)
+    shutil.rmtree(target_resolved, onexc=_retry_remove_readonly)
+
+
+def _retry_remove_readonly(
+    function: Callable[[str], object],
+    path: str,
+    exc_info: BaseException,
+) -> None:
+    if isinstance(exc_info, PermissionError):
+        os.chmod(path, stat.S_IWRITE)
+        function(path)
+        return
+    raise exc_info
 
 
 def _run(
