@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tomllib
@@ -68,9 +69,13 @@ def ensure_poetry_lock(project_root: Path) -> PoetryLock:
             f"Could not find {pyproject_path}. Poetry dependencies must be declared in pyproject.toml."
         )
 
+    env = os.environ.copy()
+    env["POETRY_VIRTUALENVS_CREATE"] = "false"
+    env["POETRY_NO_INTERACTION"] = "1"
     completed = subprocess.run(
         [sys.executable, "-m", "poetry", "lock", "--no-interaction"],
         cwd=project_root,
+        env=env,
         check=False,
         capture_output=True,
         text=True,

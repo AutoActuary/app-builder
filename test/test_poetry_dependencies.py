@@ -5,7 +5,7 @@ import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from app_builder.poetry_dependencies import (
     DEV_GROUP,
@@ -86,10 +86,16 @@ groups = ["main"]
         run.assert_called_once_with(
             [sys.executable, "-m", "poetry", "lock", "--no-interaction"],
             cwd=project_root,
+            env=ANY,
             check=False,
             capture_output=True,
             text=True,
         )
+        self.assertEqual(
+            "false",
+            run.call_args.kwargs["env"]["POETRY_VIRTUALENVS_CREATE"],
+        )
+        self.assertEqual("1", run.call_args.kwargs["env"]["POETRY_NO_INTERACTION"])
 
     def test_missing_pyproject_is_user_readable(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
