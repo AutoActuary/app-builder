@@ -118,17 +118,17 @@ runpy.run_path(str(ROOT / "legacy-cli.py"), run_name="__main__")
 def _render_legacy_bridge_launcher_config() -> bytes:
     return (
         "{\n"
+        '  "env": {\n'
+        '    "PYTHONNOUSERSITE": "1",\n'
+        '    "PYTHONPATH": "@{exe_dir}\\\\site-packages;@{exe_dir}"\n'
+        "  },\n"
         '  "command": [\n'
         '    "@{exe_dir}\\\\..\\\\bin\\\\python\\\\python\\\\python.exe",\n'
         '    "-X",\n'
         '    "utf8",\n'
         '    "@{exe_dir}\\\\app-builder-legacy.py",\n'
         "    @{args}\n"
-        "  ],\n"
-        '  "env": {\n'
-        '    "PYTHONNOUSERSITE": "1",\n'
-        '    "PYTHONPATH": "@{exe_dir}\\\\site-packages;@{exe_dir}"\n'
-        "  }\n"
+        "  ]\n"
         "}\n"
     ).encode("utf-8")
 

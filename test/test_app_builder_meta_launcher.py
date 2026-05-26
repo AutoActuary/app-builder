@@ -19,6 +19,7 @@ class TestAppBuilderMetaLauncher(unittest.TestCase):
         self.assertIn('"app_builder_meta"', config)
         self.assertIn("@{args}", config)
         self.assertIn('"PYTHONPATH": "@{exe_dir}"', config)
+        self.assertGreater(config.rfind('"command"'), config.rfind('"env"'))
 
     def test_legacy_bridge_launcher_config_preserves_cwd_and_uses_exe_dir(self) -> None:
         config = _render_legacy_bridge_launcher_config().decode("utf-8")
@@ -29,6 +30,7 @@ class TestAppBuilderMetaLauncher(unittest.TestCase):
         self.assertIn('"@{exe_dir}\\\\..\\\\bin\\\\python\\\\python\\\\python.exe"', config)
         self.assertIn('"@{exe_dir}\\\\app-builder-legacy.py"', config)
         self.assertIn('"PYTHONPATH": "@{exe_dir}\\\\site-packages;@{exe_dir}"', config)
+        self.assertGreater(config.rfind('"command"'), config.rfind('"env"'))
 
     def test_app_builder_dogfood_payload_contains_meta_launcher(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
@@ -64,6 +66,9 @@ build_hooks: {}
         )
         self.assertNotIn('"cwd"', embedded_config)
         self.assertIn('"app_builder_meta"', embedded_config)
+        self.assertGreater(
+            embedded_config.rfind('"command"'), embedded_config.rfind('"env"')
+        )
 
 
 if __name__ == "__main__":
