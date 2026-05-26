@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "app-builder"
-dynamic = ["version"]
+version = "1.0.0"
 description = "Schema-first Windows application builder for Python-focused apps."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,9 +23,6 @@ test = [
 
 [project.scripts]
 app-builder = "app_builder_meta.main:main"
-
-[tool.setuptools.dynamic]
-version = {attr = "app_builder.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["app_builder*"]
