@@ -6,7 +6,7 @@ python_venv: null
 installer:
   name: app-builder
   install_directory: "%localappdata%\\app-builder"
-  icon: application-templates/icon.ico
+  icon: app_builder/assets/app-builder.ico
   dist: dist
   paths:
     include:

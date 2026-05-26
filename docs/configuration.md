@@ -69,7 +69,7 @@ installer:
 | --- | --- | --- | --- | --- |
 | `name` | `string` | yes | required | Human-facing application name. |
 | `install_directory` | `string` | yes | required | Windows install directory. Percent-style environment variables are expanded at build time. |
-| `icon` | `string` | no | `application-templates/icon.ico` | Project-relative default icon used for Start Menu shortcuts when a shortcut does not specify its own icon. |
+| `icon` | `string` | no | `application-templates/icon.ico` | Project-relative .ico file embedded into generated ExeWrap executables and used for Start Menu shortcuts when a shortcut does not specify its own icon. |
 | `pause_on_exit` | `boolean` | no | `true` | Whether generated installer scripts should pause before exiting. |
 | `add_uninstaller` | `boolean` | no | `true` | Whether the installer bundle should include an uninstall script. |
 | `start_menu` | `list[mapping]` | no | `[]` | Windows Start Menu shortcut declarations. |

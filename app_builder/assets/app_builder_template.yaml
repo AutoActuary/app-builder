@@ -45,9 +45,9 @@ installer:
   # expanded at build time.
   install_directory: '%localappdata%\MyCompany\MyApp'
 
-  # Optional string. Project-relative default icon used for Start Menu shortcuts when a
-  # shortcut does not specify its own icon. Default if omitted: application-
-  # templates/icon.ico.
+  # Optional string. Project-relative .ico file embedded into generated ExeWrap
+  # executables and used for Start Menu shortcuts when a shortcut does not specify its own
+  # icon. Default if omitted: application-templates/icon.ico.
   icon: application-templates/icon.ico
 
   # Optional boolean. Whether generated installer scripts should pause before exiting.

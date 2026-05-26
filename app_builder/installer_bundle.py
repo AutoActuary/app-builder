@@ -5,7 +5,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZIP_STORED, ZipFile
 
-from .exewrap import stamp_exe_wrap_config
+from .exewrap import (
+    stamp_exe_icon,
+    stamp_exe_wrap_config,
+    vendored_console_launcher_bytes,
+)
 
 _INSTALLED_MANIFEST_NAME = "app-builder-manifest.json"
 _POWERSHELL_HERE_STRING_END = "'@"
@@ -19,11 +23,17 @@ def create_exewrap_zip_installer(
     app_name: str,
     pause_on_exit: bool,
     add_uninstaller: bool,
+    icon_path: Path | None = None,
     launcher: bytes | None = None,
 ) -> None:
     if output_path.exists():
         output_path.unlink()
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    if icon_path is not None:
+        launcher = stamp_exe_icon(
+            launcher if launcher is not None else vendored_console_launcher_bytes(),
+            icon_path,
+        )
     output_path.write_bytes(
         stamp_exe_wrap_config(
             _render_bootstrap_config(),
