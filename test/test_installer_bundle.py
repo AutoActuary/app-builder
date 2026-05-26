@@ -371,8 +371,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 encoding="utf-8",
             )
             (install_dir / "scripts" / "pre-uninstall.cmd").write_text(
-                "@echo off\n"
-                f'echo legacy-pre>"{legacy_pre_marker}"\n',
+                "@echo off\n" f'echo legacy-pre>"{legacy_pre_marker}"\n',
                 encoding="utf-8",
             )
             (install_dir / "old-file.txt").write_text("old", encoding="utf-8")
@@ -449,8 +448,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             first_payload = temp_dir / "demo-1.zip"
             first_hook = temp_dir / "pre-uninstall.cmd"
             first_hook.write_text(
-                "@echo off\n"
-                f'echo pre-uninstall>"{marker}"\n',
+                "@echo off\n" f'echo pre-uninstall>"{marker}"\n',
                 encoding="utf-8",
             )
             with ZipFile(first_payload, "w") as payload_zip:
@@ -542,4 +540,6 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             )
 
             self.assertEqual("two", (install_dir / "hello.txt").read_text())
-            self.assertEqual("pre-uninstall", marker.read_text(encoding="utf-8").strip())
+            self.assertEqual(
+                "pre-uninstall", marker.read_text(encoding="utf-8").strip()
+            )

@@ -147,7 +147,9 @@ def _resolve_git(
             context.project_root, ["describe", "--tags", "--exact-match"]
         )
     elif normalized == "IS_DIRTY":
-        output = _git_output(context.project_root, ["status", "--porcelain"], current_path)
+        output = _git_output(
+            context.project_root, ["status", "--porcelain"], current_path
+        )
         value = "true" if output else "false"
     else:
         raise ConfigError(
@@ -228,6 +230,7 @@ def _get_config_value(
             "CONFIG interpolation cannot descend into this value.",
         )
     return value
+
 
 def _git_output(
     project_root: Path,

@@ -23,4 +23,3 @@ def run_legacy_bridge(
         )
     completed = subprocess.run([str(executable), *argv], cwd=cwd, check=False)
     return completed.returncode
-

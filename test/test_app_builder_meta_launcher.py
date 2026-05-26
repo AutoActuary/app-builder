@@ -29,7 +29,9 @@ class TestAppBuilderMetaLauncher(unittest.TestCase):
         self.assertNotIn('"cwd"', config)
         self.assertNotIn("@{install_root}", config)
         self.assertNotIn("@{bridge_dir}", config)
-        self.assertIn('"@{exe_dir}\\\\..\\\\bin\\\\python\\\\python\\\\python.exe"', config)
+        self.assertIn(
+            '"@{exe_dir}\\\\..\\\\bin\\\\python\\\\python\\\\python.exe"', config
+        )
         self.assertIn('"@{exe_dir}\\\\app-builder-legacy.py"', config)
         self.assertIn('"PYTHONPATH": "@{exe_dir}\\\\site-packages;@{exe_dir}"', config)
         self.assertGreater(config.rfind('"command"'), config.rfind('"env"'))

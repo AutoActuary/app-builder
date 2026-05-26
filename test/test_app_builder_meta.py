@@ -6,6 +6,7 @@ import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from unittest.mock import patch
 
 from app_builder_meta.config_probe import ConfigProbeError, read_plain_yaml_version
@@ -20,7 +21,11 @@ from app_builder_meta.dispatch import (
     run_target,
 )
 from app_builder_meta.legacy_0x import run_legacy_bridge
-from app_builder_meta.version_cache import ManagedVersion, _cache_key, run_managed_version
+from app_builder_meta.version_cache import (
+    ManagedVersion,
+    _cache_key,
+    run_managed_version,
+)
 
 
 class TestAppBuilderMetaDispatch(unittest.TestCase):
@@ -30,10 +35,16 @@ class TestAppBuilderMetaDispatch(unittest.TestCase):
 
             real_import = builtins.__import__
 
-            def guarded_import(name: str, *args: object, **kwargs: object) -> object:
+            def guarded_import(
+                name: str,
+                globals: dict[str, Any] | None = None,
+                locals: dict[str, Any] | None = None,
+                fromlist: tuple[str, ...] = (),
+                level: int = 0,
+            ) -> Any:
                 if name == "app_builder" or name.startswith("app_builder."):
                     raise AssertionError(f"unexpected app_builder import: {name}")
-                return real_import(name, *args, **kwargs)
+                return real_import(name, globals, locals, fromlist, level)
 
             with patch("builtins.__import__", side_effect=guarded_import):
                 target = choose_target(["--help"], temp_dir)
@@ -122,7 +133,9 @@ class TestAppBuilderMetaExecutionAdapters(unittest.TestCase):
         with TemporaryDirectory() as temp_dir_str:
             install_root = Path(temp_dir_str)
             with self.assertRaisesRegex(RuntimeError, "__app_builder_0.x__"):
-                run_legacy_bridge(["--help"], cwd=install_root, install_root=install_root)
+                run_legacy_bridge(
+                    ["--help"], cwd=install_root, install_root=install_root
+                )
 
     def test_managed_runner_preserves_cwd_and_uses_selected_venv(self) -> None:
         with TemporaryDirectory() as temp_dir_str:

@@ -33,9 +33,7 @@ def run_managed_version(ref: str, argv: list[str], *, cwd: Path) -> int:
     managed = ensure_managed_version(ref)
     env = os.environ.copy()
     env["PYTHONNOUSERSITE"] = "1"
-    env["PYTHONPATH"] = _prepend_path(
-        str(managed.repo_path), env.get("PYTHONPATH", "")
-    )
+    env["PYTHONPATH"] = _prepend_path(str(managed.repo_path), env.get("PYTHONPATH", ""))
     completed = subprocess.run(
         [str(managed.venv_python), "-P", "-m", "app_builder", *argv],
         cwd=cwd,
@@ -147,7 +145,9 @@ def _remove_cache_dir(versions_root: Path, cache_root: Path) -> None:
     versions_resolved = versions_root.resolve()
     cache_resolved = cache_root.resolve()
     if versions_resolved not in cache_resolved.parents:
-        raise RuntimeError(f"Refusing to remove cache outside versions root: {cache_root}")
+        raise RuntimeError(
+            f"Refusing to remove cache outside versions root: {cache_root}"
+        )
     shutil.rmtree(cache_root)
 
 
@@ -176,4 +176,3 @@ def _run(
         capture_output=capture,
         text=True,
     )
-

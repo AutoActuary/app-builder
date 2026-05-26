@@ -80,7 +80,9 @@ build_hooks: {}
             subprocess.run(
                 ["git", "init"], cwd=project_root, check=True, capture_output=True
             )
-            (project_root / "app.cmd").write_text("@echo off\necho hi\n", encoding="utf-8")
+            (project_root / "app.cmd").write_text(
+                "@echo off\necho hi\n", encoding="utf-8"
+            )
             (project_root / "app.ico").write_bytes(b"icon")
             (project_root / "app_builder.yaml").write_text(
                 """
@@ -124,14 +126,12 @@ build_hooks: {}
             )
             for directory in ("scripts", "src_py", "native", "docs"):
                 (project_root / directory).mkdir()
-            (project_root / "README.md").write_text(
-                "complex clone\n", encoding="utf-8"
-            )
+            (project_root / "README.md").write_text("complex clone\n", encoding="utf-8")
             (project_root / "src_py" / "demo.py").write_text(
                 "VALUE = 'python-side'\n", encoding="utf-8"
             )
             (project_root / "native" / "runner.rs").write_text(
-                "fn main() { println!(\"native-side\"); }\n", encoding="utf-8"
+                'fn main() { println!("native-side"); }\n', encoding="utf-8"
             )
             (project_root / "scripts" / "generate_assets.py").write_text(
                 """
@@ -210,6 +210,13 @@ Path({str(markers_dir / "github-hook.txt")!r}).write_text("github-hook", encodin
 """.strip(),
                 encoding="utf-8",
             )
+            escaped_install_dir = str(install_dir).replace("\\", "\\\\")
+            escaped_pre_uninstall_marker = str(
+                markers_dir / "pre-uninstall.txt"
+            ).replace("\\", "\\\\")
+            escaped_post_uninstall_marker = str(
+                markers_dir / "post-uninstall.txt"
+            ).replace("\\", "\\\\")
             (project_root / "app_builder.yaml").write_text(
                 f"""
 app_builder_version: v1.0.0
@@ -217,7 +224,7 @@ python_bundled: null
 python_venv: null
 installer:
   name: Complex Clone
-  install_directory: "{str(install_dir).replace("\\", "\\\\")}"
+  install_directory: "{escaped_install_dir}"
   dist: dist
   pause_on_exit: false
   paths:
@@ -245,9 +252,9 @@ installer:
     post_install:
       - [hooks/post-install.cmd]
     pre_uninstall:
-      - [hooks/pre-uninstall.cmd, "{str(markers_dir / "pre-uninstall.txt").replace("\\", "\\\\")}"]
+      - [hooks/pre-uninstall.cmd, "{escaped_pre_uninstall_marker}"]
     post_uninstall:
-      - [hooks/post-uninstall.cmd, "{str(markers_dir / "post-uninstall.txt").replace("\\", "\\\\")}"]
+      - [hooks/post-uninstall.cmd, "{escaped_post_uninstall_marker}"]
 build_hooks:
   pre_dist:
     - [python, scripts/generate_assets.py]
@@ -326,7 +333,9 @@ build_hooks:
                 )
 
             self.assertEqual("https://github.example/releases/9.8.7", release_url)
-            self.assertEqual("github-hook", (markers_dir / "github-hook.txt").read_text())
+            self.assertEqual(
+                "github-hook", (markers_dir / "github-hook.txt").read_text()
+            )
             create_call = gh_calls[1]
             self.assertIn(str(release.payload_archive), create_call)
             self.assertIn(str(release.installer_archive), create_call)

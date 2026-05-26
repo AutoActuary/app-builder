@@ -317,7 +317,9 @@ build_hooks:
                 encoding="utf-8",
             )
 
-            with patch.dict(os.environ, {"LOCALAPPDATA": r"C:\Users\Test\AppData\Local"}):
+            with patch.dict(
+                os.environ, {"LOCALAPPDATA": r"C:\Users\Test\AppData\Local"}
+            ):
                 config = load_config(config_path, app_version="1.2.3")
 
         self.assertEqual("Demo 1.2.3", config.installer.name)

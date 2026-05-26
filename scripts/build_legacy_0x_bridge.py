@@ -10,6 +10,7 @@ import sys
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from types import TracebackType
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -40,7 +41,9 @@ def main() -> int:
     _run(["git", "clone", str(source_repo), str(checkout)])
     _run(["git", "fetch", "--tags", "--prune"], cwd=checkout)
     _run(["git", "checkout", args.ref], cwd=checkout)
-    commit = _run(["git", "rev-parse", "HEAD"], cwd=checkout, capture=True).stdout.strip()
+    commit = _run(
+        ["git", "rev-parse", "HEAD"], cwd=checkout, capture=True
+    ).stdout.strip()
 
     _remove_tree_within(project_root, output)
     output.mkdir(parents=True, exist_ok=True)
@@ -137,9 +140,7 @@ def _smoke_import(python: Path, output: Path) -> None:
     env = os.environ.copy()
     env["PYTHONNOUSERSITE"] = "1"
     env["APP_BUILDER_0X_BRIDGE"] = str(output)
-    env["PYTHONPATH"] = os.pathsep.join(
-        [str(output / "site-packages"), str(output)]
-    )
+    env["PYTHONPATH"] = os.pathsep.join([str(output / "site-packages"), str(output)])
     _run(
         [
             str(python),
@@ -160,20 +161,23 @@ def _remove_tree_within(root: Path, target: Path) -> None:
     root_resolved = root.resolve()
     target_resolved = target.resolve()
     if root_resolved == target_resolved or root_resolved not in target_resolved.parents:
-        raise RuntimeError(f"Refusing to remove outside {root_resolved}: {target_resolved}")
-    shutil.rmtree(target_resolved, onexc=_retry_remove_readonly)
+        raise RuntimeError(
+            f"Refusing to remove outside {root_resolved}: {target_resolved}"
+        )
+    shutil.rmtree(target_resolved, onerror=_retry_remove_readonly)
 
 
 def _retry_remove_readonly(
-    function: Callable[[str], object],
+    function: Callable[..., object],
     path: str,
-    exc_info: BaseException,
+    exc_info: tuple[type[BaseException], BaseException, TracebackType | None],
 ) -> None:
-    if isinstance(exc_info, PermissionError):
+    error = exc_info[1]
+    if isinstance(error, PermissionError):
         os.chmod(path, stat.S_IWRITE)
         function(path)
         return
-    raise exc_info
+    raise error
 
 
 def _run(

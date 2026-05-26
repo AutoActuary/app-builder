@@ -10,7 +10,9 @@ from .schema import AppBuilderConfig, ConfigError, load_app_builder_config
 CONFIG_FILENAMES = ("app_builder.yaml", "app-builder.yaml")
 
 
-def load_config(config_path: Path, *, app_version: str | None = None) -> AppBuilderConfig:
+def load_config(
+    config_path: Path, *, app_version: str | None = None
+) -> AppBuilderConfig:
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
         raise ConfigError(

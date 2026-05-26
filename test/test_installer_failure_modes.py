@@ -126,7 +126,9 @@ class TestInstallerFailureModes(unittest.TestCase):
                 "old shortcut", encoding="utf-8"
             )
             install_dir.mkdir()
-            (install_dir / "app-builder-manifest.json").write_text("{", encoding="utf-8")
+            (install_dir / "app-builder-manifest.json").write_text(
+                "{", encoding="utf-8"
+            )
             (install_dir / "old.txt").write_text("old", encoding="utf-8")
             payload = temp_dir / "payload.zip"
             _write_payload(payload, {"new.txt": "new"})
