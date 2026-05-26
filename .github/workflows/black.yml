@@ -2,9 +2,9 @@ name: Lint with Black
 
 on:
   push:
-    branches: [main]
+    branches: [1.x]
   pull_request:
-    branches: [main]
+    branches: [1.x]
 
 jobs:
   black:
