@@ -50,6 +50,10 @@ installer:
   # icon. Default if omitted: application-templates/icon.ico.
   icon: application-templates/icon.ico
 
+  # Optional string. Inner payload archive format. Use zip for the Windows tar.exe path or
+  # 7z for stronger compression with bundled 7-Zip extraction. Default if omitted: zip.
+  payload_format: zip
+
   # Optional boolean. Whether generated installer scripts should pause before exiting.
   # Default if omitted: true.
   pause_on_exit: true

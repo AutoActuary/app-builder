@@ -7,6 +7,7 @@ installer:
   name: app-builder
   install_directory: "%localappdata%\\app-builder"
   icon: app_builder/assets/app-builder.ico
+  payload_format: 7z
   dist: dist
   paths:
     include:

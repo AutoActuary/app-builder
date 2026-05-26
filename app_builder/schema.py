@@ -110,6 +110,11 @@ class InstallerOptions:
         description="Project-relative .ico file embedded into generated ExeWrap executables and used for Start Menu shortcuts when a shortcut does not specify its own icon.",
         example="application-templates/icon.ico",
     )
+    payload_format: str = config_field(
+        default="zip",
+        description="Inner payload archive format. Use zip for the Windows tar.exe path or 7z for stronger compression with bundled 7-Zip extraction.",
+        example="zip",
+    )
     pause_on_exit: bool = config_field(
         default=True,
         description="Whether generated installer scripts should pause before exiting.",
@@ -231,7 +236,13 @@ def load_app_builder_config(
             path,
             "legacy application.yaml layout is not supported. Expected app_builder.yaml 1.x keys such as 'installer', 'python_bundled', and 'build_hooks'.",
         )
-    return materialize_config(AppBuilderConfig, value, path=path)
+    config = materialize_config(AppBuilderConfig, value, path=path)
+    if config.installer.payload_format not in {"zip", "7z"}:
+        raise ConfigError(
+            f"{path}.installer.payload_format",
+            "expected one of: 'zip', '7z'.",
+        )
+    return config
 
 
 def _looks_like_legacy_config(value: Mapping[str, Any]) -> bool:

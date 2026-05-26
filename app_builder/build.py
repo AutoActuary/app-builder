@@ -26,6 +26,7 @@ from .python_runtime import (
     python_executable,
 )
 from .schema import AppBuilderConfig
+from .sevenzip import create_7z_payload_archive, vendored_7zip_files
 
 
 @dataclass(slots=True)
@@ -72,8 +73,17 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
     )
     _add_app_builder_meta_launcher(config, dist_dir, remap_table, installer_icon_path)
 
-    payload_archive = dist_dir / f"{_slugify(config.installer.name)}-{version}.zip"
-    _write_payload_archive(payload_archive, remap_table, version=version)
+    payload_archive = dist_dir / (
+        f"{_slugify(config.installer.name)}-{version}."
+        f"{config.installer.payload_format}"
+    )
+    _write_payload_archive(
+        payload_archive,
+        project_root,
+        remap_table,
+        version=version,
+        payload_format=config.installer.payload_format,
+    )
 
     manifest = {
         "name": config.installer.name,
@@ -113,6 +123,7 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
         pause_on_exit=config.installer.pause_on_exit,
         add_uninstaller=config.installer.add_uninstaller,
         icon_path=installer_icon_path,
+        top_layer_files=_installer_top_layer_files(config),
     )
 
     run_hook_commands(
@@ -239,10 +250,22 @@ def _runtime_hook_python_candidates(
 
 def _write_payload_archive(
     payload_archive: Path,
+    project_root: Path,
     remap_table: Mapping[Path, PurePosixPath],
     *,
     version: str,
+    payload_format: str = "zip",
 ) -> None:
+    if payload_format == "7z":
+        create_7z_payload_archive(
+            payload_archive,
+            project_root,
+            remap_table,
+            version=version,
+        )
+        return
+    if payload_format != "zip":
+        raise ValueError(f"Unknown installer.payload_format: {payload_format}")
     with ZipFile(payload_archive, "w", compression=ZIP_DEFLATED) as zip_file:
         for source, destination in sorted(
             remap_table.items(), key=lambda item: item[1].as_posix()
@@ -286,6 +309,12 @@ def _resolve_installer_icon(
     if icon == "application-templates/icon.ico":
         return None
     raise FileNotFoundError(f"Configured installer.icon does not exist: {icon_path}")
+
+
+def _installer_top_layer_files(config: AppBuilderConfig) -> Mapping[Path, str]:
+    if config.installer.payload_format == "7z":
+        return vendored_7zip_files()
+    return {}
 
 
 def _render_meta_launcher_config() -> bytes:

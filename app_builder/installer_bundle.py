@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZIP_STORED, ZipFile
@@ -24,6 +25,7 @@ def create_exewrap_zip_installer(
     pause_on_exit: bool,
     add_uninstaller: bool,
     icon_path: Path | None = None,
+    top_layer_files: Mapping[Path, str] | None = None,
     launcher: bytes | None = None,
 ) -> None:
     if output_path.exists():
@@ -69,6 +71,10 @@ def create_exewrap_zip_installer(
             zip_file.write(install_cmd, install_cmd.name)
             if add_uninstaller:
                 zip_file.write(uninstall_cmd, uninstall_cmd.name)
+            for source, archive_name in sorted(
+                (top_layer_files or {}).items(), key=lambda item: item[1]
+            ):
+                zip_file.write(source, archive_name)
 
 
 def _render_bootstrap_config() -> bytes:
@@ -218,10 +224,7 @@ try {
         throw "Payload archive not found: $PayloadPath"
     }
     New-Item -ItemType Directory -Path $StagingDir | Out-Null
-    tar.exe -xf $PayloadPath -C $StagingDir
-    if ($LASTEXITCODE -ne 0) {
-        throw "tar.exe failed to extract payload with exit code $LASTEXITCODE"
-    }
+    Expand-AppBuilderPayloadArchive $PayloadPath $StagingDir $ScriptRoot
 
     Invoke-AppBuilderHookList $Manifest.install_hooks.pre_install $StagingDir
 
@@ -373,6 +376,37 @@ function Set-AppBuilderEnvironment {
     $env:app_builder_install_directory = $InstallDir
     $env:app_builder_project_root = $InstallDir
     $env:app_builder_start_menu = $StartMenuDir
+}
+
+function Expand-AppBuilderPayloadArchive {
+    param(
+        [string]$PayloadPath,
+        [string]$Destination,
+        [string]$ScriptRoot
+    )
+    $Extension = [System.IO.Path]::GetExtension($PayloadPath).ToLowerInvariant()
+    if ($Extension -eq '.zip') {
+        tar.exe -xf $PayloadPath -C $Destination
+        if ($LASTEXITCODE -ne 0) {
+            throw "tar.exe failed to extract payload with exit code $LASTEXITCODE"
+        }
+        return
+    }
+    if ($Extension -eq '.7z') {
+        $SevenZip = Join-Path $ScriptRoot 'bin\7z.exe'
+        if (-not (Test-Path -LiteralPath $SevenZip -PathType Leaf)) {
+            throw "Bundled 7z.exe is missing from installer top layer: $SevenZip"
+        }
+        $SevenZipOutput = & $SevenZip x -y -bd "-o$Destination" $PayloadPath 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            foreach ($Line in @($SevenZipOutput)) {
+                Write-Host $Line
+            }
+            throw "7z.exe failed to extract payload with exit code $LASTEXITCODE"
+        }
+        return
+    }
+    throw "Unsupported payload archive extension: $Extension"
 }
 
 function Resolve-HookProgram {

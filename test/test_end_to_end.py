@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import subprocess
 import time
@@ -15,6 +16,7 @@ from zipfile import ZipFile
 from app_builder import build as build_module
 from app_builder.build import build_release
 from app_builder.exewrap import _read_icon_images, _render_icon_group_resource
+from app_builder.sevenzip import SEVENZIP_DLL_SHA256, SEVENZIP_EXE_SHA256
 
 
 def _write_sample_icon(icon_path: Path) -> None:
@@ -24,6 +26,10 @@ def _write_sample_icon(icon_path: Path) -> None:
         .joinpath("app-builder.ico")
         .read_bytes()
     )
+
+
+def _sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
 
 
 class TestEndToEndBuild(unittest.TestCase):
@@ -81,6 +87,8 @@ build_hooks: {}
                 self.assertIn("install.cmd", installer_zip.namelist())
                 self.assertIn("uninstall.cmd", installer_zip.namelist())
                 self.assertIn(release.payload_archive.name, installer_zip.namelist())
+                self.assertNotIn("bin/7z.exe", installer_zip.namelist())
+                self.assertNotIn("bin/7z.dll", installer_zip.namelist())
                 self.assertNotIn("install.ps1", installer_zip.namelist())
                 self.assertNotIn("uninstall.ps1", installer_zip.namelist())
                 self.assertNotIn(release.manifest_path.name, installer_zip.namelist())
@@ -159,6 +167,96 @@ build_hooks: {}
 
         self.assertEqual("app.ico", manifest["start_menu"][0]["icon"])
         self.assertIn(expected_group, installer_bytes)
+
+    @unittest.skipIf(os.name != "nt", "7z installer execution targets Windows")
+    def test_build_release_with_7z_payload_installs_and_uninstalls(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            project_root = temp_dir / "project"
+            install_dir = temp_dir / "installed app"
+            appdata_dir = temp_dir / "appdata"
+            project_root.mkdir()
+            subprocess.run(
+                ["git", "init"], cwd=project_root, check=True, capture_output=True
+            )
+            (project_root / "app.cmd").write_text(
+                "@echo off\necho hello\n", encoding="utf-8"
+            )
+            (project_root / "hooks").mkdir()
+            (project_root / "hooks" / "post-install.cmd").write_text(
+                "@echo off\n"
+                'echo post-install>"%app_builder_install_directory%\\post-install.txt"\n',
+                encoding="utf-8",
+            )
+            escaped_install_dir = str(install_dir).replace("\\", "\\\\")
+            (project_root / "app_builder.yaml").write_text(
+                f"""
+app_builder_version: current
+python_bundled: null
+python_venv: null
+installer:
+  name: Sevenzip Demo
+  install_directory: "{escaped_install_dir}"
+  payload_format: 7z
+  pause_on_exit: false
+  dist: dist
+  paths:
+    include:
+      - app.cmd
+      - hooks
+    remap:
+      - [app.cmd, bin/app.cmd]
+  install_hooks:
+    post_install:
+      - [hooks/post-install.cmd]
+build_hooks: {{}}
+""".strip(),
+                encoding="utf-8",
+            )
+
+            release = build_release(project_root, version="7.0.0")
+
+            self.assertEqual(".7z", release.payload_archive.suffix)
+            with ZipFile(release.installer_archive) as installer_zip:
+                names = set(installer_zip.namelist())
+                self.assertIn(release.payload_archive.name, names)
+                self.assertIn("bin/7z.exe", names)
+                self.assertIn("bin/7z.dll", names)
+                self.assertEqual(
+                    SEVENZIP_EXE_SHA256,
+                    _sha256_bytes(installer_zip.read("bin/7z.exe")),
+                )
+                self.assertEqual(
+                    SEVENZIP_DLL_SHA256,
+                    _sha256_bytes(installer_zip.read("bin/7z.dll")),
+                )
+
+            extraction_dir = temp_dir / "outer"
+            extraction_dir.mkdir()
+            with ZipFile(release.installer_archive) as installer_zip:
+                installer_zip.extractall(extraction_dir)
+            env = os.environ.copy()
+            env["APPDATA"] = str(appdata_dir)
+            subprocess.run(
+                ["cmd.exe", "/D", "/C", "call", str(extraction_dir / "install.cmd")],
+                check=True,
+                env=env,
+            )
+            self.assertTrue((install_dir / "bin" / "app.cmd").exists())
+            self.assertEqual(
+                "post-install",
+                (install_dir / "post-install.txt").read_text(encoding="utf-8").strip(),
+            )
+
+            subprocess.run(
+                ["cmd.exe", "/D", "/C", "call", str(install_dir / "uninstall.cmd")],
+                check=True,
+                env=env,
+            )
+            deadline = time.monotonic() + 10
+            while install_dir.exists() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            self.assertFalse(install_dir.exists())
 
     @unittest.skipIf(os.name != "nt", "installer execution targets Windows")
     def test_complex_clone_build_install_uninstall_and_github_release(self) -> None:
