@@ -7,7 +7,7 @@ name = "app-builder"
 version = "1.0.0"
 description = "Schema-first Windows application builder for Python-focused apps."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<4.0"
 dependencies = [
     "click>=8,<9",
     "poetry>=2,<3",
