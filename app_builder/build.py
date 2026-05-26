@@ -10,7 +10,11 @@ from typing import Mapping
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from .config import load_project_config
-from .exewrap import stamp_exe_wrap_config
+from .exewrap import (
+    stamp_exe_icon,
+    stamp_exe_wrap_config,
+    vendored_console_launcher_bytes,
+)
 from .fileset import build_remap_table, collect_files
 from .hooks import run_hook_commands
 from .installer_bundle import create_exewrap_zip_installer
@@ -56,6 +60,7 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
 
     dist_dir = project_root / config.installer.dist
     dist_dir.mkdir(parents=True, exist_ok=True)
+    installer_icon_path = _resolve_installer_icon(project_root, config)
 
     included_files = collect_files(
         project_root,
@@ -65,7 +70,7 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
     remap_table = build_remap_table(
         project_root, included_files, config.installer.paths.remap
     )
-    _add_app_builder_meta_launcher(config, dist_dir, remap_table)
+    _add_app_builder_meta_launcher(config, dist_dir, remap_table, installer_icon_path)
 
     payload_archive = dist_dir / f"{_slugify(config.installer.name)}-{version}.zip"
     _write_payload_archive(payload_archive, remap_table, version=version)
@@ -107,6 +112,7 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
         app_name=config.installer.name,
         pause_on_exit=config.installer.pause_on_exit,
         add_uninstaller=config.installer.add_uninstaller,
+        icon_path=installer_icon_path,
     )
 
     run_hook_commands(
@@ -249,13 +255,37 @@ def _add_app_builder_meta_launcher(
     config: AppBuilderConfig,
     dist_dir: Path,
     remap_table: dict[Path, PurePosixPath],
+    installer_icon_path: Path | None,
 ) -> None:
     if config.installer.name.strip().lower() != "app-builder":
         return
     launcher_path = dist_dir / "_generated" / "app-builder.exe"
     launcher_path.parent.mkdir(parents=True, exist_ok=True)
-    launcher_path.write_bytes(stamp_exe_wrap_config(_render_meta_launcher_config()))
+    launcher = None
+    if installer_icon_path is not None:
+        launcher = stamp_exe_icon(
+            vendored_console_launcher_bytes(),
+            installer_icon_path,
+        )
+    launcher_path.write_bytes(
+        stamp_exe_wrap_config(_render_meta_launcher_config(), launcher=launcher)
+    )
     remap_table[launcher_path] = PurePosixPath("app-builder.exe")
+
+
+def _resolve_installer_icon(
+    project_root: Path,
+    config: AppBuilderConfig,
+) -> Path | None:
+    icon = config.installer.icon.strip()
+    if not icon:
+        return None
+    icon_path = project_root / icon
+    if icon_path.is_file():
+        return icon_path
+    if icon == "application-templates/icon.ico":
+        return None
+    raise FileNotFoundError(f"Configured installer.icon does not exist: {icon_path}")
 
 
 def _render_meta_launcher_config() -> bytes:

@@ -5,6 +5,7 @@ import os
 import subprocess
 import time
 import unittest
+from importlib.resources import files
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, cast
@@ -13,6 +14,16 @@ from zipfile import ZipFile
 
 from app_builder import build as build_module
 from app_builder.build import build_release
+from app_builder.exewrap import _read_icon_images, _render_icon_group_resource
+
+
+def _write_sample_icon(icon_path: Path) -> None:
+    icon_path.write_bytes(
+        files("app_builder")
+        .joinpath("assets")
+        .joinpath("app-builder.ico")
+        .read_bytes()
+    )
 
 
 class TestEndToEndBuild(unittest.TestCase):
@@ -74,7 +85,7 @@ build_hooks: {}
                 self.assertNotIn("uninstall.ps1", installer_zip.namelist())
                 self.assertNotIn(release.manifest_path.name, installer_zip.namelist())
 
-    def test_build_release_uses_installer_icon_as_start_menu_default(self) -> None:
+    def test_build_release_reports_missing_custom_installer_icon(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             project_root = Path(temp_dir_str)
             subprocess.run(
@@ -83,7 +94,42 @@ build_hooks: {}
             (project_root / "app.cmd").write_text(
                 "@echo off\necho hi\n", encoding="utf-8"
             )
-            (project_root / "app.ico").write_bytes(b"icon")
+            (project_root / "app_builder.yaml").write_text(
+                """
+app_builder_version: v1.0.0
+python_bundled: null
+python_venv: null
+installer:
+  name: Missing Icon Demo
+  install_directory: "%localappdata%\\\\MissingIconDemo"
+  icon: icons/missing.ico
+  dist: dist
+  paths:
+    include:
+      - app.cmd
+build_hooks: {}
+""".strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                FileNotFoundError,
+                "Configured installer.icon does not exist",
+            ):
+                build_release(project_root, version="1.0.0")
+
+    @unittest.skipIf(os.name != "nt", "Windows icon resource update")
+    def test_build_release_uses_installer_icon_for_shortcuts_and_exe(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            subprocess.run(
+                ["git", "init"], cwd=project_root, check=True, capture_output=True
+            )
+            (project_root / "app.cmd").write_text(
+                "@echo off\necho hi\n", encoding="utf-8"
+            )
+            icon_path = project_root / "app.ico"
+            _write_sample_icon(icon_path)
             (project_root / "app_builder.yaml").write_text(
                 """
 app_builder_version: v1.0.0
@@ -108,8 +154,11 @@ build_hooks: {}
 
             release = build_release(project_root, version="1.0.0")
             manifest = json.loads(release.manifest_path.read_text(encoding="utf-8"))
+            expected_group = _render_icon_group_resource(_read_icon_images(icon_path))
+            installer_bytes = release.installer_archive.read_bytes()
 
         self.assertEqual("app.ico", manifest["start_menu"][0]["icon"])
+        self.assertIn(expected_group, installer_bytes)
 
     @unittest.skipIf(os.name != "nt", "installer execution targets Windows")
     def test_complex_clone_build_install_uninstall_and_github_release(self) -> None:

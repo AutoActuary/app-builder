@@ -5,6 +5,7 @@ import os
 import subprocess
 import time
 import unittest
+from importlib.resources import files
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZIP_STORED, ZipFile
@@ -13,6 +14,9 @@ from app_builder.exewrap import (
     EXE_WRAP_CONFIG_END_MARKER,
     EXE_WRAP_CONFIG_START_MARKER,
     EXE_WRAP_CONSOLE_X64_SHA256,
+    _read_icon_images,
+    _render_icon_group_resource,
+    stamp_exe_icon,
     vendored_console_launcher_bytes,
 )
 from app_builder.installer_bundle import (
@@ -20,6 +24,19 @@ from app_builder.installer_bundle import (
     _render_bootstrap_config,
     create_exewrap_zip_installer,
 )
+
+
+def _write_sample_icon(icon_path: Path) -> None:
+    icon_path.write_bytes(
+        files("app_builder")
+        .joinpath("assets")
+        .joinpath("app-builder.ico")
+        .read_bytes()
+    )
+
+
+def _expected_icon_group_resource(icon_path: Path) -> bytes:
+    return _render_icon_group_resource(_read_icon_images(icon_path))
 
 
 class TestExeWrapInstallerBundle(unittest.TestCase):
@@ -47,6 +64,17 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
 
         self.assertEqual(1, result.returncode)
         self.assertIn("no embedded config found", result.stderr)
+
+    @unittest.skipIf(os.name != "nt", "Windows icon resource update")
+    def test_stamp_exe_icon_embeds_ico_group_resource(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            icon_path = Path(temp_dir_str) / "app.ico"
+            _write_sample_icon(icon_path)
+            expected_group = _expected_icon_group_resource(icon_path)
+
+            stamped = stamp_exe_icon(vendored_console_launcher_bytes(), icon_path)
+
+        self.assertIn(expected_group, stamped)
 
     def test_bootstrap_config_uses_powershell_single_quoted_exe_path(self) -> None:
         config = json.loads(_render_bootstrap_config().decode("utf-8"))
@@ -139,6 +167,34 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 self.assertIn("Copy-AppBuilderPostUninstallEntrypoints", uninstall_cmd)
                 self.assertIn("Remove-AppBuilderInstallDirectory", uninstall_cmd)
                 self.assertNotIn("Start-AppBuilderDirectoryCleanup", uninstall_cmd)
+
+    @unittest.skipIf(os.name != "nt", "Windows icon resource update")
+    def test_installer_exe_embeds_configured_icon(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            payload = temp_dir / "demo-1.0.zip"
+            manifest = temp_dir / "demo-1.0-manifest.json"
+            installer = temp_dir / "demo-1.0-installer.exe"
+            icon_path = temp_dir / "app.ico"
+            payload.write_text("payload", encoding="utf-8")
+            manifest.write_text('{"name":"Demo"}', encoding="utf-8")
+            _write_sample_icon(icon_path)
+
+            create_exewrap_zip_installer(
+                installer,
+                payload_archive=payload,
+                manifest_path=manifest,
+                app_name="Demo",
+                pause_on_exit=False,
+                add_uninstaller=True,
+                icon_path=icon_path,
+            )
+
+            contents = installer.read_bytes()
+            self.assertIn(_expected_icon_group_resource(icon_path), contents)
+            self.assertIn(EXE_WRAP_CONFIG_START_MARKER, contents)
+            with ZipFile(installer) as installer_zip:
+                self.assertIn("install.cmd", installer_zip.namelist())
 
     def test_installer_can_omit_uninstaller(self) -> None:
         with TemporaryDirectory() as temp_dir_str:

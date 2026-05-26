@@ -107,7 +107,7 @@ class InstallerOptions:
     )
     icon: str = config_field(
         default="application-templates/icon.ico",
-        description="Project-relative default icon used for Start Menu shortcuts when a shortcut does not specify its own icon.",
+        description="Project-relative .ico file embedded into generated ExeWrap executables and used for Start Menu shortcuts when a shortcut does not specify its own icon.",
         example="application-templates/icon.ico",
     )
     pause_on_exit: bool = config_field(
