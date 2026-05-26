@@ -25,4 +25,6 @@ installer:
       - .git
       - .mypy_cache
       - .pytest_cache
-build_hooks: {}
+build_hooks:
+  pre_dist:
+    - [scripts/build_legacy_0x_bridge.py]

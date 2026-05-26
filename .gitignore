@@ -33,6 +33,7 @@ MANIFEST
 
 /bin/python
 /bin/git
+/__app_builder_0.x__/
 /tools/
 /bin/7z.dll
 /bin/7z.exe
