@@ -28,6 +28,11 @@ def render_config_template_yaml() -> str:
         "# app_builder.yaml",
         "# Generated from app_builder.schema metadata.",
         "# Required and common optional fields contain examples; replace them for your app.",
+        "# String values can reference ${ENV.NAME}, ${GIT.DESCRIBE},",
+        "# ${GIT.SHORT_COMMIT}, ${APP.VERSION}, and ${CONFIG.path.to.value}.",
+        "# Interpolation is string-only and runs before schema validation.",
+        "# Keep app_builder_version literal; the version dispatcher reads it before",
+        "# the full 1.x config interpolation layer is loaded.",
     ]
     _emit_dataclass_yaml(AppBuilderConfig, values, lines, indent=0)
     return _finish_text(lines)
@@ -46,6 +51,68 @@ def render_config_reference_markdown() -> str:
         "must provide project-specific values; the loader still rejects missing "
         "required values, unknown keys, unsupported shapes, and explicit `null` "
         "where a field is not nullable.",
+        "",
+        "String values are interpolated before schema validation. Supported "
+        "variables are `${ENV.NAME}`, `${GIT.DESCRIBE}`, `${GIT.COMMIT}`, "
+        "`${GIT.SHORT_COMMIT}`, `${GIT.BRANCH}`, `${GIT.TAG}`, "
+        "`${GIT.IS_DIRTY}`, `${APP.VERSION}`, and `${CONFIG.path.to.value}`. "
+        "Interpolation is string-only; references to lists or mappings are "
+        "rejected.",
+        "",
+        "## String Interpolation",
+        "",
+        "Use `${...}` inside YAML string values when a config value should be "
+        "derived from the environment, git, the app-builder release version, or "
+        "another config string. Interpolation happens after YAML parsing and "
+        "before dataclass schema validation, so the final expanded value is what "
+        "the schema sees.",
+        "",
+        "| Variable | Value | Notes |",
+        "| --- | --- | --- |",
+        "| `${ENV.NAME}` | Environment variable from the running process. | Lookup is "
+        "case-insensitive as a Windows convenience. Missing variables fail the "
+        "config load. |",
+        "| `${GIT.DESCRIBE}` | `git describe --tags --always --dirty`, with the "
+        "same fallback as app-builder's version detection. | Good for "
+        "version-from-tag config values. |",
+        "| `${GIT.COMMIT}` | Full current commit hash. | Fails if git cannot read "
+        "the repository. |",
+        "| `${GIT.SHORT_COMMIT}` | Short current commit hash. | Fails if git cannot "
+        "read the repository. |",
+        "| `${GIT.BRANCH}` | Current branch name. | Empty string when HEAD is "
+        "detached or no branch is available. |",
+        "| `${GIT.TAG}` | Exact tag at HEAD. | Empty string when HEAD is not exactly "
+        "on a tag. |",
+        "| `${GIT.IS_DIRTY}` | `true` when `git status --porcelain` has output, "
+        "otherwise `false`. | Fails if git cannot read the repository. |",
+        "| `${APP.VERSION}` | The app-builder release version. | Honors "
+        "`--version`; otherwise uses app-builder's git-based version detection. |",
+        "| `${CONFIG.path.to.value}` | Another resolved string value in the same "
+        "config. | Resolves recursively. Circular references, missing paths, and "
+        "references to non-string values fail. List indexes are allowed in the "
+        "path, but the final target must be a string. |",
+        "",
+        "`app_builder_version` is the exception to the usual interpolation "
+        "surface. The command dispatcher reads that selector from plain YAML "
+        "before importing the full 1.x app-builder package, so keep it literal "
+        "(`current`, a branch, a tag, or a commit).",
+        "",
+        "For Windows paths, single-quoted YAML strings are usually easiest "
+        "because backslashes stay literal. If you use double-quoted YAML strings "
+        "for Windows paths, write backslashes as `\\\\`.",
+        "",
+        "Example:",
+        "",
+        "```yaml",
+        "installer:",
+        "  name: \"MyApp ${APP.VERSION}\"",
+        "  install_directory: '${ENV.LOCALAPPDATA}\\Acme\\${CONFIG.installer.name}'",
+        "  paths:",
+        "    include:",
+        "      - \"build/${APP.VERSION}\"",
+        "    remap:",
+        "      - [README.md, \"docs/${CONFIG.installer.name}.md\"]",
+        "```",
         "",
     ]
     _emit_dataclass_markdown("config", AppBuilderConfig, lines)

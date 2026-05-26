@@ -123,6 +123,15 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 self.assertIn("$EmbeddedManifestJson = @'", install_cmd)
                 self.assertIn('"name": "Demo"', install_cmd)
                 self.assertIn("tar.exe -xf $PayloadPath -C $StagingDir", install_cmd)
+                self.assertIn("Get-AppBuilderExistingInstallKind", install_cmd)
+                self.assertIn("Test-AppBuilderLegacyInstall", install_cmd)
+                self.assertIn("Invoke-AppBuilderLegacyPreUninstall", install_cmd)
+                self.assertIn("Remove-AppBuilderBackupDirectory", install_cmd)
+                self.assertIn("Restore-AppBuilderDirectory", install_cmd)
+                self.assertIn(
+                    "does not use payload files such as version.txt, python-version.txt, or gitinformation.json as install markers",
+                    install_cmd,
+                )
                 self.assertIn("New-AppBuilderStartMenuShortcuts", install_cmd)
                 self.assertIn("Invoke-AppBuilderHookList", install_cmd)
                 self.assertIn("app-builder-manifest.json", install_cmd)
@@ -164,6 +173,9 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             installer = temp_dir / "installer.exe"
             install_dir = temp_dir / "installed app"
             extraction_dir = temp_dir / "top-layer"
+            appdata_dir = temp_dir / "appdata"
+            env = os.environ.copy()
+            env["APPDATA"] = str(appdata_dir)
             extraction_dir.mkdir()
 
             hook_cmd = temp_dir / "post-install.cmd"
@@ -227,6 +239,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                     str(extraction_dir / "install.cmd"),
                 ],
                 check=True,
+                env=env,
             )
             self.assertTrue((install_dir / "hello.cmd").exists())
             self.assertEqual(
@@ -239,6 +252,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             subprocess.run(
                 ["cmd.exe", "/D", "/C", "call", str(install_dir / "uninstall.cmd")],
                 check=True,
+                env=env,
             )
             deadline = time.monotonic() + 10
             while (
@@ -251,3 +265,281 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 "post-uninstall",
                 post_uninstall_marker.read_text(encoding="utf-8").strip(),
             )
+
+    @unittest.skipIf(os.name != "nt", "generated installer scripts target Windows")
+    def test_installer_refuses_directory_with_only_non_contract_payload_files(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            payload = temp_dir / "demo.zip"
+            manifest = temp_dir / "manifest.json"
+            installer = temp_dir / "installer.exe"
+            install_dir = temp_dir / "installed app"
+            extraction_dir = temp_dir / "top-layer"
+            appdata_dir = temp_dir / "appdata"
+            env = os.environ.copy()
+            env["APPDATA"] = str(appdata_dir)
+            extraction_dir.mkdir()
+            install_dir.mkdir()
+            (install_dir / "version.txt").write_text("0.9", encoding="utf-8")
+            (install_dir / "python-version.txt").write_text(
+                "pip freeze output", encoding="utf-8"
+            )
+            (install_dir / "gitinformation.json").write_text("{}", encoding="utf-8")
+            with ZipFile(payload, "w") as payload_zip:
+                payload_zip.writestr("hello.cmd", "@echo off\necho hello\n")
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "name": "Demo",
+                        "version": "1.0",
+                        "install_directory": str(install_dir),
+                        "payload_archive": payload.name,
+                        "start_menu": [],
+                        "install_hooks": {
+                            "pre_install": [],
+                            "post_install": [],
+                            "pre_uninstall": [],
+                            "post_uninstall": [],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            create_exewrap_zip_installer(
+                installer,
+                payload_archive=payload,
+                manifest_path=manifest,
+                app_name="Demo",
+                pause_on_exit=False,
+                add_uninstaller=True,
+                launcher=b"fake-launcher",
+            )
+
+            with ZipFile(installer) as installer_zip:
+                installer_zip.extractall(extraction_dir)
+
+            result = subprocess.run(
+                [
+                    "cmd.exe",
+                    "/D",
+                    "/C",
+                    "call",
+                    str(extraction_dir / "install.cmd"),
+                ],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertNotEqual(0, result.returncode)
+            output = result.stderr + result.stdout
+            self.assertIn("does not use payload", output)
+            self.assertIn("version.txt", output)
+            self.assertIn("python-version.txt", output)
+            self.assertIn("gitinformation.json", output)
+            self.assertIn("install markers", output)
+            self.assertTrue((install_dir / "version.txt").exists())
+            self.assertTrue((install_dir / "python-version.txt").exists())
+            self.assertFalse((install_dir / "hello.cmd").exists())
+
+    @unittest.skipIf(os.name != "nt", "generated installer scripts target Windows")
+    def test_installer_adopts_legacy_directory_by_uninstall_contract(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            payload = temp_dir / "demo.zip"
+            manifest = temp_dir / "manifest.json"
+            installer = temp_dir / "installer.exe"
+            install_dir = temp_dir / "installed app"
+            extraction_dir = temp_dir / "top-layer"
+            appdata_dir = temp_dir / "appdata"
+            env = os.environ.copy()
+            env["APPDATA"] = str(appdata_dir)
+            legacy_pre_marker = temp_dir / "legacy-pre-uninstall.txt"
+            extraction_dir.mkdir()
+            (install_dir / "bin").mkdir(parents=True)
+            (install_dir / "scripts").mkdir()
+            (install_dir / "bin" / "Uninstall Demo.bat").write_text(
+                "@echo off\nexit /b 0\n",
+                encoding="utf-8",
+            )
+            (install_dir / "Uninstall Demo.lnk").write_text(
+                "legacy shortcut marker",
+                encoding="utf-8",
+            )
+            (install_dir / "scripts" / "pre-uninstall.cmd").write_text(
+                "@echo off\n"
+                f'echo legacy-pre>"{legacy_pre_marker}"\n',
+                encoding="utf-8",
+            )
+            (install_dir / "old-file.txt").write_text("old", encoding="utf-8")
+            with ZipFile(payload, "w") as payload_zip:
+                payload_zip.writestr("hello.cmd", "@echo off\necho hello\n")
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "name": "Demo",
+                        "version": "1.0",
+                        "install_directory": str(install_dir),
+                        "payload_archive": payload.name,
+                        "start_menu": [],
+                        "install_hooks": {
+                            "pre_install": [],
+                            "post_install": [],
+                            "pre_uninstall": [],
+                            "post_uninstall": [],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            create_exewrap_zip_installer(
+                installer,
+                payload_archive=payload,
+                manifest_path=manifest,
+                app_name="Demo",
+                pause_on_exit=False,
+                add_uninstaller=True,
+                launcher=b"fake-launcher",
+            )
+
+            with ZipFile(installer) as installer_zip:
+                installer_zip.extractall(extraction_dir)
+
+            subprocess.run(
+                [
+                    "cmd.exe",
+                    "/D",
+                    "/C",
+                    "call",
+                    str(extraction_dir / "install.cmd"),
+                ],
+                check=True,
+                env=env,
+            )
+
+            self.assertTrue((install_dir / "hello.cmd").exists())
+            self.assertTrue((install_dir / "app-builder-manifest.json").exists())
+            self.assertFalse((install_dir / "old-file.txt").exists())
+            self.assertEqual(
+                "legacy-pre",
+                legacy_pre_marker.read_text(encoding="utf-8").strip(),
+            )
+
+    @unittest.skipIf(os.name != "nt", "generated installer scripts target Windows")
+    def test_installer_upgrades_matching_1x_install_and_runs_old_pre_uninstall(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            install_dir = temp_dir / "installed app"
+            appdata_dir = temp_dir / "appdata"
+            env = os.environ.copy()
+            env["APPDATA"] = str(appdata_dir)
+            marker = temp_dir / "pre-uninstall.txt"
+            first_extraction = temp_dir / "first"
+            second_extraction = temp_dir / "second"
+            first_extraction.mkdir()
+            second_extraction.mkdir()
+
+            first_payload = temp_dir / "demo-1.zip"
+            first_hook = temp_dir / "pre-uninstall.cmd"
+            first_hook.write_text(
+                "@echo off\n"
+                f'echo pre-uninstall>"{marker}"\n',
+                encoding="utf-8",
+            )
+            with ZipFile(first_payload, "w") as payload_zip:
+                payload_zip.writestr("hello.txt", "one")
+                payload_zip.write(first_hook, "pre-uninstall.cmd")
+            first_manifest = temp_dir / "manifest-1.json"
+            first_manifest.write_text(
+                json.dumps(
+                    {
+                        "name": "Demo",
+                        "version": "1.0",
+                        "install_directory": str(install_dir),
+                        "payload_archive": first_payload.name,
+                        "start_menu": [],
+                        "install_hooks": {
+                            "pre_install": [],
+                            "post_install": [],
+                            "pre_uninstall": [["pre-uninstall.cmd"]],
+                            "post_uninstall": [],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            first_installer = temp_dir / "installer-1.exe"
+            create_exewrap_zip_installer(
+                first_installer,
+                payload_archive=first_payload,
+                manifest_path=first_manifest,
+                app_name="Demo",
+                pause_on_exit=False,
+                add_uninstaller=True,
+                launcher=b"fake-launcher",
+            )
+            with ZipFile(first_installer) as installer_zip:
+                installer_zip.extractall(first_extraction)
+            subprocess.run(
+                ["cmd.exe", "/D", "/C", "call", str(first_extraction / "install.cmd")],
+                check=True,
+                env=env,
+            )
+            self.assertEqual("one", (install_dir / "hello.txt").read_text())
+
+            second_payload = temp_dir / "demo-2.zip"
+            with ZipFile(second_payload, "w") as payload_zip:
+                payload_zip.writestr("hello.txt", "two")
+            second_manifest = temp_dir / "manifest-2.json"
+            second_manifest.write_text(
+                json.dumps(
+                    {
+                        "name": "Demo",
+                        "version": "2.0",
+                        "install_directory": str(install_dir),
+                        "payload_archive": second_payload.name,
+                        "start_menu": [],
+                        "install_hooks": {
+                            "pre_install": [],
+                            "post_install": [],
+                            "pre_uninstall": [],
+                            "post_uninstall": [],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            second_installer = temp_dir / "installer-2.exe"
+            create_exewrap_zip_installer(
+                second_installer,
+                payload_archive=second_payload,
+                manifest_path=second_manifest,
+                app_name="Demo",
+                pause_on_exit=False,
+                add_uninstaller=True,
+                launcher=b"fake-launcher",
+            )
+            with ZipFile(second_installer) as installer_zip:
+                installer_zip.extractall(second_extraction)
+
+            subprocess.run(
+                [
+                    "cmd.exe",
+                    "/D",
+                    "/C",
+                    "call",
+                    str(second_extraction / "install.cmd"),
+                ],
+                check=True,
+                env=env,
+            )
+
+            self.assertEqual("two", (install_dir / "hello.txt").read_text())
+            self.assertEqual("pre-uninstall", marker.read_text(encoding="utf-8").strip())

@@ -1,9 +1,16 @@
 # app_builder.yaml
 # Generated from app_builder.schema metadata.
 # Required and common optional fields contain examples; replace them for your app.
-# Optional, nullable string | null. Accepted as metadata only. Version dispatch is
-# intentionally disabled for now. Default if omitted: v1.0.0.
-app_builder_version: v1.0.0
+# String values can reference ${ENV.NAME}, ${GIT.DESCRIBE},
+# ${GIT.SHORT_COMMIT}, ${APP.VERSION}, and ${CONFIG.path.to.value}.
+# Interpolation is string-only and runs before schema validation.
+# Keep app_builder_version literal; the version dispatcher reads it before
+# the full 1.x config interpolation layer is loaded.
+# Optional, nullable string | null. Version selector read by the meta CLI before loading
+# the full config. Use current for the installed 1.x app-builder; explicit 1.x tags,
+# branches, or commits are resolved through the managed version cache. Use the command
+# line form app-builder 0.x for legacy 0.x projects. Default if omitted: current.
+app_builder_version: current
 
 # Optional, nullable mapping | null. Optional bundled Python runtime. Set to null to
 # disable. Default if omitted: PythonBundledOptions defaults.
@@ -38,12 +45,9 @@ installer:
   # expanded at build time.
   install_directory: '%localappdata%\MyCompany\MyApp'
 
-  # Optional string. Project-relative ASCII banner used by generated installer assets.
-  # Default if omitted: application-templates/asciibanner.txt.
-  ascii_banner: application-templates/asciibanner.txt
-
-  # Optional string. Project-relative icon used by generated installer assets. Default if
-  # omitted: application-templates/icon.ico.
+  # Optional string. Project-relative default icon used for Start Menu shortcuts when a
+  # shortcut does not specify its own icon. Default if omitted: application-
+  # templates/icon.ico.
   icon: application-templates/icon.ico
 
   # Optional boolean. Whether generated installer scripts should pause before exiting.

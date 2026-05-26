@@ -22,7 +22,7 @@ test = [
 ]
 
 [project.scripts]
-app-builder = "app_builder.main:main"
+app-builder = "app_builder_meta.main:main"
 
 [tool.setuptools.dynamic]
 version = {attr = "app_builder.__version__"}
@@ -37,3 +37,4 @@ app_builder = [
     "assets/templates/*",
     "assets/exewrap/*",
 ]
+app_builder_meta = ["py.typed"]

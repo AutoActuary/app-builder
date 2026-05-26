@@ -192,6 +192,13 @@ build_hooks:
             [[["pre-dist"]], [["post-dist"]], [["post-process"]]],
             [call.args[1] for call in run_hooks.call_args_list],
         )
+        self.assertEqual(
+            ["1.2.3", "1.2.3", "1.2.3"],
+            [
+                call.kwargs["environment"]["app_builder_version"]
+                for call in run_hooks.call_args_list
+            ],
+        )
 
     def test_release_hook_candidates_can_be_derived_from_configured_paths(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
@@ -294,6 +301,13 @@ build_hooks:
         self.assertEqual(
             [[["pre-gh"]], [["post-gh"]]],
             [call.args[1] for call in run_hooks.call_args_list],
+        )
+        self.assertEqual(
+            ["1.2.3", "1.2.3"],
+            [
+                call.kwargs["environment"]["app_builder_version"]
+                for call in run_hooks.call_args_list
+            ],
         )
         create_call = gh_calls[1]
         self.assertEqual([gh_executable, "release", "create", "1.2.3"], create_call[:4])

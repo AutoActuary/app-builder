@@ -10,6 +10,7 @@ from typing import Mapping
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from .config import load_project_config
+from .exewrap import stamp_exe_wrap_config
 from .fileset import build_remap_table, collect_files
 from .hooks import run_hook_commands
 from .installer_bundle import create_exewrap_zip_installer
@@ -32,12 +33,15 @@ class ReleaseResult:
 
 
 def build_release(project_root: Path, *, version: str | None = None) -> ReleaseResult:
-    _, config = load_project_config(project_root)
     version = version or detect_version(project_root)
+    _, config = load_project_config(project_root, app_version=version)
 
-    env_result = _run_dependency_stages(project_root)
+    env_result = _run_dependency_stages(project_root, app_version=version)
     hook_env = _build_hook_environment(
-        config.installer.name, config.installer.install_directory, project_root
+        config.installer.name,
+        config.installer.install_directory,
+        project_root,
+        version=version,
     )
     python_candidates = _runtime_hook_python_candidates(
         project_root, config, env_result
@@ -61,6 +65,7 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
     remap_table = build_remap_table(
         project_root, included_files, config.installer.paths.remap
     )
+    _add_app_builder_meta_launcher(config, dist_dir, remap_table)
 
     payload_archive = dist_dir / f"{_slugify(config.installer.name)}-{version}.zip"
     _write_payload_archive(payload_archive, remap_table, version=version)
@@ -75,7 +80,7 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
             {
                 "target": item.target,
                 "display_name": item.display_name,
-                "icon": item.icon,
+                "icon": item.icon or config.installer.icon,
             }
             for item in config.installer.start_menu
         ],
@@ -128,8 +133,12 @@ def ensure_python_environments(project_root: Path) -> PythonEnvironmentResult:
     return _run_dependency_stages(project_root)
 
 
-def _run_dependency_stages(project_root: Path) -> PythonEnvironmentResult:
-    _, config = load_project_config(project_root)
+def _run_dependency_stages(
+    project_root: Path,
+    *,
+    app_version: str | None = None,
+) -> PythonEnvironmentResult:
+    _, config = load_project_config(project_root, app_version=app_version)
     hook_env = _build_hook_environment(
         config.installer.name, config.installer.install_directory, project_root
     )
@@ -236,11 +245,48 @@ def _write_payload_archive(
         zip_file.writestr("version.txt", version)
 
 
+def _add_app_builder_meta_launcher(
+    config: AppBuilderConfig,
+    dist_dir: Path,
+    remap_table: dict[Path, PurePosixPath],
+) -> None:
+    if config.installer.name.strip().lower() != "app-builder":
+        return
+    launcher_path = dist_dir / "_generated" / "app-builder.exe"
+    launcher_path.parent.mkdir(parents=True, exist_ok=True)
+    launcher_path.write_bytes(stamp_exe_wrap_config(_render_meta_launcher_config()))
+    remap_table[launcher_path] = PurePosixPath("app-builder.exe")
+
+
+def _render_meta_launcher_config() -> bytes:
+    return (
+        "{\n"
+        '  "command": [\n'
+        '    "@{exe_dir}\\\\bin\\\\python\\\\python\\\\python.exe",\n'
+        '    "-X",\n'
+        '    "utf8",\n'
+        '    "-m",\n'
+        '    "app_builder_meta",\n'
+        "    @{args}\n"
+        "  ],\n"
+        '  "env": {\n'
+        '    "PYTHONNOUSERSITE": "1",\n'
+        '    "PYTHONPATH": "@{exe_dir}"\n'
+        "  }\n"
+        "}\n"
+    ).encode("utf-8")
+
+
 def _build_hook_environment(
-    app_name: str, install_directory: str, project_root: Path
+    app_name: str,
+    install_directory: str,
+    project_root: Path,
+    *,
+    version: str | None = None,
 ) -> dict[str, str]:
     return {
         "app_builder_name": app_name,
+        "app_builder_version": version or "",
         "app_builder_install_directory": expand_windows_envvars(install_directory),
         "app_builder_project_root": str(project_root),
         "app_builder_start_menu": os.path.join(
@@ -257,9 +303,12 @@ def _build_hook_environment(
 def upload_release_to_github(
     project_root: Path, *, release: ReleaseResult, draft: bool
 ) -> str:
-    _, config = load_project_config(project_root)
+    _, config = load_project_config(project_root, app_version=release.version)
     hook_env = _build_hook_environment(
-        config.installer.name, config.installer.install_directory, project_root
+        config.installer.name,
+        config.installer.install_directory,
+        project_root,
+        version=release.version,
     )
     python_candidates = _runtime_hook_python_candidates(project_root, config)
     run_hook_commands(

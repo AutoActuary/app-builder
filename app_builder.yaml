@@ -1,16 +1,19 @@
-# Accepted as metadata only; app-builder version dispatch is intentionally disabled for now.
-app_builder_version: v1.0.0
-python_bundled: null
+app_builder_version: current
+python_bundled:
+  path: bin/python
+  python_version: 3.12.10
 python_venv: null
 installer:
   name: app-builder
-  install_directory: "%localappdata%\\autoactuary\\app-builder-1x"
-  ascii_banner: application-templates/asciibanner.txt
+  install_directory: "%localappdata%\\app-builder"
   icon: application-templates/icon.ico
   dist: dist
   paths:
     include:
       - app_builder
+      - app_builder_meta
+      - __app_builder_0.x__
+      - bin/python
       - pyproject.toml
       - requirements.txt
       - mypy.ini

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
+import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from app_builder.config import load_config
 from app_builder.fileset import build_remap_table, collect_files
@@ -292,6 +295,168 @@ Application:
                 r"config: legacy application\.yaml layout is not supported\.",
             ):
                 load_config(config_path)
+
+    def test_interpolates_env_app_version_and_config_values(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            config_path = temp_dir / "app_builder.yaml"
+            config_path.write_text(
+                """
+installer:
+  name: Demo ${APP.VERSION}
+  install_directory: "${ENV.LOCALAPPDATA}\\\\${CONFIG.installer.name}"
+  paths:
+    include:
+      - "src-${APP.VERSION}"
+    remap:
+      - ["README.md", "docs/${CONFIG.installer.name}.md"]
+build_hooks:
+  pre_dist:
+    - [cmd.exe, /C, echo, "${CONFIG.installer.install_directory}"]
+""".strip(),
+                encoding="utf-8",
+            )
+
+            with patch.dict(os.environ, {"LOCALAPPDATA": r"C:\Users\Test\AppData\Local"}):
+                config = load_config(config_path, app_version="1.2.3")
+
+        self.assertEqual("Demo 1.2.3", config.installer.name)
+        self.assertEqual(
+            r"C:\Users\Test\AppData\Local\Demo 1.2.3",
+            config.installer.install_directory,
+        )
+        self.assertEqual(["src-1.2.3"], config.installer.paths.include)
+        self.assertEqual(
+            [("README.md", "docs/Demo 1.2.3.md")],
+            config.installer.paths.remap,
+        )
+        self.assertEqual(
+            [
+                [
+                    "cmd.exe",
+                    "/C",
+                    "echo",
+                    r"C:\Users\Test\AppData\Local\Demo 1.2.3",
+                ]
+            ],
+            config.build_hooks.pre_dist,
+        )
+
+    def test_interpolates_git_values(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            subprocess.run(
+                ["git", "init"], cwd=temp_dir, check=True, capture_output=True
+            )
+            (temp_dir / "README.md").write_text("demo\n", encoding="utf-8")
+            (temp_dir / "app_builder.yaml").write_text(
+                """
+installer:
+  name: "Demo ${GIT.DESCRIBE}"
+  install_directory: "%localappdata%\\\\Demo-${GIT.SHORT_COMMIT}"
+  paths:
+    include:
+      - README.md
+      - "${GIT.COMMIT}"
+      - "${GIT.BRANCH}"
+      - "${GIT.TAG}"
+      - "${GIT.IS_DIRTY}"
+build_hooks: {}
+""".strip(),
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "."], cwd=temp_dir, check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "user.email=test@example.com",
+                    "-c",
+                    "user.name=Test User",
+                    "commit",
+                    "-m",
+                    "initial",
+                ],
+                cwd=temp_dir,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(["git", "tag", "v1.2.3"], cwd=temp_dir, check=True)
+            commit = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=temp_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            short_commit = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=temp_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            branch = subprocess.run(
+                ["git", "symbolic-ref", "--short", "HEAD"],
+                cwd=temp_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+
+            config = load_config(temp_dir / "app_builder.yaml")
+
+        self.assertEqual("Demo v1.2.3", config.installer.name)
+        self.assertEqual(
+            rf"%localappdata%\Demo-{short_commit}",
+            config.installer.install_directory,
+        )
+        self.assertEqual(
+            ["README.md", commit, branch, "v1.2.3", "false"],
+            config.installer.paths.include,
+        )
+
+    def test_missing_interpolation_variable_is_rejected(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            config_path = Path(temp_dir_str) / "app_builder.yaml"
+            config_path.write_text(
+                """
+installer:
+  name: "${ENV.APP_BUILDER_TEST_MISSING}"
+  install_directory: "%localappdata%\\\\Demo"
+""".strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ConfigError,
+                "environment variable 'APP_BUILDER_TEST_MISSING' is not set",
+            ):
+                load_config(config_path)
+
+    def test_config_reference_to_non_string_is_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigError,
+            r"CONFIG\.installer\.paths\.include resolved to list; only string values can be interpolated",
+        ):
+            self._load_yaml("""
+installer:
+  name: "${CONFIG.installer.paths.include}"
+  install_directory: "%localappdata%\\\\Demo"
+  paths:
+    include: [src]
+""")
+
+    def test_circular_config_references_are_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigError,
+            "circular interpolation reference detected",
+        ):
+            self._load_yaml("""
+installer:
+  name: "${CONFIG.installer.install_directory}"
+  install_directory: "${CONFIG.installer.name}"
+""")
 
 
 class TestFileset(unittest.TestCase):

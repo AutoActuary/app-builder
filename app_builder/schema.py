@@ -105,14 +105,9 @@ class InstallerOptions:
         description="Windows install directory. Percent-style environment variables are expanded at build time.",
         example=r"%localappdata%\MyCompany\MyApp",
     )
-    ascii_banner: str = config_field(
-        default="application-templates/asciibanner.txt",
-        description="Project-relative ASCII banner used by generated installer assets.",
-        example="application-templates/asciibanner.txt",
-    )
     icon: str = config_field(
         default="application-templates/icon.ico",
-        description="Project-relative icon used by generated installer assets.",
+        description="Project-relative default icon used for Start Menu shortcuts when a shortcut does not specify its own icon.",
         example="application-templates/icon.ico",
     )
     pause_on_exit: bool = config_field(
@@ -198,9 +193,9 @@ class BuildHooks:
 @dataclass(slots=True, kw_only=True)
 class AppBuilderConfig:
     app_builder_version: str | None = config_field(
-        default="v1.0.0",
-        description="Accepted as metadata only. Version dispatch is intentionally disabled for now.",
-        example="v1.0.0",
+        default="current",
+        description="Version selector read by the meta CLI before loading the full config. Use current for the installed 1.x app-builder; explicit 1.x tags, branches, or commits are resolved through the managed version cache. Use the command line form app-builder 0.x for legacy 0.x projects.",
+        example="current",
     )
     python_bundled: PythonBundledOptions | None = config_field(
         default_factory=PythonBundledOptions,
