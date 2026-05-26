@@ -262,11 +262,13 @@ def _render_meta_launcher_config() -> bytes:
     return (
         "{\n"
         '  "env": {\n'
+        '    "APP_BUILDER_INSTALL_ROOT": "@{exe_dir}",\n'
         '    "PYTHONNOUSERSITE": "1",\n'
         '    "PYTHONPATH": "@{exe_dir}"\n'
         "  },\n"
         '  "command": [\n'
         '    "@{exe_dir}\\\\bin\\\\python\\\\python\\\\python.exe",\n'
+        '    "-P",\n'
         '    "-X",\n'
         '    "utf8",\n'
         '    "-m",\n'

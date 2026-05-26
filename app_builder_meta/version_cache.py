@@ -37,7 +37,7 @@ def run_managed_version(ref: str, argv: list[str], *, cwd: Path) -> int:
         str(managed.repo_path), env.get("PYTHONPATH", "")
     )
     completed = subprocess.run(
-        [str(managed.venv_python), "-m", "app_builder", *argv],
+        [str(managed.venv_python), "-P", "-m", "app_builder", *argv],
         cwd=cwd,
         env=env,
         check=False,

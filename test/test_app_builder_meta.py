@@ -155,7 +155,7 @@ class TestAppBuilderMetaExecutionAdapters(unittest.TestCase):
         self.assertEqual(7, result)
         args = run.call_args.args[0]
         kwargs = run.call_args.kwargs
-        self.assertEqual([str(venv_python), "-m", "app_builder", "--help"], args)
+        self.assertEqual([str(venv_python), "-P", "-m", "app_builder", "--help"], args)
         self.assertEqual(temp_dir, kwargs["cwd"])
         self.assertIn(str(repo_path), kwargs["env"]["PYTHONPATH"])
 

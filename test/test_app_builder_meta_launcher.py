@@ -16,8 +16,10 @@ class TestAppBuilderMetaLauncher(unittest.TestCase):
 
         self.assertNotIn('"cwd"', config)
         self.assertIn('"@{exe_dir}\\\\bin\\\\python\\\\python\\\\python.exe"', config)
+        self.assertIn('"-P"', config)
         self.assertIn('"app_builder_meta"', config)
         self.assertIn("@{args}", config)
+        self.assertIn('"APP_BUILDER_INSTALL_ROOT": "@{exe_dir}"', config)
         self.assertIn('"PYTHONPATH": "@{exe_dir}"', config)
         self.assertGreater(config.rfind('"command"'), config.rfind('"env"'))
 
