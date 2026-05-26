@@ -147,6 +147,7 @@ def _smoke_import(python: Path, output: Path) -> None:
             "root = pathlib.Path(os.environ['APP_BUILDER_0X_BRIDGE']).resolve(); "
             "assert root in origin.parents, origin",
         ],
+        cwd=output,
         env=env,
     )
 
