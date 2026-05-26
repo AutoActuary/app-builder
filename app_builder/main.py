@@ -1,159 +1,98 @@
-import sys
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any
 
 import click
-from .commands.init import init
-from .commands.deps import deps
-from .commands.release import release
-from .commands.release_gh import release_gh
+
+from . import __version__
+from .build import build_release, ensure_python_environments, upload_release_to_github
+from .project import find_project_root
+from .python_runtime import ensure_bundled_python
+from .template import initialize_project
 
 
-def caller_version_tuple() -> tuple[int, ...] | None:
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(version=__version__, prog_name="app-builder")
+def main() -> None:
     """
-    This is a workaround to get the version of the caller cli if app-builder is not called directly (but from the cli).
-    Note: the cli also acts as a wrapper and puppeteer for maintaining different versions of this app and dispatching to the correct one.
+    Build and package Windows-first Python applications.
     """
 
-    py_caller = Path(sys.executable).resolve()
-    app_dir = py_caller.parent.parent.parent
-    if app_dir.name != "app-builder":
-        return None
 
-    version_links = list(app_dir.glob("GitHub commit *.lnk"))
-    if len(version_links) != 1:
-        return None
-    version_link = version_links[0]
-
-    version_str = version_link.name.split("GitHub commit v", 1)[-1].split(".lnk", 1)[0]
-    version_str = version_str.split("-")[0]
-    version_str_tuple = tuple(version_str.split("."))
-
-    if not len(version_str_tuple) == 3:
-        return None
-
-    def int_able(x: Any) -> bool:
-        try:
-            int(x)
-            return True
-        except:
-            return False
-
-    version = tuple(int(i) for i in version_str_tuple if int_able(i))
-    if not len(version) == 3:
-        return None
-
-    return version
-
-
-@click.group(
-    invoke_without_command=True,
-)
-@click.pass_context
+@main.command()
 @click.option(
-    "-i",
-    "--init",
-    "bc_i",
+    "--force",
     is_flag=True,
-    help="Initialize the current git repository as an app-builder project. "
-    "Deprecated. Use 'app-builder init' instead.",
+    help="Overwrite an existing template config if one already exists.",
 )
+def init(*, force: bool) -> None:
+    """
+    Create a commented app_builder.yaml template in the current git repository.
+    """
+
+    initialize_project(Path.cwd(), force=force)
+
+
+@main.command()
+def deps() -> None:
+    """
+    Materialize configured Python environments without creating a release.
+    """
+
+    project_root = find_project_root(Path.cwd())
+    result = ensure_python_environments(project_root)
+    click.echo(f"Bundled Python: {result.python_bundled or 'disabled'}")
+    click.echo(f"Build venv: {result.python_venv or 'disabled'}")
+
+
+@main.command("python")
+def python_cmd() -> None:
+    """
+    Materialize only the configured bundled Python runtime.
+    """
+
+    project_root = find_project_root(Path.cwd())
+    bundled_python = ensure_bundled_python(project_root)
+    click.echo(f"Bundled Python: {bundled_python or 'disabled'}")
+
+
+@main.command("release")
 @click.option(
-    "-d",
-    "--get-dependencies",
-    "bc_d",
-    is_flag=True,
-    help="Ensure all the dependencies are set up properly. "
-    "Deprecated. Use 'app-builder deps' instead.",
-)
-@click.option(
-    "-l",
-    "--local-release",
-    "bc_l",
-    is_flag=True,
-    help="Create a release. Deprecated. Use 'app-builder release' instead.",
-)
-@click.option(
-    "-g",
-    "--github-release",
-    "bc_g",
-    is_flag=True,
-    help="Create a release and upload it to GitHub. "
-    "Deprecated. Use 'app-builder release-gh' instead.",
-)
-# TODO: Maybe this should be a separate CLI,
-#   like `app-builder-install` or `app-builder-setup` or `app-builder-version-manager`?
-@click.option(
-    # This is handled by the CLI wrapper. We only put it here to include it in the help message.
-    "--install-version",
-    "_unused_install_version",
+    "--version",
     type=str,
-    help="Install a specific version of app-builder and exit.",
+    default=None,
+    help="Override the release version. Defaults to git describe or '0.0.0-dev'.",
+)
+def release_cmd(*, version: str | None) -> None:
+    """
+    Build a local release artifact set.
+    """
+
+    project_root = find_project_root(Path.cwd())
+    release = build_release(project_root, version=version)
+    click.echo(f"Created payload: {release.payload_archive}")
+    click.echo(f"Created installer bundle: {release.installer_archive}")
+    click.echo(f"Created manifest: {release.manifest_path}")
+
+
+@main.command("release-gh")
+@click.option(
+    "--version",
+    type=str,
+    default=None,
+    help="Override the release version. Defaults to git describe or '0.0.0-dev'.",
 )
 @click.option(
-    # This is handled by the CLI wrapper. We only put it here to include it in the help message.
-    "--use-version",
-    "_unused_use_version",
-    type=str,
-    help="Use the specified version of app-builder, ignoring the version specified in `application.yaml`. "
-    "The special value `current` may be used to refer to the currently installed version of app-builder.",
+    "--draft/--no-draft",
+    default=False,
+    help="Create a draft GitHub release.",
 )
-def main(
-    ctx: click.Context,
-    *,
-    bc_i: bool = False,
-    bc_d: bool = False,
-    bc_l: bool = False,
-    bc_g: bool = False,
-    _unused_install_version: str | None = None,
-    _unused_use_version: str | None = None,
-) -> None:
+def release_gh_cmd(*, version: str | None, draft: bool) -> None:
     """
-    \b
-     █████╗ ██████╗ ██████╗       ██████╗ ██╗   ██╗██╗██╗     ██████╗ ███████╗██████╗
-    ██╔══██╗██╔══██╗██╔══██╗      ██╔══██╗██║   ██║██║██║     ██╔══██╗██╔════╝██╔══██╗
-    ███████║██████╔╝██████╔╝█████╗██████╔╝██║   ██║██║██║     ██║  ██║█████╗  ██████╔╝
-    ██╔══██║██╔═══╝ ██╔═══╝ ╚════╝██╔══██╗██║   ██║██║██║     ██║  ██║██╔══╝  ██╔══██╗
-    ██║  ██║██║     ██║           ██████╔╝╚██████╔╝██║███████╗██████╔╝███████╗██║  ██║
-    ╚═╝  ╚═╝╚═╝     ╚═╝           ╚═════╝  ╚═════╝ ╚═╝╚══════╝╚═════╝ ╚══════╝╚═╝  ╚═╝
+    Build a release and upload it to GitHub.
     """
-    version = caller_version_tuple()
-    if version is not None and version < (0, 1, 0):
-        print()
-        print(
-            "Error: this version requires an installation of App-Builder-v0.1.0.exe or higher"
-        )
-        print(
-            "Please Download and install here: https://github.com/AutoActuary/app-builder/releases"
-        )
-        sys.exit(-1)
 
-    if bc_i:
-        from .util import init
-
-        init()
-
-    elif bc_d:
-        from .get_dependencies import get_dependencies
-
-        get_dependencies()
-
-    elif bc_l:
-        from .create_release import create_release
-
-        create_release()
-
-    elif bc_g:
-        from .create_github_release import create_github_release
-
-        create_github_release()
-
-    elif ctx.invoked_subcommand is None:
-        # No subcommand will run, so print the help message.
-        click.echo(ctx.get_help())
-
-
-main.add_command(init)
-main.add_command(deps)
-main.add_command(release)
-main.add_command(release_gh)
+    project_root = find_project_root(Path.cwd())
+    release = build_release(project_root, version=version)
+    url = upload_release_to_github(project_root, release=release, draft=draft)
+    click.echo(url)

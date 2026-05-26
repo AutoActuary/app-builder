@@ -1,2 +1,0 @@
-class ApplicationYamlError(Exception):
-    pass

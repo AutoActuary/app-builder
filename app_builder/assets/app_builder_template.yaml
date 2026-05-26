@@ -1,0 +1,157 @@
+# app_builder.yaml
+# Generated from app_builder.schema metadata.
+# Required and common optional fields contain examples; replace them for your app.
+# String values can reference ${ENV.NAME}, ${GIT.DESCRIBE},
+# ${GIT.SHORT_COMMIT}, ${APP.VERSION}, and ${CONFIG.path.to.value}.
+# Interpolation is string-only and runs before schema validation.
+# Keep app_builder_version literal; the version dispatcher reads it before
+# the full 1.x config interpolation layer is loaded.
+# Optional, nullable string | null. Version selector read by the meta CLI before loading
+# the full config. Use current for the installed 1.x app-builder; explicit 1.x tags,
+# branches, or commits are resolved through the managed version cache. Use the command
+# line form app-builder 0.x for legacy 0.x projects. Default if omitted: current.
+app_builder_version: current
+
+# Optional, nullable mapping | null. Optional bundled Python runtime. Set to null to
+# disable. Default if omitted: PythonBundledOptions defaults.
+python_bundled:
+  # Optional string. Project-relative directory where the bundled Python runtime is
+  # materialized. Default if omitted: bin/python.
+  path: bin/python
+
+  # Optional string. NuGet Python package version or version prefix to materialize.
+  # Default if omitted: 3.11.1.
+  python_version: 3.12.10
+
+# Optional, nullable mapping | null. Optional Poetry dev virtual environment derived from
+# bundled Python when available. Set to null to disable. Default if omitted:
+# PythonVenvOptions defaults.
+python_venv:
+  # Optional string. Project-relative directory where the Poetry dev virtual environment
+  # is created. Default if omitted: venv.
+  path: venv
+
+  # Optional string. NuGet Python package version or version prefix used when the virtual
+  # environment is self-contained because python_bundled is disabled. Default if omitted:
+  # 3.11.1.
+  python_version: 3.12.10
+
+# Required mapping. Required installer metadata and release payload settings.
+installer:
+  # Required string. Human-facing application name.
+  name: MyApp
+
+  # Required string. Windows install directory. Percent-style environment variables are
+  # expanded at build time.
+  install_directory: '%localappdata%\MyCompany\MyApp'
+
+  # Optional string. Project-relative default icon used for Start Menu shortcuts when a
+  # shortcut does not specify its own icon. Default if omitted: application-
+  # templates/icon.ico.
+  icon: application-templates/icon.ico
+
+  # Optional boolean. Whether generated installer scripts should pause before exiting.
+  # Default if omitted: true.
+  pause_on_exit: true
+
+  # Optional boolean. Whether the installer bundle should include an uninstall script.
+  # Default if omitted: true.
+  add_uninstaller: true
+
+  # Optional list[mapping]. Windows Start Menu shortcut declarations. Default if omitted:
+  # [].
+  start_menu:
+    - target: application-templates/program.cmd
+      display_name: MyApp
+      icon: application-templates/icon.ico
+
+  # Optional mapping. Installer and uninstaller hook command declarations. Default if
+  # omitted: InstallHooks defaults.
+  install_hooks:
+    # Optional list[list[string]]. Argv commands written into installer metadata to run
+    # before installation. Default if omitted: [].
+    pre_install: []
+
+    # Optional list[list[string]]. Argv commands written into installer metadata to run
+    # after installation. Default if omitted: [].
+    post_install: []
+
+    # Optional list[list[string]]. Argv commands written into installer metadata to run
+    # before uninstall while the installed app directory is still present. Default if
+    # omitted: [].
+    pre_uninstall: []
+
+    # Optional list[list[string]]. Argv commands written into installer metadata to run
+    # after the install directory has been removed. Entrypoints inside the install
+    # directory must be self-contained .cmd, .ps1, or .exe files because app-builder
+    # stages only argv[0] to temp before removal. Default if omitted: [].
+    post_uninstall: []
+
+  # Optional string. Project-relative output directory for release artifacts. Default if
+  # omitted: dist.
+  dist: dist
+
+  # Optional mapping. Payload include, exclude, and remap rules. Default if omitted:
+  # PathsMapping defaults.
+  paths:
+    # Optional list[string]. Project-relative files or globs included in the release
+    # payload. Default if omitted: [].
+    include:
+      - src
+      - app_builder.yaml
+      - application-templates
+
+    # Optional list[string]. Project-relative files or globs excluded from the release
+    # payload. Default if omitted: [].
+    exclude:
+      - '**/__pycache__'
+      - dist
+      - venv
+
+    # Optional list[tuple[string, string]]. Two-item source and destination pairs for
+    # relocating payload files. Default if omitted: [].
+    remap:
+      - [README.md, docs/README.md]
+
+# Optional mapping. Build and release hook command declarations. Default if omitted:
+# BuildHooks defaults.
+build_hooks:
+  # Optional list[list[string]]. Argv commands run before dependency or release processing
+  # begins. Default if omitted: [].
+  pre_process: []
+
+  # Optional list[list[string]]. Argv commands run before bundled Python is materialized.
+  # Default if omitted: [].
+  pre_python_bundled: []
+
+  # Optional list[list[string]]. Argv commands run after bundled Python is materialized.
+  # Default if omitted: [].
+  post_python_bundled: []
+
+  # Optional list[list[string]]. Argv commands run before the virtual environment is
+  # materialized. Default if omitted: [].
+  pre_python_venv: []
+
+  # Optional list[list[string]]. Argv commands run after the virtual environment is
+  # materialized. Default if omitted: [].
+  post_python_venv: []
+
+  # Optional list[list[string]]. Argv commands run before the release payload is
+  # assembled. Default if omitted: [].
+  pre_dist: []
+
+  # Optional list[list[string]]. Argv commands run after the release payload is assembled.
+  # Default if omitted: [].
+  post_dist: []
+
+  # Optional list[list[string]]. Argv commands run before GitHub release upload. Default
+  # if omitted: [].
+  pre_github_release: []
+
+  # Optional list[list[string]]. Argv commands run after GitHub release upload. Default if
+  # omitted: [].
+  post_github_release: []
+
+  # Optional list[list[string]]. Argv commands run at the end of release processing.
+  # Default if omitted: [].
+  post_process: []

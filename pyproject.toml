@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "app-builder"
+dynamic = ["version"]
+description = "Schema-first Windows application builder for Python-focused apps."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8,<9",
+    "poetry>=2,<3",
+    "PyYAML>=6,<7",
+]
+
+[project.optional-dependencies]
+schema = ["pydantic>=1,<3"]
+test = [
+    "mypy==1.19.1",
+    "types-PyYAML==6.*",
+]
+
+[project.scripts]
+app-builder = "app_builder_meta.main:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "app_builder.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["app_builder*"]
+
+[tool.setuptools.package-data]
+app_builder = [
+    "py.typed",
+    "assets/app_builder_template.yaml",
+    "assets/templates/*",
+    "assets/exewrap/*",
+]
+app_builder_meta = ["py.typed"]
