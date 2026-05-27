@@ -21,6 +21,8 @@ from app_builder.exewrap import (
 )
 from app_builder.installer_bundle import (
     _contains_powershell_here_string_terminator,
+    _json_for_embedded_powershell,
+    _render_bootstrap_hooks_powershell,
     _render_bootstrap_config,
     create_exewrap_zip_installer,
 )
@@ -92,6 +94,79 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
         self.assertIn("Remove-Item -LiteralPath $extractDir", script)
         self.assertIn("exit $exitCode", script)
 
+    def test_bootstrap_config_injects_pre_extract_hooks_before_extraction(
+        self,
+    ) -> None:
+        config = json.loads(
+            _render_bootstrap_config(
+                [
+                    ["Write-Host", "I'm before extraction"],
+                    [
+                        "cmd.exe",
+                        "/D",
+                        "/S",
+                        "/C",
+                        "echo explicit cmd is allowed",
+                    ],
+                ]
+            ).decode("utf-8")
+        )
+
+        script = config["command"][-1]
+        self.assertIn("ConvertFrom-Json", script)
+        self.assertIn("Invoke-AppBuilderBootstrapCommand", script)
+        self.assertIn("I\\u0027m before extraction", script)
+        self.assertNotIn("I'm before extraction", script)
+        self.assertIn("cmd.exe", script)
+        self.assertLess(
+            script.index("Invoke-AppBuilderBootstrapCommand $RawCommand"),
+            script.index("tar.exe -xf '@{exe_path}'"),
+        )
+
+    def test_json_for_embedded_powershell_rewrites_apostrophes(self) -> None:
+        payload = _json_for_embedded_powershell(
+            [["Write-Host", "I'm safe"], ["Write-Host", "line\n'@\nline"]],
+            compact=True,
+        )
+
+        self.assertIn("I\\u0027m safe", payload)
+        self.assertIn("\\u0027@", payload)
+        self.assertNotIn("I'm safe", payload)
+        self.assertFalse(_contains_powershell_here_string_terminator(payload))
+
+    @unittest.skipIf(os.name != "nt", "PowerShell bootstrap execution")
+    def test_bootstrap_pre_extract_hooks_execute_argv_without_powershell_injection(
+        self,
+    ) -> None:
+        script = _render_bootstrap_hooks_powershell(
+            [
+                [
+                    "Write-Output",
+                    "literal; Write-Error should-not-run; I'm data",
+                ],
+                ["cmd.exe", "/D", "/S", "/C", "echo explicit-cmd"],
+            ]
+        )
+
+        result = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                script,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual("", result.stderr)
+        self.assertEqual(0, result.returncode)
+        self.assertIn("literal; Write-Error should-not-run; I'm data", result.stdout)
+        self.assertIn("explicit-cmd", result.stdout)
+
     def test_manifest_embedding_rejects_powershell_here_string_terminator(
         self,
     ) -> None:
@@ -140,6 +215,10 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                     },
                     set(installer_zip.namelist()),
                 )
+                self.assertEqual(
+                    ["install.cmd", "uninstall.cmd", "demo-1.0.zip"],
+                    installer_zip.namelist(),
+                )
                 for info in installer_zip.infolist():
                     self.assertEqual(ZIP_STORED, info.compress_type)
                 self.assertNotIn("demo-1.0-manifest.json", installer_zip.namelist())
@@ -173,6 +252,47 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 self.assertIn("Copy-AppBuilderPostUninstallEntrypoints", uninstall_cmd)
                 self.assertIn("Remove-AppBuilderInstallDirectory", uninstall_cmd)
                 self.assertNotIn("Start-AppBuilderDirectoryCleanup", uninstall_cmd)
+
+    def test_manifest_embedding_rewrites_apostrophes_in_generated_scripts(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            payload = temp_dir / "demo-1.0.zip"
+            manifest = temp_dir / "demo-1.0-manifest.json"
+            installer = temp_dir / "demo-1.0-installer.exe"
+            payload.write_text("payload", encoding="utf-8")
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "name": "I'm Demo",
+                        "install_hooks": {
+                            "pre_install": [["Write-Host", "it's ok"]]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            create_exewrap_zip_installer(
+                installer,
+                payload_archive=payload,
+                manifest_path=manifest,
+                app_name="Demo",
+                pause_on_exit=False,
+                add_uninstaller=True,
+                launcher=b"fake-launcher",
+            )
+
+            with ZipFile(installer) as installer_zip:
+                install_cmd = installer_zip.read("install.cmd").decode("utf-8")
+                uninstall_cmd = installer_zip.read("uninstall.cmd").decode("utf-8")
+
+        self.assertIn("I\\u0027m Demo", install_cmd)
+        self.assertIn("it\\u0027s ok", install_cmd)
+        self.assertNotIn("I'm Demo", install_cmd)
+        self.assertNotIn("it's ok", install_cmd)
+        self.assertIn("I\\u0027m Demo", uninstall_cmd)
 
     def test_installer_can_include_extra_top_layer_files(self) -> None:
         with TemporaryDirectory() as temp_dir_str:

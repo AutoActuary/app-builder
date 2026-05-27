@@ -59,6 +59,14 @@ class InstallHooks:
 
 
 @dataclass(slots=True)
+class BootstrapHooks:
+    pre_extract: list[HookCommand] = config_field(
+        default_factory=list,
+        description="Argv commands injected into the ExeWrap PowerShell bootstrap before the installer extracts its top layer. These commands cannot use payload files, install.cmd, uninstall.cmd, or bundled top-layer tools because none have been extracted yet.",
+    )
+
+
+@dataclass(slots=True)
 class PathsMapping:
     include: list[str] = config_field(
         default_factory=list,
@@ -135,6 +143,10 @@ class InstallerOptions:
                 "icon": "application-templates/icon.ico",
             }
         ],
+    )
+    bootstrap_hooks: BootstrapHooks = config_field(
+        default_factory=BootstrapHooks,
+        description="Early ExeWrap bootstrap hook command declarations.",
     )
     install_hooks: InstallHooks = config_field(
         default_factory=InstallHooks,

@@ -124,6 +124,7 @@ def build_release(project_root: Path, *, version: str | None = None) -> ReleaseR
         add_uninstaller=config.installer.add_uninstaller,
         icon_path=installer_icon_path,
         top_layer_files=_installer_top_layer_files(config),
+        bootstrap_pre_extract_commands=config.installer.bootstrap_hooks.pre_extract,
     )
 
     run_hook_commands(

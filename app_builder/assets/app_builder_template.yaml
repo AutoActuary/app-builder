@@ -69,6 +69,15 @@ installer:
       display_name: MyApp
       icon: application-templates/icon.ico
 
+  # Optional mapping. Early ExeWrap bootstrap hook command declarations. Default if
+  # omitted: BootstrapHooks defaults.
+  bootstrap_hooks:
+    # Optional list[list[string]]. Argv commands injected into the ExeWrap PowerShell
+    # bootstrap before the installer extracts its top layer. These commands cannot use
+    # payload files, install.cmd, uninstall.cmd, or bundled top-layer tools because none
+    # have been extracted yet. Default if omitted: [].
+    pre_extract: []
+
   # Optional mapping. Installer and uninstaller hook command declarations. Default if
   # omitted: InstallHooks defaults.
   install_hooks:
