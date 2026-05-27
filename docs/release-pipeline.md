@@ -61,6 +61,22 @@ ExeWrap and PowerShell. It extracts ZIP payloads with Windows `tar.exe` and 7z
 payloads with the bundled `bin\7z.exe`, so the target machine does not need
 7-Zip installed.
 
+## Bootstrap Hooks
+
+`installer.bootstrap_hooks.pre_extract` commands run inside the ExeWrap
+PowerShell bootstrap before the outer installer layer is extracted. This is the
+earliest lifecycle point and is useful for output such as a banner, or for other
+machine-level commands that do not depend on app files.
+
+These hooks are structured argv lists, not raw PowerShell strings. app-builder
+serializes them as JSON, rewrites apostrophes as `\u0027`, parses them with
+PowerShell `ConvertFrom-Json`, and invokes the resulting argv arrays. That keeps
+argument text from breaking out into extra PowerShell syntax. If a project
+explicitly runs `cmd.exe /C`, then cmd's own parsing rules apply.
+
+Because this hook runs before extraction, it cannot use the app payload,
+`install.cmd`, `uninstall.cmd`, bundled 7z files, or staged application files.
+
 ## Icons
 
 `installer.icon` is the single icon setting. It is used as the default Start

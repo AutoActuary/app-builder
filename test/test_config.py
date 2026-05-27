@@ -120,7 +120,27 @@ installer:
         self.assertIsInstance(config.python_venv, PythonVenvOptions)
         self.assertEqual([], config.build_hooks.pre_dist)
         self.assertEqual([], config.installer.paths.include)
+        self.assertEqual([], config.installer.bootstrap_hooks.pre_extract)
         self.assertEqual([], config.installer.install_hooks.post_install)
+
+    def test_bootstrap_pre_extract_hooks_are_argv_lists(self) -> None:
+        config = self._load_yaml("""
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+  bootstrap_hooks:
+    pre_extract:
+      - [Write-Host, "hello before extraction"]
+      - [cmd.exe, /D, /S, /C, echo explicit cmd is allowed]
+""")
+
+        self.assertEqual(
+            [
+                ["Write-Host", "hello before extraction"],
+                ["cmd.exe", "/D", "/S", "/C", "echo explicit cmd is allowed"],
+            ],
+            config.installer.bootstrap_hooks.pre_extract,
+        )
 
     def test_python_dependency_fields_are_not_configured_in_yaml(self) -> None:
         with self.assertRaisesRegex(

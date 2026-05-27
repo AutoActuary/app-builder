@@ -16,6 +16,19 @@ _INSTALLED_MANIFEST_NAME = "app-builder-manifest.json"
 _POWERSHELL_HERE_STRING_END = "'@"
 
 
+def _json_for_embedded_powershell(
+    value: object,
+    *,
+    indent: int | None = None,
+    compact: bool = False,
+) -> str:
+    if compact:
+        payload = json.dumps(value, ensure_ascii=True, separators=(",", ":"))
+    else:
+        payload = json.dumps(value, ensure_ascii=True, indent=indent)
+    return payload.replace("'", "\\u0027")
+
+
 def create_exewrap_zip_installer(
     output_path: Path,
     *,
@@ -26,6 +39,7 @@ def create_exewrap_zip_installer(
     add_uninstaller: bool,
     icon_path: Path | None = None,
     top_layer_files: Mapping[Path, str] | None = None,
+    bootstrap_pre_extract_commands: list[list[str]] | None = None,
     launcher: bytes | None = None,
 ) -> None:
     if output_path.exists():
@@ -38,7 +52,7 @@ def create_exewrap_zip_installer(
         )
     output_path.write_bytes(
         stamp_exe_wrap_config(
-            _render_bootstrap_config(),
+            _render_bootstrap_config(bootstrap_pre_extract_commands),
             launcher=launcher,
             include_end_marker=True,
         )
@@ -67,7 +81,6 @@ def create_exewrap_zip_installer(
             )
 
         with ZipFile(output_path, "a", compression=ZIP_STORED) as zip_file:
-            zip_file.write(payload_archive, payload_archive.name)
             zip_file.write(install_cmd, install_cmd.name)
             if add_uninstaller:
                 zip_file.write(uninstall_cmd, uninstall_cmd.name)
@@ -75,9 +88,12 @@ def create_exewrap_zip_installer(
                 (top_layer_files or {}).items(), key=lambda item: item[1]
             ):
                 zip_file.write(source, archive_name)
+            zip_file.write(payload_archive, payload_archive.name)
 
 
-def _render_bootstrap_config() -> bytes:
+def _render_bootstrap_config(
+    bootstrap_pre_extract_commands: list[list[str]] | None = None,
+) -> bytes:
     return json.dumps(
         {
             "command": [
@@ -86,20 +102,26 @@ def _render_bootstrap_config() -> bytes:
                 "-ExecutionPolicy",
                 "Bypass",
                 "-Command",
-                _render_powershell_bootstrap(),
+                _render_powershell_bootstrap(bootstrap_pre_extract_commands),
             ]
         },
         separators=(",", ":"),
     ).encode("utf-8")
 
 
-def _render_powershell_bootstrap() -> str:
+def _render_powershell_bootstrap(
+    bootstrap_pre_extract_commands: list[list[str]] | None = None,
+) -> str:
+    bootstrap_hooks = _render_bootstrap_hooks_powershell(
+        bootstrap_pre_extract_commands or []
+    )
     return (
         "$ErrorActionPreference = 'Stop'; "
         "$exitCode = 0; "
         "$extractDir = Join-Path $env:TEMP "
         "('app-builder-' + [guid]::NewGuid().ToString('N')); "
         "try { "
+        f"{bootstrap_hooks} "
         "New-Item -ItemType Directory -Path $extractDir | Out-Null; "
         "tar.exe -xf '@{exe_path}' -C $extractDir; "
         "if ($LASTEXITCODE -ne 0) { "
@@ -121,9 +143,40 @@ def _render_powershell_bootstrap() -> str:
     )
 
 
+def _render_bootstrap_hooks_powershell(commands: list[list[str]]) -> str:
+    commands_json = _json_for_embedded_powershell(commands, compact=True)
+    return (
+        f"$BootstrapCommandsJson = '{commands_json}'; "
+        "$BootstrapCommands = $BootstrapCommandsJson | ConvertFrom-Json; "
+        "function Invoke-AppBuilderBootstrapCommand { "
+        "param($Command); "
+        "if ($null -eq $Command) { return }; "
+        "$Argv = @(); "
+        "foreach ($Item in @($Command)) { $Argv += [string]$Item }; "
+        "if ($Argv.Count -eq 0) { return }; "
+        "$Program = $Argv[0]; "
+        "$Arguments = @(); "
+        "if ($Argv.Count -gt 1) { "
+        "$Arguments = $Argv[1..($Argv.Count - 1)] "
+        "}; "
+        "$global:LASTEXITCODE = 0; "
+        "& $Program @Arguments; "
+        "if (-not $?) { "
+        "throw \"Bootstrap hook command failed: $($Argv -join ' ')\" "
+        "}; "
+        "if ($LASTEXITCODE -ne 0) { "
+        "throw \"Bootstrap hook command failed with exit code ${LASTEXITCODE}: $($Argv -join ' ')\" "
+        "} "
+        "}; "
+        "foreach ($RawCommand in @($BootstrapCommands)) { "
+        "Invoke-AppBuilderBootstrapCommand $RawCommand "
+        "};"
+    )
+
+
 def _read_manifest_json_for_embedding(manifest_path: Path) -> str:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest_json = json.dumps(manifest, indent=2)
+    manifest_json = _json_for_embedded_powershell(manifest, indent=2)
     if _contains_powershell_here_string_terminator(manifest_json):
         raise ValueError(
             f"{manifest_path} cannot be embedded in the installer script because "

@@ -74,6 +74,7 @@ installer:
 | `pause_on_exit` | `boolean` | no | `true` | Whether generated installer scripts should pause before exiting. |
 | `add_uninstaller` | `boolean` | no | `true` | Whether the installer bundle should include an uninstall script. |
 | `start_menu` | `list[mapping]` | no | `[]` | Windows Start Menu shortcut declarations. |
+| `bootstrap_hooks` | `mapping` | no | `BootstrapHooks defaults` | Early ExeWrap bootstrap hook command declarations. |
 | `install_hooks` | `mapping` | no | `InstallHooks defaults` | Installer and uninstaller hook command declarations. |
 | `dist` | `string` | no | `dist` | Project-relative output directory for release artifacts. |
 | `paths` | `mapping` | no | `PathsMapping defaults` | Payload include, exclude, and remap rules. |
@@ -85,6 +86,12 @@ installer:
 | `target` | `string` | yes | required | Project-relative command or file launched by the shortcut. |
 | `display_name` | `string \| null` | no | `null` | Shortcut display name. Defaults to the installer name when omitted by downstream tooling. |
 | `icon` | `string \| null` | no | `null` | Project-relative icon path for the shortcut. |
+
+## `config.installer.bootstrap_hooks`
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `pre_extract` | `list[list[string]]` | no | `[]` | Argv commands injected into the ExeWrap PowerShell bootstrap before the installer extracts its top layer. These commands cannot use payload files, install.cmd, uninstall.cmd, or bundled top-layer tools because none have been extracted yet. |
 
 ## `config.installer.install_hooks`
 
