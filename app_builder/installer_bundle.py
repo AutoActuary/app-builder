@@ -490,8 +490,18 @@ function Wait-AppBuilderBeforeExit {
     if ((-not [bool]$Options.WaitOnExit) -or [bool]$Options.NoWait) {
         return
     }
-    Write-Host 'Closing in 30 seconds. Use --yes, --cli, or --no-wait to skip this wait.'
-    Start-Sleep -Seconds 30
+    Write-Host 'Press Enter to close now, or wait 30 seconds. Use --yes, --cli, or --no-wait to skip this wait.'
+    $Deadline = [DateTime]::UtcNow.AddSeconds(30)
+    while ([DateTime]::UtcNow -lt $Deadline) {
+        if ([Console]::KeyAvailable) {
+            $Key = [Console]::ReadKey($true)
+            if ($Key.Key -eq [ConsoleKey]::Enter) {
+                return
+            }
+            continue
+        }
+        Start-Sleep -Milliseconds 100
+    }
 }
 
 function Read-AppBuilderManifestJson {
