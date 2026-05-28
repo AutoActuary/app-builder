@@ -1,8 +1,9 @@
 # app_builder.yaml
 # Generated from app_builder.schema metadata.
 # Required and common optional fields contain examples; replace them for your app.
-# String values can reference ${ENV.NAME}, ${GIT.DESCRIBE},
-# ${GIT.SHORT_COMMIT}, ${APP.VERSION}, and ${CONFIG.path.to.value}.
+# String values can reference ${ENV.NAME}, ${GIT.DESCRIBE}, ${GIT.COMMIT},
+# ${GIT.SHORT_COMMIT}, ${GIT.BRANCH}, ${GIT.TAG}, ${GIT.IS_DIRTY},
+# ${APP.VERSION}, and ${CONFIG.path.to.value}.
 # Interpolation is string-only and runs before schema validation.
 # Keep app_builder_version literal; the version dispatcher reads it before
 # the full 1.x config interpolation layer is loaded.
@@ -55,8 +56,8 @@ installer:
   payload_format: zip
 
   # Optional boolean. Whether generated installer scripts should wait briefly before
-  # exiting. Runtime flags such as --yes and --no-wait skip the wait. Default if omitted:
-  # true.
+  # exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait,
+  # while --no-wait skips only the wait. Default if omitted: true.
   pause_on_exit: true
 
   # Optional boolean. Whether the installer bundle should include an uninstall script.

@@ -125,7 +125,7 @@ class InstallerOptions:
     )
     pause_on_exit: bool = config_field(
         default=True,
-        description="Whether generated installer scripts should wait briefly before exiting. Runtime flags such as --yes and --no-wait skip the wait.",
+        description="Whether generated installer scripts should wait briefly before exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait, while --no-wait skips only the wait.",
         example=True,
     )
     add_uninstaller: bool = config_field(

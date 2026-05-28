@@ -71,7 +71,7 @@ installer:
 | `install_directory` | `string` | yes | required | Windows install directory. Percent-style environment variables are expanded at build time. |
 | `icon` | `string` | no | `application-templates/icon.ico` | Project-relative .ico file embedded into generated ExeWrap executables and used for Start Menu shortcuts when a shortcut does not specify its own icon. |
 | `payload_format` | `string` | no | `zip` | Inner payload archive format. Use zip for the Windows tar.exe path or 7z for stronger compression with bundled 7-Zip extraction. |
-| `pause_on_exit` | `boolean` | no | `true` | Whether generated installer scripts should wait briefly before exiting. Runtime flags such as --yes and --no-wait skip the wait. |
+| `pause_on_exit` | `boolean` | no | `true` | Whether generated installer scripts should wait briefly before exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait, while --no-wait skips only the wait. |
 | `add_uninstaller` | `boolean` | no | `true` | Whether the installer bundle should include an uninstall script. |
 | `start_menu` | `list[mapping]` | no | `[]` | Windows Start Menu shortcut declarations. |
 | `bootstrap_hooks` | `mapping` | no | `BootstrapHooks defaults` | Early ExeWrap bootstrap hook command declarations. |

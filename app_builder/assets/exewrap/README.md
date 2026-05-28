@@ -9,7 +9,9 @@ runtime asset download step for the first-layer installer bootstrap.
 
 This vendored version is required for `@{args_as_json}`, which lets
 app-builder pass installer arguments through the PowerShell bootstrap as JSON
-instead of relying on PowerShell `-Command` tail parsing.
+instead of relying on PowerShell `-Command` tail parsing. The installer
+bootstrap decodes that JSON with `ConvertFrom-Json` and splats the resulting
+strings into `bin\install.ps1`.
 
 ## Manifest note
 
@@ -32,6 +34,7 @@ If this binary is replaced:
 1. Confirm the replacement is the intended 64-bit console ExeWrap launcher.
 2. Embed or preserve the `asInvoker` application manifest.
 3. Update `EXE_WRAP_CONSOLE_X64_SHA256` in `app_builder/exewrap.py`.
-4. Run the ExeWrap launcher tests, including the manifest check.
+4. Run the ExeWrap launcher tests, including the manifest and `args_as_json`
+   checks.
 5. Build and run a real `*-installer.exe` once on Windows to confirm it does
    not trigger an unexpected UAC prompt.
