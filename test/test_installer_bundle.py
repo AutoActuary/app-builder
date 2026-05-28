@@ -672,7 +672,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             self.assertFalse((install_dir / "hello.cmd").exists())
 
     @unittest.skipIf(os.name != "nt", "generated installer scripts target Windows")
-    def test_installer_adopts_legacy_directory_by_uninstall_contract(self) -> None:
+    def test_installer_adopts_legacy_directory_with_old_display_name(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
             payload = temp_dir / "demo.zip"
@@ -687,11 +687,11 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             extraction_dir.mkdir()
             (install_dir / "bin").mkdir(parents=True)
             (install_dir / "scripts").mkdir()
-            (install_dir / "bin" / "Uninstall Demo.bat").write_text(
+            (install_dir / "bin" / "Uninstall App Builder.bat").write_text(
                 "@echo off\nexit /b 0\n",
                 encoding="utf-8",
             )
-            (install_dir / "Uninstall Demo.lnk").write_text(
+            (install_dir / "Uninstall App Builder.lnk").write_text(
                 "legacy shortcut marker",
                 encoding="utf-8",
             )
@@ -705,7 +705,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             manifest.write_text(
                 json.dumps(
                     {
-                        "name": "Demo",
+                        "name": "app-builder",
                         "version": "1.0",
                         "install_directory": str(install_dir),
                         "payload_archive": payload.name,

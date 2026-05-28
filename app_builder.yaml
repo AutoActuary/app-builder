@@ -5,7 +5,7 @@ python_bundled:
 python_venv: null
 installer:
   name: app-builder
-  install_directory: "%localappdata%\\app-builder"
+  install_directory: "%localappdata%\\autoactuary\\app-builder"
   icon: app_builder/assets/app-builder.ico
   payload_format: 7z
   dist: dist
@@ -21,6 +21,8 @@ installer:
       - README.md
       - docs
       - app_builder.yaml
+      - scripts/post-install.ps1
+      - scripts/post-uninstall.ps1
     exclude:
       - "**/__pycache__"
       - dist
@@ -49,6 +51,11 @@ installer:
            AAAAAAA                   AAAAAAA                                    |___/
 
                       ========================================================
+  install_hooks:
+    post_install:
+      - [scripts/post-install.ps1]
+    post_uninstall:
+      - [scripts/post-uninstall.ps1]
 build_hooks:
   pre_dist:
     - [scripts/build_legacy_0x_bridge.py]

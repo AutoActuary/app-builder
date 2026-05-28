@@ -840,15 +840,69 @@ function Get-AppBuilderUninstallNames {
     return ,($Names | Select-Object -Unique)
 }
 
-function Get-AppBuilderLegacyUninstallEntrypoint {
-    param($Manifest, [string]$InstallDir)
-    foreach ($Name in (Get-AppBuilderUninstallNames $Manifest)) {
-        foreach ($Extension in @('.bat', '.cmd')) {
-            $Candidate = Join-Path $InstallDir (Join-Path 'bin' ('Uninstall ' + $Name + $Extension))
-            if (Test-Path -LiteralPath $Candidate -PathType Leaf) {
-                return [System.IO.Path]::GetFullPath($Candidate)
-            }
+function Get-AppBuilderLegacyNameKey {
+    param([string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        return ''
+    }
+    return ([regex]::Replace($Name.ToLowerInvariant(), '[^a-z0-9]', ''))
+}
+
+function Test-AppBuilderLegacyNameMatchesManifest {
+    param([string]$Name, $Manifest)
+    $NameKey = Get-AppBuilderLegacyNameKey $Name
+    if ([string]::IsNullOrWhiteSpace($NameKey)) {
+        return $false
+    }
+    foreach ($ManifestName in (Get-AppBuilderUninstallNames $Manifest)) {
+        if ($NameKey.Equals((Get-AppBuilderLegacyNameKey $ManifestName), [System.StringComparison]::Ordinal)) {
+            return $true
         }
+    }
+    return $false
+}
+
+function Get-AppBuilderLegacyUninstallDisplayName {
+    param([string]$FileName)
+    $BaseName = [System.IO.Path]::GetFileNameWithoutExtension($FileName)
+    $Prefix = 'Uninstall '
+    if ($BaseName.Length -le $Prefix.Length -or -not $BaseName.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $null
+    }
+    return $BaseName.Substring($Prefix.Length)
+}
+
+function Test-AppBuilderLegacyUninstallShortcut {
+    param([string]$Name, [string]$InstallDir, [string]$StartMenuDir)
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        return $false
+    }
+    $ShortcutName = 'Uninstall ' + $Name + '.lnk'
+    $InstallShortcut = Join-Path $InstallDir $ShortcutName
+    $StartMenuShortcut = Join-Path $StartMenuDir $ShortcutName
+    return (Test-Path -LiteralPath $InstallShortcut -PathType Leaf) -or (Test-Path -LiteralPath $StartMenuShortcut -PathType Leaf)
+}
+
+function Get-AppBuilderLegacyUninstallEntrypoint {
+    param($Manifest, [string]$InstallDir, [string]$StartMenuDir)
+    $BinDir = Join-Path $InstallDir 'bin'
+    if (-not (Test-Path -LiteralPath $BinDir -PathType Container)) {
+        return $null
+    }
+    $Candidates = @(Get-ChildItem -LiteralPath $BinDir -File -Filter 'Uninstall *' -ErrorAction SilentlyContinue)
+    foreach ($Candidate in $Candidates) {
+        $Extension = [System.IO.Path]::GetExtension($Candidate.Name).ToLowerInvariant()
+        if ($Extension -ne '.bat' -and $Extension -ne '.cmd') {
+            continue
+        }
+        $DisplayName = Get-AppBuilderLegacyUninstallDisplayName $Candidate.Name
+        if (-not (Test-AppBuilderLegacyNameMatchesManifest $DisplayName $Manifest)) {
+            continue
+        }
+        if (-not (Test-AppBuilderLegacyUninstallShortcut $DisplayName $InstallDir $StartMenuDir)) {
+            continue
+        }
+        return [System.IO.Path]::GetFullPath($Candidate.FullName)
     }
     return $null
 }
@@ -866,28 +920,15 @@ function Test-AppBuilderLegacyDirectoryShape {
     return $false
 }
 
-function Test-AppBuilderLegacyUninstallRegistration {
-    param($Manifest, [string]$InstallDir, [string]$StartMenuDir)
-    foreach ($Name in (Get-AppBuilderUninstallNames $Manifest)) {
-        $ShortcutName = 'Uninstall ' + $Name + '.lnk'
-        $InstallShortcut = Join-Path $InstallDir $ShortcutName
-        $StartMenuShortcut = Join-Path $StartMenuDir $ShortcutName
-        if ((Test-Path -LiteralPath $InstallShortcut -PathType Leaf) -or (Test-Path -LiteralPath $StartMenuShortcut -PathType Leaf)) {
-            return $true
-        }
-    }
-    return $false
-}
-
 function Test-AppBuilderLegacyInstall {
     param($Manifest, [string]$InstallDir, [string]$StartMenuDir)
     if (-not (Test-AppBuilderLegacyDirectoryShape $InstallDir)) {
         return $false
     }
-    if ([string]::IsNullOrWhiteSpace((Get-AppBuilderLegacyUninstallEntrypoint $Manifest $InstallDir))) {
+    if ([string]::IsNullOrWhiteSpace((Get-AppBuilderLegacyUninstallEntrypoint $Manifest $InstallDir $StartMenuDir))) {
         return $false
     }
-    return Test-AppBuilderLegacyUninstallRegistration $Manifest $InstallDir $StartMenuDir
+    return $true
 }
 
 function Get-AppBuilderExistingInstallKind {
