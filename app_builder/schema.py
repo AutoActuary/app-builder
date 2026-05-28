@@ -110,7 +110,7 @@ class InstallerOptions:
         example="MyApp",
     )
     install_directory: str = config_field(
-        description="Windows install directory. Percent-style environment variables are expanded at build time.",
+        description="Windows install directory. Use percent-style environment variables such as %localappdata% when the path must resolve on the user's machine; generated installer scripts expand them at install time.",
         example=r"%localappdata%\MyCompany\MyApp",
     )
     icon: str = config_field(

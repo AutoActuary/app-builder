@@ -102,12 +102,17 @@ def render_config_reference_markdown() -> str:
         "because backslashes stay literal. If you use double-quoted YAML strings "
         "for Windows paths, write backslashes as `\\\\`.",
         "",
+        "Use percent-style Windows variables such as `%localappdata%` for "
+        "install paths that must resolve on the user's machine. `${ENV.*}` is "
+        "resolved while building the release, so it bakes in the builder or CI "
+        "environment.",
+        "",
         "Example:",
         "",
         "```yaml",
         "installer:",
         '  name: "MyApp ${APP.VERSION}"',
-        "  install_directory: '${ENV.LOCALAPPDATA}\\Acme\\${CONFIG.installer.name}'",
+        "  install_directory: '%localappdata%\\Acme\\${CONFIG.installer.name}'",
         "  paths:",
         "    include:",
         '      - "build/${APP.VERSION}"',

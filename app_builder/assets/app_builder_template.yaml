@@ -42,8 +42,9 @@ installer:
   # Required string. Human-facing application name.
   name: MyApp
 
-  # Required string. Windows install directory. Percent-style environment variables are
-  # expanded at build time.
+  # Required string. Windows install directory. Use percent-style environment variables
+  # such as %localappdata% when the path must resolve on the user's machine; generated
+  # installer scripts expand them at install time.
   install_directory: '%localappdata%\MyCompany\MyApp'
 
   # Optional string. Project-relative .ico file embedded into generated ExeWrap

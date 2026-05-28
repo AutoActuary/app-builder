@@ -98,7 +98,7 @@ Interpolation is string-only. Missing values, circular `CONFIG.*` references, an
 app_builder_version: current
 installer:
   name: "MyApp ${APP.VERSION}"
-  install_directory: '${ENV.LOCALAPPDATA}\Acme\${CONFIG.installer.name}'
+  install_directory: '%localappdata%\Acme\${CONFIG.installer.name}'
   paths:
     include:
       - "build/${APP.VERSION}"
@@ -107,6 +107,8 @@ installer:
 ```
 
 Keep `app_builder_version` literal. The dispatcher reads it from plain YAML before the full interpolation layer is loaded.
+
+Use `%localappdata%`, `%appdata%`, and other percent-style Windows variables for install paths that must resolve on the end user's machine. `${ENV.*}` is build-time interpolation and should only be used when you intentionally want the builder's environment baked into the config.
 
 ## Python Runtime
 

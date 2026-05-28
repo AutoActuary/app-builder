@@ -26,12 +26,14 @@ Use `${...}` inside YAML string values when a config value should be derived fro
 
 For Windows paths, single-quoted YAML strings are usually easiest because backslashes stay literal. If you use double-quoted YAML strings for Windows paths, write backslashes as `\\`.
 
+Use percent-style Windows variables such as `%localappdata%` for install paths that must resolve on the user's machine. `${ENV.*}` is resolved while building the release, so it bakes in the builder or CI environment.
+
 Example:
 
 ```yaml
 installer:
   name: "MyApp ${APP.VERSION}"
-  install_directory: '${ENV.LOCALAPPDATA}\Acme\${CONFIG.installer.name}'
+  install_directory: '%localappdata%\Acme\${CONFIG.installer.name}'
   paths:
     include:
       - "build/${APP.VERSION}"
@@ -68,7 +70,7 @@ installer:
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `name` | `string` | yes | required | Human-facing application name. |
-| `install_directory` | `string` | yes | required | Windows install directory. Percent-style environment variables are expanded at build time. |
+| `install_directory` | `string` | yes | required | Windows install directory. Use percent-style environment variables such as %localappdata% when the path must resolve on the user's machine; generated installer scripts expand them at install time. |
 | `icon` | `string` | no | `application-templates/icon.ico` | Project-relative .ico file embedded into generated ExeWrap executables and used for Start Menu shortcuts when a shortcut does not specify its own icon. |
 | `payload_format` | `string` | no | `zip` | Inner payload archive format. Use zip for the Windows tar.exe path or 7z for stronger compression with bundled 7-Zip extraction. |
 | `pause_on_exit` | `boolean` | no | `true` | Whether generated installer scripts should wait briefly before exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait, while --no-wait skips only the wait. |
