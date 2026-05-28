@@ -72,6 +72,7 @@
       border-top: 0;
     }
     h3 { margin: 22px 0 8px; font-size: 17px; }
+    h4 { margin: 20px 0 8px; font-size: 15px; color: #2a3544; }
     p { margin: 10px 0; }
     ul, ol { margin: 10px 0 16px 24px; padding: 0; }
     li { margin: 5px 0; }
@@ -265,57 +266,695 @@
         </table>
       </section>
 
+      <!-- BEGIN GENERATED CONFIG REFERENCE -->
       <section id="config">
         <h2>Configuration</h2>
         <p>
-          <code>app_builder.yaml</code> is strict. Unknown keys are rejected, legacy <code>application.yaml</code>
-          shapes are rejected, and hook commands must be argv lists.
+          <code>app_builder.yaml</code> is the contract for a project. The loader is strict: unknown keys
+          are rejected, legacy <code>application.yaml</code> shapes are rejected, and hook commands must be
+          argv lists. The complete shape below is generated from the same schema metadata as
+          <code>app-builder init</code>.
         </p>
+        <div class="callout">
+          <p>
+            Start from the complete template when you are unsure. It shows every supported field, its
+            default when omitted, and the short help text attached to that config option.
+          </p>
+        </div>
+        <h3>Complete app_builder.yaml Template</h3>
+        <p>
+          This is the full generated template. Required fields contain example values that you must replace
+          for your app. Optional fields show their defaults or empty lists.
+        </p>
+        <pre><code># app_builder.yaml
+# Generated from app_builder.schema metadata.
+# Required and common optional fields contain examples; replace them for your app.
+# String values can reference ${ENV.NAME}, ${GIT.DESCRIBE}, ${GIT.COMMIT},
+# ${GIT.SHORT_COMMIT}, ${GIT.BRANCH}, ${GIT.TAG}, ${GIT.IS_DIRTY},
+# ${APP.VERSION}, and ${CONFIG.path.to.value}.
+# Interpolation is string-only and runs before schema validation.
+# Keep app_builder_version literal; the version dispatcher reads it before
+# the full 1.x config interpolation layer is loaded.
+# Optional, nullable string | null. Version selector read by the meta CLI before loading
+# the full config. Use current for the installed 1.x app-builder; explicit 1.x tags,
+# branches, or commits are resolved through the managed version cache. Use the command
+# line form app-builder 0.x for legacy 0.x projects. Default if omitted: current.
+app_builder_version: current
+
+# Optional, nullable mapping | null. Optional bundled Python runtime. Set to null to
+# disable. Default if omitted: PythonBundledOptions defaults.
+python_bundled:
+  # Optional string. Project-relative directory where the bundled Python runtime is
+  # materialized. Default if omitted: bin/python.
+  path: bin/python
+
+  # Optional string. NuGet Python package version or version prefix to materialize.
+  # Default if omitted: 3.11.1.
+  python_version: 3.12.10
+
+# Optional, nullable mapping | null. Optional Poetry dev virtual environment derived from
+# bundled Python when available. Set to null to disable. Default if omitted:
+# PythonVenvOptions defaults.
+python_venv:
+  # Optional string. Project-relative directory where the Poetry dev virtual environment
+  # is created. Default if omitted: venv.
+  path: venv
+
+  # Optional string. NuGet Python package version or version prefix used when the virtual
+  # environment is self-contained because python_bundled is disabled. Default if omitted:
+  # 3.11.1.
+  python_version: 3.12.10
+
+# Required mapping. Required installer metadata and release payload settings.
+installer:
+  # Required string. Human-facing application name.
+  name: MyApp
+
+  # Required string. Windows install directory. Use percent-style environment variables
+  # such as %localappdata% when the path must resolve on the user&#x27;s machine; generated
+  # installer scripts expand them at install time.
+  install_directory: &#x27;%localappdata%\MyCompany\MyApp&#x27;
+
+  # Optional string. Project-relative .ico file used for generated executables and Start
+  # Menu shortcuts when a shortcut does not specify its own icon. Default if omitted:
+  # application-templates/icon.ico.
+  icon: application-templates/icon.ico
+
+  # Optional string. Inner payload archive format. Use zip for the Windows tar.exe path or
+  # 7z for stronger compression with bundled 7-Zip extraction. Default if omitted: zip.
+  payload_format: zip
+
+  # Optional boolean. Whether generated installer scripts should wait briefly before
+  # exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait,
+  # while --no-wait skips only the wait. Default if omitted: true.
+  pause_on_exit: true
+
+  # Optional boolean. Whether the installer bundle should include an uninstall script.
+  # Default if omitted: true.
+  add_uninstaller: true
+
+  # Optional list[mapping]. Windows Start Menu shortcut declarations. Default if omitted:
+  # [].
+  start_menu:
+    - target: application-templates/program.cmd
+      display_name: MyApp
+      icon: application-templates/icon.ico
+
+  # Optional mapping. Early installer hook command declarations. Default if omitted:
+  # BootstrapHooks defaults.
+  bootstrap_hooks:
+    # Optional list[list[string]]. Argv commands run before the installer extracts its top
+    # layer. These commands cannot use payload files, installer scripts, or bundled top-
+    # layer tools because none have been extracted yet. Default if omitted: [].
+    pre_extract: []
+
+  # Optional mapping. Installer and uninstaller hook command declarations. Default if
+  # omitted: InstallHooks defaults.
+  install_hooks:
+    # Optional list[list[string]]. Argv commands written into installer metadata to run
+    # before installation. Default if omitted: [].
+    pre_install: []
+
+    # Optional list[list[string]]. Argv commands written into installer metadata to run
+    # after installation. Default if omitted: [].
+    post_install: []
+
+    # Optional list[list[string]]. Argv commands written into installer metadata to run
+    # before uninstall while the installed app directory is still present. Default if
+    # omitted: [].
+    pre_uninstall: []
+
+    # Optional list[list[string]]. Argv commands written into installer metadata to run
+    # after the install directory has been removed. Entrypoints inside the install
+    # directory must be self-contained .cmd, .ps1, or .exe files because app-builder
+    # stages only argv[0] to temp before removal. Default if omitted: [].
+    post_uninstall: []
+
+  # Optional string. Project-relative output directory for release artifacts. Default if
+  # omitted: dist.
+  dist: dist
+
+  # Optional mapping. Payload include, exclude, and remap rules. Default if omitted:
+  # PathsMapping defaults.
+  paths:
+    # Optional list[string]. Project-relative files or globs included in the release
+    # payload. Default if omitted: [].
+    include:
+      - src
+      - app_builder.yaml
+      - application-templates
+
+    # Optional list[string]. Project-relative files or globs excluded from the release
+    # payload. Default if omitted: [].
+    exclude:
+      - &#x27;**/__pycache__&#x27;
+      - dist
+      - venv
+
+    # Optional list[tuple[string, string]]. Two-item source and destination pairs for
+    # relocating payload files. Default if omitted: [].
+    remap:
+      - [README.md, docs/README.md]
+
+# Optional mapping. Build and release hook command declarations. Default if omitted:
+# BuildHooks defaults.
+build_hooks:
+  # Optional list[list[string]]. Argv commands run before dependency or release processing
+  # begins. Default if omitted: [].
+  pre_process: []
+
+  # Optional list[list[string]]. Argv commands run before bundled Python is materialized.
+  # Default if omitted: [].
+  pre_python_bundled: []
+
+  # Optional list[list[string]]. Argv commands run after bundled Python is materialized.
+  # Default if omitted: [].
+  post_python_bundled: []
+
+  # Optional list[list[string]]. Argv commands run before the virtual environment is
+  # materialized. Default if omitted: [].
+  pre_python_venv: []
+
+  # Optional list[list[string]]. Argv commands run after the virtual environment is
+  # materialized. Default if omitted: [].
+  post_python_venv: []
+
+  # Optional list[list[string]]. Argv commands run before the release payload is
+  # assembled. Default if omitted: [].
+  pre_dist: []
+
+  # Optional list[list[string]]. Argv commands run after the release payload is assembled.
+  # Default if omitted: [].
+  post_dist: []
+
+  # Optional list[list[string]]. Argv commands run before GitHub release upload. Default
+  # if omitted: [].
+  pre_github_release: []
+
+  # Optional list[list[string]]. Argv commands run after GitHub release upload. Default if
+  # omitted: [].
+  post_github_release: []
+
+  # Optional list[list[string]]. Argv commands run at the end of release processing.
+  # Default if omitted: [].
+  post_process: []
+</code></pre>
+        <h3>How To Read The Reference</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Column</th>
+              <th>Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Field</td><td>The YAML key at that level.</td></tr>
+            <tr><td>Type</td><td>The accepted YAML shape after interpolation has run.</td></tr>
+            <tr><td>Required</td><td><code>yes</code> means you must provide it. <code>no</code> means app-builder supplies a default.</td></tr>
+            <tr><td>Default</td><td>The value used when the key is omitted. Nested mappings say to see their child defaults.</td></tr>
+            <tr><td>Example</td><td>A realistic value from the generated template.</td></tr>
+            <tr><td>What it does</td><td>The behavior controlled by the option.</td></tr>
+          </tbody>
+        </table>
+        <h3>Field Reference</h3>
+        <h4 id="config-reference">Top-Level Config</h4>
         <table>
           <thead>
             <tr>
               <th>Field</th>
-              <th>Purpose</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Example</th>
+              <th>What it does</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td><code>app_builder_version</code></td>
-              <td><code>current</code>, blank, or omitted runs the installed 1.x app-builder. Explicit 1.x refs are resolved through the version cache. 0.x must be invoked from the command line. Keep this value literal; it is read from plain YAML before config interpolation runs.</td>
+              <td><code>string | null</code></td>
+              <td>no</td>
+              <td><code>current</code></td>
+              <td><code>current</code></td>
+              <td>Version selector read by the meta CLI before loading the full config. Use current for the installed 1.x app-builder; explicit 1.x tags, branches, or commits are resolved through the managed version cache. Use the command line form app-builder 0.x for legacy 0.x projects.</td>
             </tr>
             <tr>
               <td><code>python_bundled</code></td>
-              <td>Optional NuGet Python runtime copied into the project, usually <code>bin/python</code>. Set to <code>null</code> to disable.</td>
+              <td><code>mapping | null</code></td>
+              <td>no</td>
+              <td><code>see nested defaults</code></td>
+              <td></td>
+              <td>Optional bundled Python runtime. Set to null to disable.</td>
             </tr>
             <tr>
               <td><code>python_venv</code></td>
-              <td>Optional Poetry dev virtual environment. Can derive from bundled Python or become a self-contained NuGet-backed venv. Set to <code>null</code> to disable.</td>
+              <td><code>mapping | null</code></td>
+              <td>no</td>
+              <td><code>see nested defaults</code></td>
+              <td></td>
+              <td>Optional Poetry dev virtual environment derived from bundled Python when available. Set to null to disable.</td>
             </tr>
             <tr>
               <td><code>installer</code></td>
-              <td>Required app name, install directory, icon, payload format, shortcuts, install hooks, dist directory, and payload file rules.</td>
+              <td><code>mapping</code></td>
+              <td>yes</td>
+              <td></td>
+              <td></td>
+              <td>Required installer metadata and release payload settings.</td>
             </tr>
             <tr>
               <td><code>build_hooks</code></td>
-              <td>Commands that run around dependency preparation, payload assembly, GitHub publishing, and final cleanup.</td>
+              <td><code>mapping</code></td>
+              <td>no</td>
+              <td><code>see nested defaults</code></td>
+              <td></td>
+              <td>Build and release hook command declarations.</td>
             </tr>
           </tbody>
         </table>
-
-        <h3>Minimal Config</h3>
-        <pre><code>app_builder_version: current
-python_bundled: null
-python_venv: null
-installer:
-  name: MyApp
-  install_directory: "%localappdata%\\MyCompany\\MyApp"
-  dist: dist
-  paths:
-    include:
-      - src
-      - README.md
-build_hooks: {}</code></pre>
+        <h4 id="config-reference-python_bundled">config.python_bundled</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Example</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>path</code></td>
+              <td><code>string</code></td>
+              <td>no</td>
+              <td><code>bin/python</code></td>
+              <td><code>bin/python</code></td>
+              <td>Project-relative directory where the bundled Python runtime is materialized.</td>
+            </tr>
+            <tr>
+              <td><code>python_version</code></td>
+              <td><code>string</code></td>
+              <td>no</td>
+              <td><code>3.11.1</code></td>
+              <td><code>3.12.10</code></td>
+              <td>NuGet Python package version or version prefix to materialize.</td>
+            </tr>
+          </tbody>
+        </table>
+        <h4 id="config-reference-python_venv">config.python_venv</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Example</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>path</code></td>
+              <td><code>string</code></td>
+              <td>no</td>
+              <td><code>venv</code></td>
+              <td><code>venv</code></td>
+              <td>Project-relative directory where the Poetry dev virtual environment is created.</td>
+            </tr>
+            <tr>
+              <td><code>python_version</code></td>
+              <td><code>string</code></td>
+              <td>no</td>
+              <td><code>3.11.1</code></td>
+              <td><code>3.12.10</code></td>
+              <td>NuGet Python package version or version prefix used when the virtual environment is self-contained because python_bundled is disabled.</td>
+            </tr>
+          </tbody>
+        </table>
+        <h4 id="config-reference-installer">config.installer</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Example</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>name</code></td>
+              <td><code>string</code></td>
+              <td>yes</td>
+              <td></td>
+              <td><code>MyApp</code></td>
+              <td>Human-facing application name.</td>
+            </tr>
+            <tr>
+              <td><code>install_directory</code></td>
+              <td><code>string</code></td>
+              <td>yes</td>
+              <td></td>
+              <td><code>&#x27;%localappdata%\MyCompany\MyApp&#x27;</code></td>
+              <td>Windows install directory. Use percent-style environment variables such as %localappdata% when the path must resolve on the user&#x27;s machine; generated installer scripts expand them at install time.</td>
+            </tr>
+            <tr>
+              <td><code>icon</code></td>
+              <td><code>string</code></td>
+              <td>no</td>
+              <td><code>application-templates/icon.ico</code></td>
+              <td><code>application-templates/icon.ico</code></td>
+              <td>Project-relative .ico file used for generated executables and Start Menu shortcuts when a shortcut does not specify its own icon.</td>
+            </tr>
+            <tr>
+              <td><code>payload_format</code></td>
+              <td><code>string</code></td>
+              <td>no</td>
+              <td><code>zip</code></td>
+              <td><code>zip</code></td>
+              <td>Inner payload archive format. Use zip for the Windows tar.exe path or 7z for stronger compression with bundled 7-Zip extraction.</td>
+            </tr>
+            <tr>
+              <td><code>pause_on_exit</code></td>
+              <td><code>boolean</code></td>
+              <td>no</td>
+              <td><code>true</code></td>
+              <td><code>true</code></td>
+              <td>Whether generated installer scripts should wait briefly before exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait, while --no-wait skips only the wait.</td>
+            </tr>
+            <tr>
+              <td><code>add_uninstaller</code></td>
+              <td><code>boolean</code></td>
+              <td>no</td>
+              <td><code>true</code></td>
+              <td><code>true</code></td>
+              <td>Whether the installer bundle should include an uninstall script.</td>
+            </tr>
+            <tr>
+              <td><code>start_menu</code></td>
+              <td><code>list[mapping]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td><code>[{target: application-templates/program.cmd, display_name: MyApp, icon: application-templates/icon.ico}]</code></td>
+              <td>Windows Start Menu shortcut declarations.</td>
+            </tr>
+            <tr>
+              <td><code>bootstrap_hooks</code></td>
+              <td><code>mapping</code></td>
+              <td>no</td>
+              <td><code>see nested defaults</code></td>
+              <td></td>
+              <td>Early installer hook command declarations.</td>
+            </tr>
+            <tr>
+              <td><code>install_hooks</code></td>
+              <td><code>mapping</code></td>
+              <td>no</td>
+              <td><code>see nested defaults</code></td>
+              <td></td>
+              <td>Installer and uninstaller hook command declarations.</td>
+            </tr>
+            <tr>
+              <td><code>dist</code></td>
+              <td><code>string</code></td>
+              <td>no</td>
+              <td><code>dist</code></td>
+              <td><code>dist</code></td>
+              <td>Project-relative output directory for release artifacts.</td>
+            </tr>
+            <tr>
+              <td><code>paths</code></td>
+              <td><code>mapping</code></td>
+              <td>no</td>
+              <td><code>see nested defaults</code></td>
+              <td></td>
+              <td>Payload include, exclude, and remap rules.</td>
+            </tr>
+          </tbody>
+        </table>
+        <h4 id="config-reference-installer-start_menu">config.installer.start_menu[]</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Example</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>target</code></td>
+              <td><code>string</code></td>
+              <td>yes</td>
+              <td></td>
+              <td><code>application-templates/program.cmd</code></td>
+              <td>Project-relative command or file launched by the shortcut.</td>
+            </tr>
+            <tr>
+              <td><code>display_name</code></td>
+              <td><code>string | null</code></td>
+              <td>no</td>
+              <td><code>null</code></td>
+              <td><code>MyApp</code></td>
+              <td>Shortcut display name. Defaults to the installer name when omitted by downstream tooling.</td>
+            </tr>
+            <tr>
+              <td><code>icon</code></td>
+              <td><code>string | null</code></td>
+              <td>no</td>
+              <td><code>null</code></td>
+              <td><code>application-templates/icon.ico</code></td>
+              <td>Project-relative icon path for the shortcut.</td>
+            </tr>
+          </tbody>
+        </table>
+        <h4 id="config-reference-installer-bootstrap_hooks">config.installer.bootstrap_hooks</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Example</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>pre_extract</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run before the installer extracts its top layer. These commands cannot use payload files, installer scripts, or bundled top-layer tools because none have been extracted yet.</td>
+            </tr>
+          </tbody>
+        </table>
+        <h4 id="config-reference-installer-install_hooks">config.installer.install_hooks</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Example</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>pre_install</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands written into installer metadata to run before installation.</td>
+            </tr>
+            <tr>
+              <td><code>post_install</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands written into installer metadata to run after installation.</td>
+            </tr>
+            <tr>
+              <td><code>pre_uninstall</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands written into installer metadata to run before uninstall while the installed app directory is still present.</td>
+            </tr>
+            <tr>
+              <td><code>post_uninstall</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands written into installer metadata to run after the install directory has been removed. Entrypoints inside the install directory must be self-contained .cmd, .ps1, or .exe files because app-builder stages only argv[0] to temp before removal.</td>
+            </tr>
+          </tbody>
+        </table>
+        <h4 id="config-reference-installer-paths">config.installer.paths</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Example</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>include</code></td>
+              <td><code>list[string]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td><code>[src, app_builder.yaml, application-templates]</code></td>
+              <td>Project-relative files or globs included in the release payload.</td>
+            </tr>
+            <tr>
+              <td><code>exclude</code></td>
+              <td><code>list[string]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td><code>[&#x27;**/__pycache__&#x27;, dist, venv]</code></td>
+              <td>Project-relative files or globs excluded from the release payload.</td>
+            </tr>
+            <tr>
+              <td><code>remap</code></td>
+              <td><code>list[tuple[string, string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td><code>[[README.md, docs/README.md]]</code></td>
+              <td>Two-item source and destination pairs for relocating payload files.</td>
+            </tr>
+          </tbody>
+        </table>
+        <h4 id="config-reference-build_hooks">config.build_hooks</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Example</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>pre_process</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run before dependency or release processing begins.</td>
+            </tr>
+            <tr>
+              <td><code>pre_python_bundled</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run before bundled Python is materialized.</td>
+            </tr>
+            <tr>
+              <td><code>post_python_bundled</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run after bundled Python is materialized.</td>
+            </tr>
+            <tr>
+              <td><code>pre_python_venv</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run before the virtual environment is materialized.</td>
+            </tr>
+            <tr>
+              <td><code>post_python_venv</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run after the virtual environment is materialized.</td>
+            </tr>
+            <tr>
+              <td><code>pre_dist</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run before the release payload is assembled.</td>
+            </tr>
+            <tr>
+              <td><code>post_dist</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run after the release payload is assembled.</td>
+            </tr>
+            <tr>
+              <td><code>pre_github_release</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run before GitHub release upload.</td>
+            </tr>
+            <tr>
+              <td><code>post_github_release</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run after GitHub release upload.</td>
+            </tr>
+            <tr>
+              <td><code>post_process</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run at the end of release processing.</td>
+            </tr>
+          </tbody>
+        </table>
+        <h3>Command Values</h3>
+        <p>
+          Hook fields are <code>list[list[string]]</code>. Each command is an argv list. Use an
+          explicit shell argv, such as <code>[cmd.exe, /D, /C, ...]</code>, when shell behavior is
+          required.
+        </p>
+        <p>
+          When a hook command starts with an existing <code>.py</code> file, app-builder runs it with
+          the Python runtime configured for the project, preferring <code>python_venv</code> and then
+          <code>python_bundled</code>. A hook such as <code>[scripts/build.py]</code> does not need
+          <code>python.exe</code> on PATH. Use <code>[python, scripts/build.py]</code> only when
+          you deliberately want the machine's own <code>python</code>.
+        </p>
       </section>
+      <!-- END GENERATED CONFIG REFERENCE -->
 
       <section id="config-variables">
         <h2>Variables</h2>
