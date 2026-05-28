@@ -31,6 +31,7 @@ include = ["app_builder*"]
 app_builder = [
     "py.typed",
     "assets/app_builder_template.yaml",
+    "assets/*.html",
     "assets/*.ico",
     "assets/7zip/*",
     "assets/templates/*",

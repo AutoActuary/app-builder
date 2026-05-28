@@ -42,10 +42,10 @@ def _select_python(python_candidates: Sequence[Path]) -> str:
     detail = f" Checked: {candidates}." if candidates else ""
     raise RuntimeError(
         "Cannot run Python hook from a .py entrypoint because app-builder could "
-        "not find a project-owned Python interpreter. Enable or materialize "
-        "python_bundled/python_venv, or use an explicit command such as "
-        "['python', 'script.py'] if the target machine is expected to provide "
-        f"Python.{detail}"
+        "not find the Python runtime configured for this project. Enable or "
+        "materialize python_bundled/python_venv, or use an explicit command such "
+        "as ['python', 'script.py'] if the target machine is expected to provide "
+        f"Python on PATH.{detail}"
     )
 
 

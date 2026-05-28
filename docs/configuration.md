@@ -71,12 +71,12 @@ installer:
 | --- | --- | --- | --- | --- |
 | `name` | `string` | yes | required | Human-facing application name. |
 | `install_directory` | `string` | yes | required | Windows install directory. Use percent-style environment variables such as %localappdata% when the path must resolve on the user's machine; generated installer scripts expand them at install time. |
-| `icon` | `string` | no | `application-templates/icon.ico` | Project-relative .ico file embedded into generated ExeWrap executables and used for Start Menu shortcuts when a shortcut does not specify its own icon. |
+| `icon` | `string` | no | `application-templates/icon.ico` | Project-relative .ico file used for generated executables and Start Menu shortcuts when a shortcut does not specify its own icon. |
 | `payload_format` | `string` | no | `zip` | Inner payload archive format. Use zip for the Windows tar.exe path or 7z for stronger compression with bundled 7-Zip extraction. |
 | `pause_on_exit` | `boolean` | no | `true` | Whether generated installer scripts should wait briefly before exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait, while --no-wait skips only the wait. |
 | `add_uninstaller` | `boolean` | no | `true` | Whether the installer bundle should include an uninstall script. |
 | `start_menu` | `list[mapping]` | no | `[]` | Windows Start Menu shortcut declarations. |
-| `bootstrap_hooks` | `mapping` | no | `BootstrapHooks defaults` | Early ExeWrap bootstrap hook command declarations. |
+| `bootstrap_hooks` | `mapping` | no | `BootstrapHooks defaults` | Early installer hook command declarations. |
 | `install_hooks` | `mapping` | no | `InstallHooks defaults` | Installer and uninstaller hook command declarations. |
 | `dist` | `string` | no | `dist` | Project-relative output directory for release artifacts. |
 | `paths` | `mapping` | no | `PathsMapping defaults` | Payload include, exclude, and remap rules. |
@@ -93,7 +93,7 @@ installer:
 
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `pre_extract` | `list[list[string]]` | no | `[]` | Argv commands injected into the ExeWrap PowerShell bootstrap before the installer extracts its top layer. These commands cannot use payload files, installer scripts, or bundled top-layer tools because none have been extracted yet. |
+| `pre_extract` | `list[list[string]]` | no | `[]` | Argv commands run before the installer extracts its top layer. These commands cannot use payload files, installer scripts, or bundled top-layer tools because none have been extracted yet. |
 
 ## `config.installer.install_hooks`
 
@@ -131,4 +131,4 @@ installer:
 
 Hook fields are `list[list[string]]`. Each command is an argv list. Use an explicit shell argv, such as `[cmd, /c, ...]`, when shell behavior is required.
 
-When a hook command's `argv[0]` is a `.py` file, app-builder runs it with a project-owned Python from `python_bundled` or `python_venv`. It does not fall back to system Python. Use an explicit argv such as `[python, script.py]` only when the target machine is expected to provide Python.
+When a hook command's `argv[0]` is a `.py` file, app-builder runs it with the Python runtime configured for the project, preferring `python_venv` and then `python_bundled`. That means a hook such as `[scripts/build.py]` does not need `python.exe` on PATH. Use an explicit argv such as `[python, script.py]` only when the target machine is expected to provide Python.

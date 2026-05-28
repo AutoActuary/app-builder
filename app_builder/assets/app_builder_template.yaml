@@ -47,9 +47,9 @@ installer:
   # installer scripts expand them at install time.
   install_directory: '%localappdata%\MyCompany\MyApp'
 
-  # Optional string. Project-relative .ico file embedded into generated ExeWrap
-  # executables and used for Start Menu shortcuts when a shortcut does not specify its own
-  # icon. Default if omitted: application-templates/icon.ico.
+  # Optional string. Project-relative .ico file used for generated executables and Start
+  # Menu shortcuts when a shortcut does not specify its own icon. Default if omitted:
+  # application-templates/icon.ico.
   icon: application-templates/icon.ico
 
   # Optional string. Inner payload archive format. Use zip for the Windows tar.exe path or
@@ -72,13 +72,12 @@ installer:
       display_name: MyApp
       icon: application-templates/icon.ico
 
-  # Optional mapping. Early ExeWrap bootstrap hook command declarations. Default if
-  # omitted: BootstrapHooks defaults.
+  # Optional mapping. Early installer hook command declarations. Default if omitted:
+  # BootstrapHooks defaults.
   bootstrap_hooks:
-    # Optional list[list[string]]. Argv commands injected into the ExeWrap PowerShell
-    # bootstrap before the installer extracts its top layer. These commands cannot use
-    # payload files, installer scripts, or bundled top-layer tools because none have been
-    # extracted yet. Default if omitted: [].
+    # Optional list[list[string]]. Argv commands run before the installer extracts its top
+    # layer. These commands cannot use payload files, installer scripts, or bundled top-
+    # layer tools because none have been extracted yet. Default if omitted: [].
     pre_extract: []
 
   # Optional mapping. Installer and uninstaller hook command declarations. Default if

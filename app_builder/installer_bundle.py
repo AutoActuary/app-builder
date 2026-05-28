@@ -450,10 +450,10 @@ function Get-AppBuilderScriptOptions {
     $NoWait = $false
     foreach ($Arg in $Argv) {
         $Normalized = $Arg.ToLowerInvariant()
-        if (@('--yes', '-yes', '-y', '/y', '--non-interactive', '-noninteractive', '--no-prompt', '-noprompt').Contains($Normalized)) {
+        if ($Normalized -eq '--yes') {
             $BypassQuestions = $true
         }
-        if (@('--no-wait', '-no-wait', '-nowait').Contains($Normalized)) {
+        if ($Normalized -eq '--no-wait') {
             $NoWait = $true
         }
     }
@@ -609,7 +609,7 @@ function Select-HookPython {
             return $Candidate
         }
     }
-    throw "Cannot run Python hook from a .py entrypoint because app-builder could not find project-owned Python in venv\Scripts\python.exe or bin\python\python\python.exe. Use an explicit command such as ['python', 'script.py'] if the target machine is expected to provide Python."
+    throw "Cannot run Python hook from a .py entrypoint because app-builder could not find the Python runtime configured for this install in venv\Scripts\python.exe or bin\python\python\python.exe. Use an explicit command such as ['python', 'script.py'] if the target machine is expected to provide Python on PATH."
 }
 
 function Invoke-AppBuilderHook {

@@ -62,7 +62,7 @@ class InstallHooks:
 class BootstrapHooks:
     pre_extract: list[HookCommand] = config_field(
         default_factory=list,
-        description="Argv commands injected into the ExeWrap PowerShell bootstrap before the installer extracts its top layer. These commands cannot use payload files, installer scripts, or bundled top-layer tools because none have been extracted yet.",
+        description="Argv commands run before the installer extracts its top layer. These commands cannot use payload files, installer scripts, or bundled top-layer tools because none have been extracted yet.",
     )
 
 
@@ -115,7 +115,7 @@ class InstallerOptions:
     )
     icon: str = config_field(
         default="application-templates/icon.ico",
-        description="Project-relative .ico file embedded into generated ExeWrap executables and used for Start Menu shortcuts when a shortcut does not specify its own icon.",
+        description="Project-relative .ico file used for generated executables and Start Menu shortcuts when a shortcut does not specify its own icon.",
         example="application-templates/icon.ico",
     )
     payload_format: str = config_field(
@@ -146,7 +146,7 @@ class InstallerOptions:
     )
     bootstrap_hooks: BootstrapHooks = config_field(
         default_factory=BootstrapHooks,
-        description="Early ExeWrap bootstrap hook command declarations.",
+        description="Early installer hook command declarations.",
     )
     install_hooks: InstallHooks = config_field(
         default_factory=InstallHooks,

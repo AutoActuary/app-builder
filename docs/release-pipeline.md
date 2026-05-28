@@ -42,7 +42,7 @@ The release path runs dependency stages before file collection:
 - `post_python_venv`
 - `pre_dist`
 
-Python dependencies come from `pyproject.toml` and Poetry. Automatic `.py` hook dispatch uses project-owned Python from `python_bundled` or `python_venv`; app-builder does not assume system Python exists.
+Python dependencies come from `pyproject.toml` and Poetry. If a hook command starts with an existing `.py` file, app-builder runs it with the Python runtime configured for the project, preferring `python_venv` and then `python_bundled`. A hook such as `[scripts/build.py]` does not need `python.exe` on PATH. A hook such as `[python, scripts/build.py]` intentionally uses whatever `python` the machine provides.
 
 `pre_dist` is the last hook that can generate files for the payload through normal include/remap rules.
 
@@ -81,9 +81,7 @@ The installed uninstaller reads the manifest for metadata and hooks. It does not
 
 ## 6. Installer Build
 
-The installer is a vendored ExeWrap 2.1.0 console launcher with an appended stored ZIP. The outer ZIP is stored, not compressed, so Windows can still read it as a ZIP if a user renames the installer to `.zip`.
-
-The vendored ExeWrap launcher is patched with an `asInvoker` manifest to avoid Windows installer-elevation heuristics for names such as `*-installer.exe`.
+The installer is a self-extracting executable with an appended stored ZIP. The outer ZIP is stored, not compressed, so Windows can still read it as a ZIP if a user renames the installer to `.zip`.
 
 The outer layer layout is:
 
@@ -97,27 +95,23 @@ bin/7z.dll              # only when installer.payload_format: 7z
 <slug>-<version>.zip    # or .7z
 ```
 
-`install.cmd` is a manual helper for users who rename or extract the installer ZIP by hand. The normal ExeWrap path calls `bin\install.ps1` directly.
+`install.cmd` is a manual helper for users who rename or extract the installer ZIP by hand. The normal executable path runs the PowerShell installer directly and forwards all command-line arguments.
 
-## 7. ExeWrap Bootstrap
+## 7. Installer Bootstrap
 
-The generated ExeWrap command is PowerShell. It:
+The generated bootstrap:
 
 1. runs `installer.bootstrap_hooks.pre_extract`;
 2. creates a random temp extraction directory under `%TEMP%`;
 3. extracts the outer layer with `tar.exe -xf '<installer.exe>' -C <temp>`;
-4. reads installer arguments from ExeWrap `@{args_as_json}`;
-5. decodes that JSON with PowerShell `ConvertFrom-Json`;
-6. splats the decoded strings into `bin\install.ps1`;
-7. removes the temp extraction directory in `finally`.
-
-`@{args_as_json}` is the installer argument transport. Older raw `@{args}` forwarding is not used for the installer bootstrap.
+4. runs the PowerShell installer script and forwards all command-line arguments;
+5. removes the temp extraction directory.
 
 ## 8. Bootstrap Hooks
 
 `installer.bootstrap_hooks.pre_extract` commands run before the outer installer layer is extracted. They are useful for banners, early checks, or other machine-level work that does not need app files.
 
-These hooks are structured argv lists, not raw PowerShell strings. app-builder serializes each argv list as JSON, rewrites apostrophes as `\u0027`, parses it with PowerShell `ConvertFrom-Json`, and invokes the resulting argv array. If a project explicitly runs `cmd.exe /C`, then cmd's own parsing rules apply because the project asked for a shell.
+These hooks are structured argv lists, not raw PowerShell strings. app-builder runs the argv as given. If a project explicitly runs `cmd.exe /C`, then cmd's own parsing rules apply because the project asked for a shell.
 
 Because this hook runs before extraction, it cannot use the app payload, `install.cmd`, `bin/install.ps1`, bundled 7z tools, or staged app files.
 
@@ -140,9 +134,9 @@ Because this hook runs before extraction, it cannot use the app payload, `instal
 
 Installer runtime flags:
 
-- `--yes`, `-yes`, `-y`, `/y`, `--non-interactive`, `-noninteractive`, `--no-prompt`, `-noprompt`
+- `--yes`
   - bypass questions and the final close wait.
-- `--no-wait`, `-no-wait`, `-nowait`
+- `--no-wait`
   - skip only the final close wait.
 
 When `installer.pause_on_exit` is true and no bypass flag is supplied, the console closes after 30 seconds or when the user presses Enter. Other keys are ignored.
@@ -183,7 +177,7 @@ If a `post_uninstall` entrypoint points inside the install directory, it must be
 
 ## 11. Icons
 
-`installer.icon` is the single icon setting. app-builder embeds it into generated ExeWrap `.exe` files and uses it as the default Start Menu shortcut icon when a shortcut does not specify its own icon.
+`installer.icon` is the single icon setting. app-builder uses it for generated executables and as the default Start Menu shortcut icon when a shortcut does not specify its own icon.
 
 For app-builder's dogfood build, the same icon is embedded into the generated payload `app-builder.exe`.
 
