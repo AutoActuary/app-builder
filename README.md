@@ -2,7 +2,7 @@
 
 `app-builder` packages Windows-first applications from `app_builder.yaml`. It prepares configured Python runtimes, runs explicit hooks, builds a payload archive, creates an installer, writes an uninstaller, and can publish the resulting artifacts with GitHub CLI.
 
-Full user help is available in [docs/app-builder-help.html](docs/app-builder-help.html). The installed `app-builder --help` command prints a link to its packaged copy of the same file.
+Full user help is available in [docs/app-builder-help.html](docs/app-builder-help.html). `app-builder --help` prints a link to that same file.
 
 ## Quick Start
 

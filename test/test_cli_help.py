@@ -18,18 +18,17 @@ class TestCliHelp(unittest.TestCase):
         self.assertTrue(first_line.startswith("Full help: file:///"), first_line)
         self.assertIn("app-builder-help.html", first_line)
 
-    def test_packaged_help_html_exists(self) -> None:
+    def test_docs_help_html_exists(self) -> None:
         help_path = (
             Path(__file__).resolve().parents[1]
-            / "app_builder"
-            / "assets"
+            / "docs"
             / "app-builder-help.html"
         )
 
         self.assertTrue(help_path.is_file())
         self.assertIn("app-builder Help", help_path.read_text(encoding="utf-8"))
 
-    def test_help_link_points_to_packaged_copy(self) -> None:
+    def test_help_link_points_to_docs_copy(self) -> None:
         result = CliRunner().invoke(main, ["--help"])
 
         self.assertEqual(0, result.exit_code)
@@ -43,18 +42,15 @@ class TestCliHelp(unittest.TestCase):
 
         self.assertEqual("file", parsed.scheme)
         self.assertTrue(help_path.is_file())
-        self.assertIn("app_builder", help_path.parts)
+        self.assertIn("docs", help_path.parts)
 
-    def test_docs_and_packaged_help_html_match(self) -> None:
+    def test_help_html_has_single_source_in_docs(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        packaged_help = repo_root / "app_builder" / "assets" / "app-builder-help.html"
         docs_help = repo_root / "docs" / "app-builder-help.html"
+        old_assets_help = repo_root / "app_builder" / "assets" / "app-builder-help.html"
 
         self.assertTrue(docs_help.is_file())
-        self.assertEqual(
-            packaged_help.read_text(encoding="utf-8"),
-            docs_help.read_text(encoding="utf-8"),
-        )
+        self.assertFalse(old_assets_help.exists())
 
 
 if __name__ == "__main__":

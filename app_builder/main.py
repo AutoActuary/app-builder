@@ -12,7 +12,7 @@ from .template import initialize_project
 
 
 def _help_html_url() -> str:
-    help_path = Path(__file__).resolve().parent / "assets" / "app-builder-help.html"
+    help_path = Path(__file__).resolve().parents[1] / "docs" / "app-builder-help.html"
     return help_path.as_uri()
 
 

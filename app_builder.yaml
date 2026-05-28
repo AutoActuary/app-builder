@@ -19,6 +19,7 @@ installer:
       - requirements.txt
       - mypy.ini
       - README.md
+      - docs
       - app_builder.yaml
     exclude:
       - "**/__pycache__"

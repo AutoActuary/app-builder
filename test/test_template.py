@@ -16,7 +16,7 @@ from app_builder.template import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_REFERENCE_PATH = REPO_ROOT / "docs" / "configuration.md"
-HELP_HTML_PATH = REPO_ROOT / "app_builder" / "assets" / "app-builder-help.html"
+HELP_HTML_PATH = REPO_ROOT / "docs" / "app-builder-help.html"
 
 
 class TestTemplateInitialization(unittest.TestCase):
