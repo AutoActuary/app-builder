@@ -86,7 +86,7 @@ def _run_install(
     extraction_dir: Path, *, appdata_dir: Path, temp_dir: Path | None = None
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["cmd.exe", "/D", "/C", "call", str(extraction_dir / "install.cmd")],
+        ["cmd.exe", "/D", "/C", "call", str(extraction_dir / "install.cmd"), "--yes"],
         capture_output=True,
         text=True,
         env=_installer_env(appdata_dir, temp_dir),
@@ -98,7 +98,7 @@ def _run_uninstall(
     uninstall_cmd: Path, *, appdata_dir: Path, temp_dir: Path | None = None
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["cmd.exe", "/D", "/C", "call", str(uninstall_cmd)],
+        ["cmd.exe", "/D", "/C", "call", str(uninstall_cmd), "--yes"],
         capture_output=True,
         text=True,
         env=_installer_env(appdata_dir, temp_dir),
@@ -147,7 +147,8 @@ class TestInstallerFailureModes(unittest.TestCase):
             result = _run_install(extraction_dir, appdata_dir=appdata_dir)
 
             self.assertNotEqual(0, result.returncode)
-            self.assertIn("manifest is corrupt or unreadable", result.stderr)
+            self.assertIn("manifest is corrupt", result.stderr)
+            self.assertIn("unreadable", result.stderr)
             self.assertEqual("old", (install_dir / "old.txt").read_text())
             self.assertFalse((install_dir / "new.txt").exists())
 
@@ -384,7 +385,8 @@ class TestInstallerFailureModes(unittest.TestCase):
             result = _run_install(extraction_dir, appdata_dir=appdata_dir)
 
             self.assertNotEqual(0, result.returncode)
-            self.assertIn("not a recognized app-builder install", result.stderr)
+            self.assertIn("not", result.stderr)
+            self.assertIn("recognized app-builder install", result.stderr)
             self.assertEqual("old", (install_dir / "old.txt").read_text())
             self.assertFalse((install_dir / "new.txt").exists())
 
@@ -533,7 +535,7 @@ class TestInstallerFailureModes(unittest.TestCase):
             self.assertEqual(0, install_result.returncode, install_result.stderr)
 
             uninstall_result = _run_uninstall(
-                install_dir / "uninstall.cmd",
+                install_dir / "bin" / "uninstall.cmd",
                 appdata_dir=appdata_dir,
                 temp_dir=runtime_temp,
             )

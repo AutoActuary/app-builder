@@ -62,7 +62,7 @@ class InstallHooks:
 class BootstrapHooks:
     pre_extract: list[HookCommand] = config_field(
         default_factory=list,
-        description="Argv commands injected into the ExeWrap PowerShell bootstrap before the installer extracts its top layer. These commands cannot use payload files, install.cmd, uninstall.cmd, or bundled top-layer tools because none have been extracted yet.",
+        description="Argv commands injected into the ExeWrap PowerShell bootstrap before the installer extracts its top layer. These commands cannot use payload files, installer scripts, or bundled top-layer tools because none have been extracted yet.",
     )
 
 
@@ -125,7 +125,7 @@ class InstallerOptions:
     )
     pause_on_exit: bool = config_field(
         default=True,
-        description="Whether generated installer scripts should pause before exiting.",
+        description="Whether generated installer scripts should wait briefly before exiting. Runtime flags such as --yes, --cli, and --no-wait skip the wait.",
         example=True,
     )
     add_uninstaller: bool = config_field(

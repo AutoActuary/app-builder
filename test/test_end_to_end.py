@@ -85,12 +85,15 @@ build_hooks: {}
 
             with ZipFile(release.installer_archive) as installer_zip:
                 self.assertIn("install.cmd", installer_zip.namelist())
-                self.assertIn("uninstall.cmd", installer_zip.namelist())
+                self.assertIn("bin/install.ps1", installer_zip.namelist())
+                self.assertIn("bin/uninstall.cmd", installer_zip.namelist())
+                self.assertIn("bin/uninstall.ps1", installer_zip.namelist())
                 self.assertIn(release.payload_archive.name, installer_zip.namelist())
                 self.assertNotIn("bin/7z.exe", installer_zip.namelist())
                 self.assertNotIn("bin/7z.dll", installer_zip.namelist())
                 self.assertNotIn("install.ps1", installer_zip.namelist())
                 self.assertNotIn("uninstall.ps1", installer_zip.namelist())
+                self.assertNotIn("uninstall.cmd", installer_zip.namelist())
                 self.assertNotIn(release.manifest_path.name, installer_zip.namelist())
 
     def test_build_release_reports_missing_custom_installer_icon(self) -> None:
@@ -238,7 +241,14 @@ build_hooks: {{}}
             env = os.environ.copy()
             env["APPDATA"] = str(appdata_dir)
             subprocess.run(
-                ["cmd.exe", "/D", "/C", "call", str(extraction_dir / "install.cmd")],
+                [
+                    "cmd.exe",
+                    "/D",
+                    "/C",
+                    "call",
+                    str(extraction_dir / "install.cmd"),
+                    "--yes",
+                ],
                 check=True,
                 env=env,
             )
@@ -249,7 +259,14 @@ build_hooks: {{}}
             )
 
             subprocess.run(
-                ["cmd.exe", "/D", "/C", "call", str(install_dir / "uninstall.cmd")],
+                [
+                    "cmd.exe",
+                    "/D",
+                    "/C",
+                    "call",
+                    str(install_dir / "bin" / "uninstall.cmd"),
+                    "--yes",
+                ],
                 check=True,
                 env=env,
             )
@@ -496,7 +513,14 @@ build_hooks:
             env = os.environ.copy()
             env["APPDATA"] = str(appdata_dir)
             subprocess.run(
-                ["cmd.exe", "/D", "/C", "call", str(extraction_dir / "install.cmd")],
+                [
+                    "cmd.exe",
+                    "/D",
+                    "/C",
+                    "call",
+                    str(extraction_dir / "install.cmd"),
+                    "--yes",
+                ],
                 check=True,
                 env=env,
             )
@@ -519,7 +543,14 @@ build_hooks:
             )
 
             subprocess.run(
-                ["cmd.exe", "/D", "/C", "call", str(install_dir / "uninstall.cmd")],
+                [
+                    "cmd.exe",
+                    "/D",
+                    "/C",
+                    "call",
+                    str(install_dir / "bin" / "uninstall.cmd"),
+                    "--yes",
+                ],
                 check=True,
                 env=env,
             )

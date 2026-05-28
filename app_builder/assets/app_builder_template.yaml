@@ -54,8 +54,9 @@ installer:
   # 7z for stronger compression with bundled 7-Zip extraction. Default if omitted: zip.
   payload_format: zip
 
-  # Optional boolean. Whether generated installer scripts should pause before exiting.
-  # Default if omitted: true.
+  # Optional boolean. Whether generated installer scripts should wait briefly before
+  # exiting. Runtime flags such as --yes, --cli, and --no-wait skip the wait. Default if
+  # omitted: true.
   pause_on_exit: true
 
   # Optional boolean. Whether the installer bundle should include an uninstall script.
@@ -74,8 +75,8 @@ installer:
   bootstrap_hooks:
     # Optional list[list[string]]. Argv commands injected into the ExeWrap PowerShell
     # bootstrap before the installer extracts its top layer. These commands cannot use
-    # payload files, install.cmd, uninstall.cmd, or bundled top-layer tools because none
-    # have been extracted yet. Default if omitted: [].
+    # payload files, installer scripts, or bundled top-layer tools because none have been
+    # extracted yet. Default if omitted: [].
     pre_extract: []
 
   # Optional mapping. Installer and uninstaller hook command declarations. Default if

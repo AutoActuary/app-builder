@@ -14,6 +14,10 @@ from .exewrap import (
 
 _INSTALLED_MANIFEST_NAME = "app-builder-manifest.json"
 _POWERSHELL_HERE_STRING_END = "'@"
+_INSTALL_CMD_NAME = "install.cmd"
+_INSTALL_PS1_NAME = "bin/install.ps1"
+_UNINSTALL_CMD_NAME = "bin/uninstall.cmd"
+_UNINSTALL_PS1_NAME = "bin/uninstall.ps1"
 
 
 def _json_for_embedded_powershell(
@@ -60,11 +64,18 @@ def create_exewrap_zip_installer(
 
     with TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
-        install_cmd = temp_dir / "install.cmd"
-        uninstall_cmd = temp_dir / "uninstall.cmd"
+        install_cmd = temp_dir / _INSTALL_CMD_NAME
+        install_ps1 = temp_dir / _INSTALL_PS1_NAME
+        uninstall_cmd = temp_dir / _UNINSTALL_CMD_NAME
+        uninstall_ps1 = temp_dir / _UNINSTALL_PS1_NAME
+        install_ps1.parent.mkdir(parents=True, exist_ok=True)
         manifest_json = _read_manifest_json_for_embedding(manifest_path)
         install_cmd.write_text(
-            _render_install_command(
+            _render_install_cmd_wrapper(),
+            encoding="utf-8",
+        )
+        install_ps1.write_text(
+            _render_install_powershell_script(
                 manifest_json=manifest_json,
                 uninstall_enabled=add_uninstaller,
                 pause_on_exit=pause_on_exit,
@@ -73,17 +84,20 @@ def create_exewrap_zip_installer(
         )
         if add_uninstaller:
             uninstall_cmd.write_text(
-                _render_uninstall_command(
-                    manifest_json=manifest_json,
-                    pause_on_exit=pause_on_exit,
-                ),
+                _render_uninstall_cmd_wrapper(),
+                encoding="utf-8",
+            )
+            uninstall_ps1.write_text(
+                _render_uninstall_powershell_script(pause_on_exit=pause_on_exit),
                 encoding="utf-8",
             )
 
         with ZipFile(output_path, "a", compression=ZIP_STORED) as zip_file:
             zip_file.write(install_cmd, install_cmd.name)
+            zip_file.write(install_ps1, _INSTALL_PS1_NAME)
             if add_uninstaller:
-                zip_file.write(uninstall_cmd, uninstall_cmd.name)
+                zip_file.write(uninstall_cmd, _UNINSTALL_CMD_NAME)
+                zip_file.write(uninstall_ps1, _UNINSTALL_PS1_NAME)
             for source, archive_name in sorted(
                 (top_layer_files or {}).items(), key=lambda item: item[1]
             ):
@@ -94,7 +108,7 @@ def create_exewrap_zip_installer(
 def _render_bootstrap_config(
     bootstrap_pre_extract_commands: list[list[str]] | None = None,
 ) -> bytes:
-    return json.dumps(
+    config = json.dumps(
         {
             "command": [
                 "powershell.exe",
@@ -102,11 +116,16 @@ def _render_bootstrap_config(
                 "-ExecutionPolicy",
                 "Bypass",
                 "-Command",
-                _render_powershell_bootstrap(bootstrap_pre_extract_commands),
+                "& { "
+                + _render_powershell_bootstrap(bootstrap_pre_extract_commands)
+                + " }",
             ]
         },
         separators=(",", ":"),
-    ).encode("utf-8")
+    )
+    if not config.endswith("]}"):
+        raise RuntimeError("Unexpected ExeWrap bootstrap config shape.")
+    return (config[:-2] + ",@{args}]}").encode("utf-8")
 
 
 def _render_powershell_bootstrap(
@@ -128,7 +147,7 @@ def _render_powershell_bootstrap(
         "$exitCode = $LASTEXITCODE; "
         'throw "tar.exe failed with exit code $exitCode" '
         "}; "
-        "& (Join-Path $extractDir 'install.cmd'); "
+        "& (Join-Path $extractDir 'bin\\install.ps1') @args; "
         "$exitCode = $LASTEXITCODE "
         "} catch { "
         "if ($exitCode -eq 0) { $exitCode = 1 }; "
@@ -190,16 +209,21 @@ def _contains_powershell_here_string_terminator(value: str) -> bool:
     return any(line == _POWERSHELL_HERE_STRING_END for line in normalized.split("\n"))
 
 
-def _render_cmd_powershell_header(pause_on_exit: bool) -> str:
-    pause_block = 'if not "%ERRORLEVEL%"=="0" pause\n' if pause_on_exit else ""
+def _render_install_cmd_wrapper() -> str:
     return (
-        "<# :\n"
         "@echo off\n"
-        'set "_cmd=%~f0"\n'
-        'powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "iex (Get-Content -LiteralPath $env:_cmd -Raw)"\n'
-        f"{pause_block}"
+        'powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass '
+        '-File "%~dp0bin\\install.ps1" %*\n'
         "exit /b %ERRORLEVEL%\n"
-        "#>\n"
+    )
+
+
+def _render_uninstall_cmd_wrapper() -> str:
+    return (
+        "@echo off\n"
+        'powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass '
+        '-File "%~dp0uninstall.ps1" %*\n'
+        "exit /b %ERRORLEVEL%\n"
     )
 
 
@@ -212,38 +236,47 @@ def _embedded_manifest_assignment(manifest_json: str) -> str:
     return f"\n$EmbeddedManifestJson = @'\n{manifest_json}\n'@\n"
 
 
-def _render_install_command(
+def _default_wait_assignment(pause_on_exit: bool) -> str:
+    value = "$true" if pause_on_exit else "$false"
+    return f"$AppBuilderDefaultWaitOnExit = {value}\n"
+
+
+def _render_install_powershell_script(
     *,
     manifest_json: str,
     uninstall_enabled: bool,
     pause_on_exit: bool,
 ) -> str:
-    return _render_cmd_powershell_header(pause_on_exit) + _render_install_powershell(
+    return _render_install_powershell(
         manifest_json=manifest_json,
         uninstall_enabled=uninstall_enabled,
+        pause_on_exit=pause_on_exit,
     )
 
 
-def _render_uninstall_command(*, manifest_json: str, pause_on_exit: bool) -> str:
-    return _render_cmd_powershell_header(pause_on_exit) + _render_uninstall_powershell(
-        manifest_json=manifest_json
-    )
+def _render_uninstall_powershell_script(*, pause_on_exit: bool) -> str:
+    return _render_uninstall_powershell(pause_on_exit=pause_on_exit)
 
 
 def _render_install_powershell(
     *,
     manifest_json: str,
     uninstall_enabled: bool,
+    pause_on_exit: bool,
 ) -> str:
     uninstall_copy_block = ""
     uninstall_shortcut_block = ""
     if uninstall_enabled:
         uninstall_copy_block = (
+            "$InstalledBinDir = Join-Path $InstallDir 'bin'\n"
+            "New-Item -ItemType Directory -Path $InstalledBinDir -Force | Out-Null\n"
             "Copy-Item -LiteralPath (Join-Path $ScriptRoot 'uninstall.cmd') "
-            "-Destination (Join-Path $InstallDir 'uninstall.cmd') -Force\n"
+            "-Destination (Join-Path $InstalledBinDir 'uninstall.cmd') -Force\n"
+            "Copy-Item -LiteralPath (Join-Path $ScriptRoot 'uninstall.ps1') "
+            "-Destination (Join-Path $InstalledBinDir 'uninstall.ps1') -Force\n"
         )
         uninstall_shortcut_block = (
-            "$UninstallCommand = Join-Path $InstallDir 'uninstall.cmd'\n"
+            "$UninstallCommand = Join-Path $InstallDir 'bin\\uninstall.cmd'\n"
             "if (Test-Path -LiteralPath $UninstallCommand) {\n"
             "    $UninstallShortcutName = "
             "(Get-SafeShortcutName ('Uninstall ' + [string]$Manifest.name)) + '.lnk'\n"
@@ -256,11 +289,16 @@ def _render_install_powershell(
         _powershell_common_functions()
         + _embedded_manifest_assignment(manifest_json)
         + f"$InstalledManifestName = '{_INSTALLED_MANIFEST_NAME}'\n"
+        + _default_wait_assignment(pause_on_exit)
         + """
-$ScriptRoot = Split-Path -Parent $env:_cmd
+$AppBuilderScriptOptions = Get-AppBuilderScriptOptions -Arguments @($args) -DefaultWaitOnExit $AppBuilderDefaultWaitOnExit
+$AppBuilderExitCode = 0
+try {
+$ScriptRoot = $PSScriptRoot
+$InstallerRoot = Split-Path -Parent $ScriptRoot
 $Manifest = Read-AppBuilderManifestJson $EmbeddedManifestJson
 $InstallDir = Resolve-AppBuilderPath ([string]$Manifest.install_directory) $null
-$PayloadPath = Join-Path $ScriptRoot ([string]$Manifest.payload_archive)
+$PayloadPath = Join-Path $InstallerRoot ([string]$Manifest.payload_archive)
 $StagingDir = Join-Path $env:TEMP ('app-builder-install-' + [guid]::NewGuid().ToString('N'))
 $BackupDir = $null
 $StartMenuBackupDir = $null
@@ -269,6 +307,8 @@ $MovedStaging = $false
 $ExistingInstallKind = $null
 $StartMenuDir = Get-AppBuilderStartMenuDirectory $Manifest
 
+Write-Host ('Ready to install {0} {1} to {2}' -f $Manifest.name, $Manifest.version, $InstallDir)
+Confirm-AppBuilderAction ('Continue installing {0}?' -f $Manifest.name) $AppBuilderScriptOptions.BypassQuestions
 Write-Host ('Installing {0} {1}' -f $Manifest.name, $Manifest.version)
 Set-AppBuilderEnvironment $Manifest $InstallDir $StartMenuDir
 
@@ -277,7 +317,7 @@ try {
         throw "Payload archive not found: $PayloadPath"
     }
     New-Item -ItemType Directory -Path $StagingDir | Out-Null
-    Expand-AppBuilderPayloadArchive $PayloadPath $StagingDir $ScriptRoot
+    Expand-AppBuilderPayloadArchive $PayloadPath $StagingDir $InstallerRoot
 
     Invoke-AppBuilderHookList $Manifest.install_hooks.pre_install $StagingDir
 
@@ -337,23 +377,36 @@ try {
         Remove-Item -LiteralPath $StagingDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
+} catch {
+    $AppBuilderExitCode = 1
+    Write-Error $_ -ErrorAction Continue
+} finally {
+    Wait-AppBuilderBeforeExit $AppBuilderScriptOptions
+}
+exit $AppBuilderExitCode
 """
     )
 
 
-def _render_uninstall_powershell(*, manifest_json: str) -> str:
+def _render_uninstall_powershell(*, pause_on_exit: bool) -> str:
     return (
         _powershell_common_functions()
-        + _embedded_manifest_assignment(manifest_json)
         + f"$InstalledManifestName = '{_INSTALLED_MANIFEST_NAME}'\n"
+        + _default_wait_assignment(pause_on_exit)
         + """
-$ScriptRoot = Split-Path -Parent $env:_cmd
-$Manifest = Read-AppBuilderManifestJson $EmbeddedManifestJson
-$InstallDir = Resolve-AppBuilderPath ([string]$Manifest.install_directory) $null
+$AppBuilderScriptOptions = Get-AppBuilderScriptOptions -Arguments @($args) -DefaultWaitOnExit $AppBuilderDefaultWaitOnExit
+$AppBuilderExitCode = 0
+try {
+$ScriptRoot = $PSScriptRoot
+$InstallDir = Split-Path -Parent $ScriptRoot
+$ManifestPath = Join-Path $InstallDir $InstalledManifestName
+$Manifest = Read-AppBuilderManifestFile $ManifestPath
 $StartMenuDir = Get-AppBuilderStartMenuDirectory $Manifest
 $PostUninstallDir = Join-Path $env:TEMP ('app-builder-post-uninstall-' + [guid]::NewGuid().ToString('N'))
 $StartedCleanup = $false
 
+Write-Host ('Ready to uninstall {0} from {1}' -f $Manifest.name, $InstallDir)
+Confirm-AppBuilderAction ('Continue uninstalling {0}?' -f $Manifest.name) $AppBuilderScriptOptions.BypassQuestions
 Write-Host ('Uninstalling {0} from {1}' -f $Manifest.name, $InstallDir)
 Set-AppBuilderEnvironment $Manifest $InstallDir $StartMenuDir
 
@@ -373,6 +426,13 @@ try {
     }
 }
 Write-Host 'Uninstall cleanup started.'
+} catch {
+    $AppBuilderExitCode = 1
+    Write-Error $_ -ErrorAction Continue
+} finally {
+    Wait-AppBuilderBeforeExit $AppBuilderScriptOptions
+}
+exit $AppBuilderExitCode
 """
     )
 
@@ -380,6 +440,60 @@ Write-Host 'Uninstall cleanup started.'
 def _powershell_common_functions() -> str:
     return r"""Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
+
+function Get-AppBuilderScriptOptions {
+    param($Arguments, [bool]$DefaultWaitOnExit)
+    $Argv = @()
+    foreach ($Item in @($Arguments)) {
+        $Argv += [string]$Item
+    }
+    $BypassQuestions = $false
+    $NoWait = $false
+    foreach ($Arg in $Argv) {
+        $Normalized = $Arg.ToLowerInvariant()
+        if (@('--yes', '-yes', '-y', '/y', '--cli', '-cli', '--non-interactive', '-noninteractive', '--no-prompt', '-noprompt').Contains($Normalized)) {
+            $BypassQuestions = $true
+        }
+        if (@('--no-wait', '-no-wait', '-nowait').Contains($Normalized)) {
+            $NoWait = $true
+        }
+    }
+    if ($BypassQuestions) {
+        $NoWait = $true
+    }
+    return [pscustomobject]@{
+        BypassQuestions = $BypassQuestions
+        WaitOnExit = $DefaultWaitOnExit
+        NoWait = $NoWait
+        Arguments = $Argv
+    }
+}
+
+function Confirm-AppBuilderAction {
+    param([string]$Prompt, [bool]$BypassQuestions)
+    if ($BypassQuestions) {
+        return
+    }
+    $Answer = Read-Host ($Prompt + ' [y/N]')
+    if ($null -eq $Answer) {
+        $Answer = ''
+    }
+    if (-not @('y', 'yes').Contains(([string]$Answer).ToLowerInvariant())) {
+        throw 'Cancelled by user.'
+    }
+}
+
+function Wait-AppBuilderBeforeExit {
+    param($Options)
+    if ($null -eq $Options) {
+        return
+    }
+    if ((-not [bool]$Options.WaitOnExit) -or [bool]$Options.NoWait) {
+        return
+    }
+    Write-Host 'Closing in 30 seconds. Use --yes, --cli, or --no-wait to skip this wait.'
+    Start-Sleep -Seconds 30
+}
 
 function Read-AppBuilderManifestJson {
     param([string]$Json)

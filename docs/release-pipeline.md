@@ -48,7 +48,9 @@ the installer as a ZIP if a user manually renames it to `.zip`.
 The outer layer always contains:
 
 - `install.cmd`
-- `uninstall.cmd` when `installer.add_uninstaller` is true
+- `bin/install.ps1`
+- `bin/uninstall.cmd` and `bin/uninstall.ps1` when `installer.add_uninstaller`
+  is true
 - the inner payload archive
 
 When `installer.payload_format: 7z` is selected, the outer layer also contains:
@@ -57,9 +59,21 @@ When `installer.payload_format: 7z` is selected, the outer layer also contains:
 - `bin/7z.dll`
 
 The generated installer extracts the outer layer to a random temp directory via
-ExeWrap and PowerShell. It extracts ZIP payloads with Windows `tar.exe` and 7z
+ExeWrap and PowerShell, then runs `bin\install.ps1` directly. The top-level
+`install.cmd` is kept as a manual helper for users who rename/extract the
+installer ZIP by hand. Both paths accept normal runtime flags such as `--yes`,
+`--cli`, and `--no-wait`: `--yes`/`--cli` answer installer questions and skip
+the close wait, while `--no-wait` only skips the final wait.
+
+The generated scripts extract ZIP payloads with Windows `tar.exe` and 7z
 payloads with the bundled `bin\7z.exe`, so the target machine does not need
 7-Zip installed.
+
+When an uninstaller is enabled, installation copies `bin\uninstall.cmd` and
+`bin\uninstall.ps1` into the installed app's own `bin` directory. The Start
+Menu uninstall shortcut points at that installed `bin\uninstall.cmd`.
+`bin\uninstall.ps1` infers the install root from its own location and uses the
+installed manifest for metadata and hooks, not as the deletion target.
 
 ## Bootstrap Hooks
 
@@ -75,7 +89,7 @@ argument text from breaking out into extra PowerShell syntax. If a project
 explicitly runs `cmd.exe /C`, then cmd's own parsing rules apply.
 
 Because this hook runs before extraction, it cannot use the app payload,
-`install.cmd`, `uninstall.cmd`, bundled 7z files, or staged application files.
+installer scripts, bundled 7z files, or staged application files.
 
 ## Icons
 
