@@ -18,10 +18,7 @@ from scripts.build_legacy_0x_bridge import _render_legacy_bridge_launcher_config
 
 def _write_sample_icon(icon_path: Path) -> None:
     icon_path.write_bytes(
-        files("app_builder")
-        .joinpath("assets")
-        .joinpath("app-builder.ico")
-        .read_bytes()
+        files("app_builder").joinpath("assets").joinpath("app-builder.ico").read_bytes()
     )
 
 

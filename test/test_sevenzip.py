@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import subprocess
 import unittest
 from pathlib import Path, PurePosixPath
@@ -47,6 +48,7 @@ class TestSevenZipPayloadArchive(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     sevenzip.validate_archive_path(value)
 
+    @unittest.skipIf(os.name != "nt", "vendored 7z.exe runs on Windows")
     def test_create_7z_payload_supports_remap_and_version_quietly(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             project_root = Path(temp_dir_str) / "project"
@@ -78,6 +80,7 @@ class TestSevenZipPayloadArchive(unittest.TestCase):
             self.assertEqual("app", (extract_dir / "renamed" / "app.txt").read_text())
             self.assertEqual("1.2.3", (extract_dir / "version.txt").read_text())
 
+    @unittest.skipIf(os.name != "nt", "vendored 7z.exe runs on Windows")
     def test_locked_files_are_staged_before_7z_archiving(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             project_root = Path(temp_dir_str) / "project"

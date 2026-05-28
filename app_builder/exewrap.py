@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, cast
 
 EXE_WRAP_CONFIG_START_MARKER = b"8c0e8d4c-32af-4fd8-9c68-6a0f97efeb6a"
 EXE_WRAP_CONFIG_END_MARKER = b"ce3beca3-7ed2-40a4-9133-f82198be1d7b"
@@ -49,7 +49,9 @@ def stamp_exe_icon(exe_payload: bytes, icon_path: Path) -> bytes:
             "Embedding installer.icon into ExeWrap executables requires Windows."
         )
     if not icon_path.is_file():
-        raise FileNotFoundError(f"Configured installer.icon does not exist: {icon_path}")
+        raise FileNotFoundError(
+            f"Configured installer.icon does not exist: {icon_path}"
+        )
 
     images = _read_icon_images(icon_path)
     with TemporaryDirectory() as temp_dir_str:
@@ -140,7 +142,7 @@ def _update_exe_icon_resources(exe_path: Path, images: list[_IconImage]) -> None
     import ctypes
     from ctypes import wintypes
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = getattr(ctypes, "WinDLL")("kernel32", use_last_error=True)
     begin_update_resource = kernel32.BeginUpdateResourceW
     begin_update_resource.argtypes = [wintypes.LPCWSTR, wintypes.BOOL]
     begin_update_resource.restype = wintypes.HANDLE
@@ -162,7 +164,7 @@ def _update_exe_icon_resources(exe_path: Path, images: list[_IconImage]) -> None
 
     handle = begin_update_resource(str(exe_path), False)
     if not handle:
-        raise ctypes.WinError(ctypes.get_last_error())
+        raise _windows_error(ctypes)
 
     should_discard = True
     try:
@@ -182,7 +184,7 @@ def _update_exe_icon_resources(exe_path: Path, images: list[_IconImage]) -> None
             data=_render_icon_group_resource(images),
         )
         if not end_update_resource(handle, False):
-            raise ctypes.WinError(ctypes.get_last_error())
+            raise _windows_error(ctypes)
         should_discard = False
     finally:
         if should_discard:
@@ -210,7 +212,7 @@ def _update_resource(
         len(data),
     )
     if not ok:
-        raise ctypes.WinError(ctypes.get_last_error())
+        raise _windows_error(ctypes)
 
 
 def _make_int_resource(value: int) -> Any:
@@ -218,3 +220,7 @@ def _make_int_resource(value: int) -> Any:
     from ctypes import wintypes
 
     return ctypes.cast(ctypes.c_void_p(value), wintypes.LPCWSTR)
+
+
+def _windows_error(ctypes_module: Any) -> OSError:
+    return cast(OSError, ctypes_module.WinError(ctypes_module.get_last_error()))

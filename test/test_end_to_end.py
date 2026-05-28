@@ -21,10 +21,7 @@ from app_builder.sevenzip import SEVENZIP_DLL_SHA256, SEVENZIP_EXE_SHA256
 
 def _write_sample_icon(icon_path: Path) -> None:
     icon_path.write_bytes(
-        files("app_builder")
-        .joinpath("assets")
-        .joinpath("app-builder.ico")
-        .read_bytes()
+        files("app_builder").joinpath("assets").joinpath("app-builder.ico").read_bytes()
     )
 
 

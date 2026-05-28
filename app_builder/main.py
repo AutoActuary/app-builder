@@ -17,9 +17,7 @@ def _help_html_url() -> str:
 
 
 class AppBuilderGroup(click.Group):
-    def format_help(
-        self, ctx: click.Context, formatter: click.HelpFormatter
-    ) -> None:
+    def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
         formatter.write(f"Full help: {_help_html_url()}\n\n")
         super().format_help(ctx, formatter)
 

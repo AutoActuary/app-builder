@@ -20,9 +20,7 @@ class TestCliHelp(unittest.TestCase):
 
     def test_docs_help_html_exists(self) -> None:
         help_path = (
-            Path(__file__).resolve().parents[1]
-            / "docs"
-            / "app-builder-help.html"
+            Path(__file__).resolve().parents[1] / "docs" / "app-builder-help.html"
         )
 
         self.assertTrue(help_path.is_file())

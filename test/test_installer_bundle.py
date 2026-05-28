@@ -32,10 +32,7 @@ from app_builder.installer_bundle import (
 
 def _write_sample_icon(icon_path: Path) -> None:
     icon_path.write_bytes(
-        files("app_builder")
-        .joinpath("assets")
-        .joinpath("app-builder.ico")
-        .read_bytes()
+        files("app_builder").joinpath("assets").joinpath("app-builder.ico").read_bytes()
     )
 
 
@@ -344,7 +341,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 self.assertIn("[ConsoleKey]::Enter", install_ps1)
                 self.assertNotIn("Press any key", install_ps1)
                 uninstall_cmd = installer_zip.read("bin/uninstall.cmd").decode("utf-8")
-                self.assertIn("-File \"%~dp0uninstall.ps1\" %*", uninstall_cmd)
+                self.assertIn('-File "%~dp0uninstall.ps1" %*', uninstall_cmd)
                 uninstall_ps1 = installer_zip.read("bin/uninstall.ps1").decode("utf-8")
                 self.assertIn("Copy-AppBuilderPostUninstallEntrypoints", uninstall_ps1)
                 self.assertIn("Remove-AppBuilderInstallDirectory", uninstall_ps1)
@@ -364,9 +361,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 json.dumps(
                     {
                         "name": "I'm Demo",
-                        "install_hooks": {
-                            "pre_install": [["Write-Host", "it's ok"]]
-                        },
+                        "install_hooks": {"pre_install": [["Write-Host", "it's ok"]]},
                     }
                 ),
                 encoding="utf-8",
@@ -384,9 +379,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
 
             with ZipFile(installer) as installer_zip:
                 install_ps1 = installer_zip.read("bin/install.ps1").decode("utf-8")
-                uninstall_ps1 = installer_zip.read("bin/uninstall.ps1").decode(
-                    "utf-8"
-                )
+                uninstall_ps1 = installer_zip.read("bin/uninstall.ps1").decode("utf-8")
 
         self.assertIn("I\\u0027m Demo", install_ps1)
         self.assertIn("it\\u0027s ok", install_ps1)

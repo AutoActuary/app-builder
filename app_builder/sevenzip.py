@@ -10,12 +10,8 @@ from collections.abc import Mapping
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
 
-SEVENZIP_EXE_SHA256 = (
-    "6b95e76bbe2147bdc6b0debbd28fd45ef160175fa22762f64ffdb0025e75e9e6"
-)
-SEVENZIP_DLL_SHA256 = (
-    "84d2bcf774aba77e938d3f36bfe020e0d49cfb3074ad9de69b5af78054602b7e"
-)
+SEVENZIP_EXE_SHA256 = "6b95e76bbe2147bdc6b0debbd28fd45ef160175fa22762f64ffdb0025e75e9e6"
+SEVENZIP_DLL_SHA256 = "84d2bcf774aba77e938d3f36bfe020e0d49cfb3074ad9de69b5af78054602b7e"
 
 _SEVENZIP_NOISE_PATTERNS = [
     re.compile(r"^7-Zip .* Copyright \(c\) 1999.* Igor Pavlov.*$"),
@@ -141,7 +137,7 @@ def can_7z_read_file(filepath: Path) -> bool:
     if os.name != "nt":
         return True
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = getattr(ctypes, "WinDLL")("kernel32", use_last_error=True)
     create_file = kernel32.CreateFileW
     create_file.argtypes = [
         ctypes.c_wchar_p,
@@ -269,8 +265,7 @@ def _run_7z_quiet(command: list[Path | str], *, cwd: Path) -> None:
         detail = output.strip() or (result.stdout + result.stderr).strip()
         if detail:
             raise RuntimeError(
-                "7-Zip command failed with exit code "
-                f"{result.returncode}:\n{detail}"
+                "7-Zip command failed with exit code " f"{result.returncode}:\n{detail}"
             )
         raise RuntimeError(f"7-Zip command failed with exit code {result.returncode}.")
 

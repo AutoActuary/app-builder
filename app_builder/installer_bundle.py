@@ -211,7 +211,7 @@ def _contains_powershell_here_string_terminator(value: str) -> bool:
 def _render_install_cmd_wrapper() -> str:
     return (
         "@echo off\n"
-        'powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass '
+        "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass "
         '-File "%~dp0bin\\install.ps1" %*\n'
         "exit /b %ERRORLEVEL%\n"
     )
@@ -220,7 +220,7 @@ def _render_install_cmd_wrapper() -> str:
 def _render_uninstall_cmd_wrapper() -> str:
     return (
         "@echo off\n"
-        'powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass '
+        "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass "
         '-File "%~dp0uninstall.ps1" %*\n'
         "exit /b %ERRORLEVEL%\n"
     )
