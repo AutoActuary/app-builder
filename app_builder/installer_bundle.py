@@ -108,7 +108,7 @@ def create_exewrap_zip_installer(
 def _render_bootstrap_config(
     bootstrap_pre_extract_commands: list[list[str]] | None = None,
 ) -> bytes:
-    config = json.dumps(
+    return json.dumps(
         {
             "command": [
                 "powershell.exe",
@@ -122,10 +122,7 @@ def _render_bootstrap_config(
             ]
         },
         separators=(",", ":"),
-    )
-    if not config.endswith("]}"):
-        raise RuntimeError("Unexpected ExeWrap bootstrap config shape.")
-    return (config[:-2] + ",@{args}]}").encode("utf-8")
+    ).encode("utf-8")
 
 
 def _render_powershell_bootstrap(
@@ -136,6 +133,8 @@ def _render_powershell_bootstrap(
     )
     return (
         "$ErrorActionPreference = 'Stop'; "
+        "$InstallerArgsJson = '@{args_as_json}'; "
+        "[string[]]$InstallerArgs = $InstallerArgsJson | ConvertFrom-Json; "
         "$exitCode = 0; "
         "$extractDir = Join-Path $env:TEMP "
         "('app-builder-' + [guid]::NewGuid().ToString('N')); "
@@ -147,7 +146,7 @@ def _render_powershell_bootstrap(
         "$exitCode = $LASTEXITCODE; "
         'throw "tar.exe failed with exit code $exitCode" '
         "}; "
-        "& (Join-Path $extractDir 'bin\\install.ps1') @args; "
+        "& (Join-Path $extractDir 'bin\\install.ps1') @InstallerArgs; "
         "$exitCode = $LASTEXITCODE "
         "} catch { "
         "if ($exitCode -eq 0) { $exitCode = 1 }; "

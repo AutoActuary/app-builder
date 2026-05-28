@@ -18,6 +18,7 @@ from app_builder.exewrap import (
     _read_icon_images,
     _render_icon_group_resource,
     stamp_exe_icon,
+    stamp_exe_wrap_config,
     vendored_console_launcher_bytes,
 )
 from app_builder.installer_bundle import (
@@ -44,7 +45,7 @@ def _expected_icon_group_resource(icon_path: Path) -> bytes:
 
 def _load_exewrap_config_for_assertion(config: bytes | str) -> dict[str, Any]:
     text = config.decode("utf-8") if isinstance(config, bytes) else config
-    return cast(dict[str, Any], json.loads(text.replace(",@{args}", ',"@{args}"')))
+    return cast(dict[str, Any], json.loads(text))
 
 
 class TestExeWrapInstallerBundle(unittest.TestCase):
@@ -54,7 +55,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
         self.assertGreater(len(launcher), 100_000)
         self.assertEqual(
             EXE_WRAP_CONSOLE_X64_SHA256,
-            "f1a68e6b71dbe0db7db3e8c151dcb66c10d77469a219f1cb4fb365fe3a78cf10",
+            "520b83bc9663ff9dcdae075fac2e37292eb14572b82a9388db8bcec9d0237393",
         )
 
     @unittest.skipIf(os.name != "nt", "Windows elevation heuristic check")
@@ -72,6 +73,68 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
 
         self.assertEqual(1, result.returncode)
         self.assertIn("no embedded config found", result.stderr)
+
+    @unittest.skipIf(os.name != "nt", "ExeWrap runtime smoke targets Windows")
+    def test_vendored_launcher_json_args_round_trips_to_powershell(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            marker = temp_dir / "args.json"
+            launcher = temp_dir / "args-installer.exe"
+            script = (
+                "& { "
+                "$Argv = '@{args_as_json}' | ConvertFrom-Json; "
+                "($Argv | ConvertTo-Json -Compress) | "
+                "Set-Content -LiteralPath $env:ARG_MARKER -Encoding UTF8; "
+                "exit 0 "
+                "}"
+            )
+            config = json.dumps(
+                {
+                    "command": [
+                        "powershell.exe",
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-Command",
+                        script,
+                    ]
+                },
+                separators=(",", ":"),
+            ).encode("utf-8")
+            launcher.write_bytes(stamp_exe_wrap_config(config))
+            env = os.environ.copy()
+            env["ARG_MARKER"] = str(marker)
+
+            result = subprocess.run(
+                [
+                    str(launcher),
+                    "--yes",
+                    "space arg",
+                    "quote'arg",
+                    "semi;arg",
+                    "amp&arg",
+                    "dollar$arg",
+                    "tick`arg",
+                ],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(
+                [
+                    "--yes",
+                    "space arg",
+                    "quote'arg",
+                    "semi;arg",
+                    "amp&arg",
+                    "dollar$arg",
+                    "tick`arg",
+                ],
+                json.loads(marker.read_text(encoding="utf-8-sig")),
+            )
 
     @unittest.skipIf(os.name != "nt", "Windows icon resource update")
     def test_stamp_exe_icon_embeds_ico_group_resource(self) -> None:
@@ -92,10 +155,15 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
         self.assertEqual("-NoProfile", command[1])
         self.assertIn("-ExecutionPolicy", command)
         self.assertIn("Bypass", command)
-        script = command[-2]
+        script = command[-1]
         self.assertIn("tar.exe -xf '@{exe_path}' -C $extractDir", script)
         self.assertIn("bin\\install.ps1", script)
-        self.assertEqual("@{args}", command[-1])
+        self.assertIn("$InstallerArgsJson = '@{args_as_json}'", script)
+        self.assertIn(
+            "[string[]]$InstallerArgs = $InstallerArgsJson | ConvertFrom-Json",
+            script,
+        )
+        self.assertIn("bin\\install.ps1') @InstallerArgs", script)
         self.assertIn("[guid]::NewGuid().ToString('N')", script)
         self.assertIn("finally", script)
         self.assertIn("Write-Error $_ -ErrorAction Continue", script)
@@ -120,7 +188,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             )
         )
 
-        script = config["command"][-2]
+        script = config["command"][-1]
         self.assertIn("ConvertFrom-Json", script)
         self.assertIn("Invoke-AppBuilderBootstrapCommand", script)
         self.assertIn("I\\u0027m before extraction", script)

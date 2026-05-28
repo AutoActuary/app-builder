@@ -59,11 +59,15 @@ When `installer.payload_format: 7z` is selected, the outer layer also contains:
 - `bin/7z.dll`
 
 The generated installer extracts the outer layer to a random temp directory via
-ExeWrap and PowerShell, then runs `bin\install.ps1` directly. The top-level
-`install.cmd` is kept as a manual helper for users who rename/extract the
-installer ZIP by hand. Both paths accept normal runtime flags such as `--yes`,
-`--cli`, and `--no-wait`: `--yes`/`--cli` answer installer questions and skip
-the close wait, while `--no-wait` only skips the final wait.
+ExeWrap and PowerShell, then runs `bin\install.ps1` directly. Installer
+arguments are transported through ExeWrap's `@{args_as_json}` template value,
+decoded with PowerShell `ConvertFrom-Json`, and splatted into `bin\install.ps1`.
+This avoids passing hostile user text through the PowerShell `-Command` tail.
+The top-level `install.cmd` is kept as a manual helper for users who
+rename/extract the installer ZIP by hand. Both paths accept normal runtime
+flags such as `--yes`, `--cli`, and `--no-wait`: `--yes`/`--cli` answer
+installer questions and skip the close wait, while `--no-wait` only skips the
+final wait.
 
 The generated scripts extract ZIP payloads with Windows `tar.exe` and 7z
 payloads with the bundled `bin\7z.exe`, so the target machine does not need
