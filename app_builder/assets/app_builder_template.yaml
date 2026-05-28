@@ -55,8 +55,8 @@ installer:
   payload_format: zip
 
   # Optional boolean. Whether generated installer scripts should wait briefly before
-  # exiting. Runtime flags such as --yes, --cli, and --no-wait skip the wait. Default if
-  # omitted: true.
+  # exiting. Runtime flags such as --yes and --no-wait skip the wait. Default if omitted:
+  # true.
   pause_on_exit: true
 
   # Optional boolean. Whether the installer bundle should include an uninstall script.

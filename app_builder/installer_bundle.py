@@ -450,7 +450,7 @@ function Get-AppBuilderScriptOptions {
     $NoWait = $false
     foreach ($Arg in $Argv) {
         $Normalized = $Arg.ToLowerInvariant()
-        if (@('--yes', '-yes', '-y', '/y', '--cli', '-cli', '--non-interactive', '-noninteractive', '--no-prompt', '-noprompt').Contains($Normalized)) {
+        if (@('--yes', '-yes', '-y', '/y', '--non-interactive', '-noninteractive', '--no-prompt', '-noprompt').Contains($Normalized)) {
             $BypassQuestions = $true
         }
         if (@('--no-wait', '-no-wait', '-nowait').Contains($Normalized)) {
@@ -490,7 +490,7 @@ function Wait-AppBuilderBeforeExit {
     if ((-not [bool]$Options.WaitOnExit) -or [bool]$Options.NoWait) {
         return
     }
-    Write-Host 'Press Enter to close now, or wait 30 seconds. Use --yes, --cli, or --no-wait to skip this wait.'
+    Write-Host 'Press Enter to close now, or wait 30 seconds. Use --yes or --no-wait to skip this wait.'
     $Deadline = [DateTime]::UtcNow.AddSeconds(30)
     while ([DateTime]::UtcNow -lt $Deadline) {
         if ([Console]::KeyAvailable) {

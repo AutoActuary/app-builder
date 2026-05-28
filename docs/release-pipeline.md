@@ -65,9 +65,8 @@ decoded with PowerShell `ConvertFrom-Json`, and splatted into `bin\install.ps1`.
 This avoids passing hostile user text through the PowerShell `-Command` tail.
 The top-level `install.cmd` is kept as a manual helper for users who
 rename/extract the installer ZIP by hand. Both paths accept normal runtime
-flags such as `--yes`, `--cli`, and `--no-wait`: `--yes`/`--cli` answer
-installer questions and skip the close wait, while `--no-wait` only skips the
-final wait.
+flags such as `--yes` and `--no-wait`: `--yes` answers installer questions and
+skips the close wait, while `--no-wait` only skips the final wait.
 
 The generated scripts extract ZIP payloads with Windows `tar.exe` and 7z
 payloads with the bundled `bin\7z.exe`, so the target machine does not need
