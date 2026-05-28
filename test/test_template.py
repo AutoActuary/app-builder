@@ -10,11 +10,13 @@ from app_builder.template import (
     TEMPLATE_SNAPSHOT_PATH,
     initialize_project,
     render_config_reference_markdown,
+    render_help_config_reference_html,
     render_config_template_yaml,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_REFERENCE_PATH = REPO_ROOT / "docs" / "configuration.md"
+HELP_HTML_PATH = REPO_ROOT / "docs" / "app-builder-help.html"
 
 
 class TestTemplateInitialization(unittest.TestCase):
@@ -68,7 +70,18 @@ class TestTemplateInitialization(unittest.TestCase):
 
         self.assertIn("## `config.installer`", docs)
         self.assertIn(
-            "| `name` | `string` | yes | required | Human-facing application name. |",
+            "| `name` | `string` | yes | required | `MyApp` | Human-facing application name. |",
             docs,
         )
+        self.assertIn("## Complete app_builder.yaml Template", docs)
         self.assertIn("Hook fields are `list[list[string]]`.", docs)
+
+    def test_help_html_config_reference_matches_schema_metadata(self) -> None:
+        help_html = HELP_HTML_PATH.read_text(encoding="utf-8")
+        fragment = render_help_config_reference_html()
+
+        self.assertIn("<!-- BEGIN GENERATED CONFIG REFERENCE -->", help_html)
+        self.assertIn("<!-- END GENERATED CONFIG REFERENCE -->", help_html)
+        self.assertIn(fragment, help_html)
+        self.assertIn("Complete app_builder.yaml Template", fragment)
+        self.assertIn("config.installer.install_hooks", fragment)

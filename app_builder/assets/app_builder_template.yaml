@@ -1,8 +1,9 @@
 # app_builder.yaml
 # Generated from app_builder.schema metadata.
 # Required and common optional fields contain examples; replace them for your app.
-# String values can reference ${ENV.NAME}, ${GIT.DESCRIBE},
-# ${GIT.SHORT_COMMIT}, ${APP.VERSION}, and ${CONFIG.path.to.value}.
+# String values can reference ${ENV.NAME}, ${GIT.DESCRIBE}, ${GIT.COMMIT},
+# ${GIT.SHORT_COMMIT}, ${GIT.BRANCH}, ${GIT.TAG}, ${GIT.IS_DIRTY},
+# ${APP.VERSION}, and ${CONFIG.path.to.value}.
 # Interpolation is string-only and runs before schema validation.
 # Keep app_builder_version literal; the version dispatcher reads it before
 # the full 1.x config interpolation layer is loaded.
@@ -41,21 +42,23 @@ installer:
   # Required string. Human-facing application name.
   name: MyApp
 
-  # Required string. Windows install directory. Percent-style environment variables are
-  # expanded at build time.
+  # Required string. Windows install directory. Use percent-style environment variables
+  # such as %localappdata% when the path must resolve on the user's machine; generated
+  # installer scripts expand them at install time.
   install_directory: '%localappdata%\MyCompany\MyApp'
 
-  # Optional string. Project-relative .ico file embedded into generated ExeWrap
-  # executables and used for Start Menu shortcuts when a shortcut does not specify its own
-  # icon. Default if omitted: application-templates/icon.ico.
+  # Optional string. Project-relative .ico file used for generated executables and Start
+  # Menu shortcuts when a shortcut does not specify its own icon. Default if omitted:
+  # application-templates/icon.ico.
   icon: application-templates/icon.ico
 
   # Optional string. Inner payload archive format. Use zip for the Windows tar.exe path or
   # 7z for stronger compression with bundled 7-Zip extraction. Default if omitted: zip.
   payload_format: zip
 
-  # Optional boolean. Whether generated installer scripts should pause before exiting.
-  # Default if omitted: true.
+  # Optional boolean. Whether generated installer scripts should wait briefly before
+  # exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait,
+  # while --no-wait skips only the wait. Default if omitted: true.
   pause_on_exit: true
 
   # Optional boolean. Whether the installer bundle should include an uninstall script.
@@ -69,13 +72,12 @@ installer:
       display_name: MyApp
       icon: application-templates/icon.ico
 
-  # Optional mapping. Early ExeWrap bootstrap hook command declarations. Default if
-  # omitted: BootstrapHooks defaults.
+  # Optional mapping. Early installer hook command declarations. Default if omitted:
+  # BootstrapHooks defaults.
   bootstrap_hooks:
-    # Optional list[list[string]]. Argv commands injected into the ExeWrap PowerShell
-    # bootstrap before the installer extracts its top layer. These commands cannot use
-    # payload files, install.cmd, uninstall.cmd, or bundled top-layer tools because none
-    # have been extracted yet. Default if omitted: [].
+    # Optional list[list[string]]. Argv commands run before the installer extracts its top
+    # layer. These commands cannot use payload files, installer scripts, or bundled top-
+    # layer tools because none have been extracted yet. Default if omitted: [].
     pre_extract: []
 
   # Optional mapping. Installer and uninstaller hook command declarations. Default if

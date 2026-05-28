@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import shutil
 import textwrap
 import types
@@ -12,7 +13,7 @@ import yaml
 
 from .project import find_project_root
 from .schema import AppBuilderConfig
-from .schema_core import example_mapping, get_config_meta
+from .schema_core import REQUIRED, example_mapping, get_config_meta
 
 _NONE_TYPE = type(None)
 TEMPLATE_SNAPSHOT_PATH = (
@@ -28,8 +29,9 @@ def render_config_template_yaml() -> str:
         "# app_builder.yaml",
         "# Generated from app_builder.schema metadata.",
         "# Required and common optional fields contain examples; replace them for your app.",
-        "# String values can reference ${ENV.NAME}, ${GIT.DESCRIBE},",
-        "# ${GIT.SHORT_COMMIT}, ${APP.VERSION}, and ${CONFIG.path.to.value}.",
+        "# String values can reference ${ENV.NAME}, ${GIT.DESCRIBE}, ${GIT.COMMIT},",
+        "# ${GIT.SHORT_COMMIT}, ${GIT.BRANCH}, ${GIT.TAG}, ${GIT.IS_DIRTY},",
+        "# ${APP.VERSION}, and ${CONFIG.path.to.value}.",
         "# Interpolation is string-only and runs before schema validation.",
         "# Keep app_builder_version literal; the version dispatcher reads it before",
         "# the full 1.x config interpolation layer is loaded.",
@@ -51,6 +53,16 @@ def render_config_reference_markdown() -> str:
         "must provide project-specific values; the loader still rejects missing "
         "required values, unknown keys, unsupported shapes, and explicit `null` "
         "where a field is not nullable.",
+        "",
+        "## Complete app_builder.yaml Template",
+        "",
+        "This is the full generated template. Required fields contain example "
+        "values that you must replace for your app. Optional fields show their "
+        "defaults or empty lists.",
+        "",
+        "```yaml",
+        render_config_template_yaml().rstrip(),
+        "```",
         "",
         "String values are interpolated before schema validation. Supported "
         "variables are `${ENV.NAME}`, `${GIT.DESCRIBE}`, `${GIT.COMMIT}`, "
@@ -101,12 +113,17 @@ def render_config_reference_markdown() -> str:
         "because backslashes stay literal. If you use double-quoted YAML strings "
         "for Windows paths, write backslashes as `\\\\`.",
         "",
+        "Use percent-style Windows variables such as `%localappdata%` for "
+        "install paths that must resolve on the user's machine. `${ENV.*}` is "
+        "resolved while building the release, so it bakes in the builder or CI "
+        "environment.",
+        "",
         "Example:",
         "",
         "```yaml",
         "installer:",
         '  name: "MyApp ${APP.VERSION}"',
-        "  install_directory: '${ENV.LOCALAPPDATA}\\Acme\\${CONFIG.installer.name}'",
+        "  install_directory: '%localappdata%\\Acme\\${CONFIG.installer.name}'",
         "  paths:",
         "    include:",
         '      - "build/${APP.VERSION}"',
@@ -125,14 +142,81 @@ def render_config_reference_markdown() -> str:
             "behavior is required.",
             "",
             "When a hook command's `argv[0]` is a `.py` file, app-builder runs it "
-            "with a project-owned Python from `python_bundled` or `python_venv`. "
-            "It does not fall back to system Python. Use an explicit argv such as "
-            "`[python, script.py]` only when the target machine is expected to "
-            "provide Python.",
+            "with the Python runtime configured for the project, preferring "
+            "`python_venv` and then `python_bundled`. That means a hook such as "
+            "`[scripts/build.py]` does not need `python.exe` on PATH. Use an "
+            "explicit argv such as `[python, script.py]` only when the target "
+            "machine is expected to provide Python.",
             "",
         ]
     )
     return _finish_text(lines)
+
+
+def render_help_config_reference_html() -> str:
+    """Render the full config help block for the packaged HTML help page."""
+
+    template = html.escape(render_config_template_yaml())
+    lines = [
+        '      <section id="config">',
+        "        <h2>Configuration</h2>",
+        "        <p>",
+        "          <code>app_builder.yaml</code> is the contract for a project. The loader is strict: unknown keys",
+        "          are rejected, legacy <code>application.yaml</code> shapes are rejected, and hook commands must be",
+        "          argv lists. The complete shape below is generated from the same schema metadata as",
+        "          <code>app-builder init</code>.",
+        "        </p>",
+        '        <div class="callout">',
+        "          <p>",
+        "            Start from the complete template when you are unsure. It shows every supported field, its",
+        "            default when omitted, and the short help text attached to that config option.",
+        "          </p>",
+        "        </div>",
+        "        <h3>Complete app_builder.yaml Template</h3>",
+        "        <p>",
+        "          This is the full generated template. Required fields contain example values that you must replace",
+        "          for your app. Optional fields show their defaults or empty lists.",
+        "        </p>",
+        f"        <pre><code>{template}</code></pre>",
+        "        <h3>How To Read The Reference</h3>",
+        "        <table>",
+        "          <thead>",
+        "            <tr>",
+        "              <th>Column</th>",
+        "              <th>Meaning</th>",
+        "            </tr>",
+        "          </thead>",
+        "          <tbody>",
+        "            <tr><td>Field</td><td>The YAML key at that level.</td></tr>",
+        "            <tr><td>Type</td><td>The accepted YAML shape after interpolation has run.</td></tr>",
+        "            <tr><td>Required</td><td><code>yes</code> means you must provide it. <code>no</code> means app-builder supplies a default.</td></tr>",
+        "            <tr><td>Default</td><td>The value used when the key is omitted. Nested mappings say to see their child defaults.</td></tr>",
+        "            <tr><td>Example</td><td>A realistic value from the generated template.</td></tr>",
+        "            <tr><td>What it does</td><td>The behavior controlled by the option.</td></tr>",
+        "          </tbody>",
+        "        </table>",
+        "        <h3>Field Reference</h3>",
+    ]
+    _emit_dataclass_html("config", AppBuilderConfig, lines)
+    lines.extend(
+        [
+            "        <h3>Command Values</h3>",
+            "        <p>",
+            "          Hook fields are <code>list[list[string]]</code>. Each command is an argv list. Use an",
+            "          explicit shell argv, such as <code>[cmd.exe, /D, /C, ...]</code>, when shell behavior is",
+            "          required.",
+            "        </p>",
+            "        <p>",
+            "          When a hook command starts with an existing <code>.py</code> file, app-builder runs it with",
+            "          the Python runtime configured for the project, preferring <code>python_venv</code> and then",
+            "          <code>python_bundled</code>. A hook such as <code>[scripts/build.py]</code> does not need",
+            "          <code>python.exe</code> on PATH. Use <code>[python, scripts/build.py]</code> only when",
+            "          you deliberately want the machine's own <code>python</code>.",
+            "        </p>",
+            "      </section>",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def initialize_project(start: Path, *, force: bool) -> Path:
@@ -301,8 +385,8 @@ def _emit_dataclass_markdown(
         [
             f"## {title}",
             "",
-            "| Field | Type | Required | Default | Description |",
-            "| --- | --- | --- | --- | --- |",
+            "| Field | Type | Required | Default | Example | Description |",
+            "| --- | --- | --- | --- | --- | --- |",
         ]
     )
     hints = get_type_hints(config_type, include_extras=True)
@@ -317,6 +401,7 @@ def _emit_dataclass_markdown(
                     _markdown_cell(f"`{_annotation_label(annotation)}`"),
                     "yes" if _is_required(field_) else "no",
                     _markdown_cell(_markdown_default(field_)),
+                    _markdown_cell(_markdown_example(field_)),
                     _markdown_cell(meta.description or ""),
                 ]
             )
@@ -332,6 +417,62 @@ def _emit_dataclass_markdown(
             _emit_dataclass_markdown(f"{path}.{field_.name}", nested_type, lines)
         elif list_item_type is not None:
             _emit_dataclass_markdown(f"{path}.{field_.name}[]", list_item_type, lines)
+
+
+def _emit_dataclass_html(
+    path: str,
+    config_type: type[Any],
+    lines: list[str],
+) -> None:
+    title = "Top-Level Config" if path == "config" else path
+    lines.extend(
+        [
+            f'        <h4 id="{_config_anchor(path)}">{_html(title)}</h4>',
+            "        <table>",
+            "          <thead>",
+            "            <tr>",
+            "              <th>Field</th>",
+            "              <th>Type</th>",
+            "              <th>Required</th>",
+            "              <th>Default</th>",
+            "              <th>Example</th>",
+            "              <th>What it does</th>",
+            "            </tr>",
+            "          </thead>",
+            "          <tbody>",
+        ]
+    )
+    hints = get_type_hints(config_type, include_extras=True)
+    for field_ in fields(config_type):
+        annotation = hints[field_.name]
+        meta = get_config_meta(field_)
+        lines.extend(
+            [
+                "            <tr>",
+                f"              <td><code>{_html(field_.name)}</code></td>",
+                f"              <td><code>{_html(_annotation_label(annotation))}</code></td>",
+                f"              <td>{'yes' if _is_required(field_) else 'no'}</td>",
+                f"              <td>{_html_code_or_text(_default_summary_for_reference(field_))}</td>",
+                f"              <td>{_html_code_or_text(_example_summary(field_))}</td>",
+                f"              <td>{_html(meta.description or '')}</td>",
+                "            </tr>",
+            ]
+        )
+    lines.extend(
+        [
+            "          </tbody>",
+            "        </table>",
+        ]
+    )
+
+    for field_ in fields(config_type):
+        annotation = hints[field_.name]
+        nested_type = _nested_dataclass_type(annotation)
+        list_item_type = _list_dataclass_item_type(annotation)
+        if nested_type is not None:
+            _emit_dataclass_html(f"{path}.{field_.name}", nested_type, lines)
+        elif list_item_type is not None:
+            _emit_dataclass_html(f"{path}.{field_.name}[]", list_item_type, lines)
 
 
 def _field_comment(field_: Field[Any], annotation: Any) -> str:
@@ -365,10 +506,34 @@ def _default_summary(field_: Field[Any]) -> str | None:
     return None
 
 
+def _default_summary_for_reference(field_: Field[Any]) -> str | None:
+    if field_.default_factory is not MISSING:
+        value = field_.default_factory()
+        if is_dataclass(value):
+            return "see nested defaults"
+    return _default_summary(field_)
+
+
+def _example_summary(field_: Field[Any]) -> str | None:
+    meta = get_config_meta(field_)
+    if meta.example is not REQUIRED:
+        return _inline_yaml(_plain_value(meta.example))
+    if meta.example_factory is not None:
+        return _inline_yaml(_plain_value(meta.example_factory()))
+    return None
+
+
 def _markdown_default(field_: Field[Any]) -> str:
-    summary = _default_summary(field_)
+    summary = _default_summary_for_reference(field_)
     if summary is None:
         return "required"
+    return f"`{summary}`"
+
+
+def _markdown_example(field_: Field[Any]) -> str:
+    summary = _example_summary(field_)
+    if summary is None:
+        return ""
     return f"`{summary}`"
 
 
@@ -473,6 +638,26 @@ def _plain_value(value: Any) -> Any:
 
 def _markdown_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", "<br>")
+
+
+def _html(value: str) -> str:
+    return html.escape(value, quote=True)
+
+
+def _html_code_or_text(value: str | None) -> str:
+    if value is None:
+        return ""
+    return f"<code>{_html(value)}</code>"
+
+
+def _config_anchor(path: str) -> str:
+    normalized = (
+        path.replace("config", "config-reference", 1)
+        .replace(".", "-")
+        .replace("[", "")
+        .replace("]", "")
+    )
+    return normalized
 
 
 def _finish_text(lines: list[str]) -> str:

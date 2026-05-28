@@ -8,6 +8,7 @@ import unittest
 from importlib.resources import files
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any, cast
 from zipfile import ZIP_STORED, ZipFile
 
 from app_builder.exewrap import (
@@ -17,6 +18,7 @@ from app_builder.exewrap import (
     _read_icon_images,
     _render_icon_group_resource,
     stamp_exe_icon,
+    stamp_exe_wrap_config,
     vendored_console_launcher_bytes,
 )
 from app_builder.installer_bundle import (
@@ -41,6 +43,11 @@ def _expected_icon_group_resource(icon_path: Path) -> bytes:
     return _render_icon_group_resource(_read_icon_images(icon_path))
 
 
+def _load_exewrap_config_for_assertion(config: bytes | str) -> dict[str, Any]:
+    text = config.decode("utf-8") if isinstance(config, bytes) else config
+    return cast(dict[str, Any], json.loads(text))
+
+
 class TestExeWrapInstallerBundle(unittest.TestCase):
     def test_vendored_console_launcher_matches_recorded_hash(self) -> None:
         launcher = vendored_console_launcher_bytes()
@@ -48,7 +55,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
         self.assertGreater(len(launcher), 100_000)
         self.assertEqual(
             EXE_WRAP_CONSOLE_X64_SHA256,
-            "f1a68e6b71dbe0db7db3e8c151dcb66c10d77469a219f1cb4fb365fe3a78cf10",
+            "520b83bc9663ff9dcdae075fac2e37292eb14572b82a9388db8bcec9d0237393",
         )
 
     @unittest.skipIf(os.name != "nt", "Windows elevation heuristic check")
@@ -67,6 +74,68 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertIn("no embedded config found", result.stderr)
 
+    @unittest.skipIf(os.name != "nt", "ExeWrap runtime smoke targets Windows")
+    def test_vendored_launcher_json_args_round_trips_to_powershell(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            marker = temp_dir / "args.json"
+            launcher = temp_dir / "args-installer.exe"
+            script = (
+                "& { "
+                "$Argv = '@{args_as_json}' | ConvertFrom-Json; "
+                "($Argv | ConvertTo-Json -Compress) | "
+                "Set-Content -LiteralPath $env:ARG_MARKER -Encoding UTF8; "
+                "exit 0 "
+                "}"
+            )
+            config = json.dumps(
+                {
+                    "command": [
+                        "powershell.exe",
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-Command",
+                        script,
+                    ]
+                },
+                separators=(",", ":"),
+            ).encode("utf-8")
+            launcher.write_bytes(stamp_exe_wrap_config(config))
+            env = os.environ.copy()
+            env["ARG_MARKER"] = str(marker)
+
+            result = subprocess.run(
+                [
+                    str(launcher),
+                    "--yes",
+                    "space arg",
+                    "quote'arg",
+                    "semi;arg",
+                    "amp&arg",
+                    "dollar$arg",
+                    "tick`arg",
+                ],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(
+                [
+                    "--yes",
+                    "space arg",
+                    "quote'arg",
+                    "semi;arg",
+                    "amp&arg",
+                    "dollar$arg",
+                    "tick`arg",
+                ],
+                json.loads(marker.read_text(encoding="utf-8-sig")),
+            )
+
     @unittest.skipIf(os.name != "nt", "Windows icon resource update")
     def test_stamp_exe_icon_embeds_ico_group_resource(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
@@ -79,7 +148,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
         self.assertIn(expected_group, stamped)
 
     def test_bootstrap_config_uses_powershell_single_quoted_exe_path(self) -> None:
-        config = json.loads(_render_bootstrap_config().decode("utf-8"))
+        config = _load_exewrap_config_for_assertion(_render_bootstrap_config())
 
         command = config["command"]
         self.assertEqual("powershell.exe", command[0])
@@ -88,6 +157,13 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
         self.assertIn("Bypass", command)
         script = command[-1]
         self.assertIn("tar.exe -xf '@{exe_path}' -C $extractDir", script)
+        self.assertIn("bin\\install.ps1", script)
+        self.assertIn("$InstallerArgsJson = '@{args_as_json}'", script)
+        self.assertIn(
+            "[string[]]$InstallerArgs = $InstallerArgsJson | ConvertFrom-Json",
+            script,
+        )
+        self.assertIn("bin\\install.ps1') @InstallerArgs", script)
         self.assertIn("[guid]::NewGuid().ToString('N')", script)
         self.assertIn("finally", script)
         self.assertIn("Write-Error $_ -ErrorAction Continue", script)
@@ -97,7 +173,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
     def test_bootstrap_config_injects_pre_extract_hooks_before_extraction(
         self,
     ) -> None:
-        config = json.loads(
+        config = _load_exewrap_config_for_assertion(
             _render_bootstrap_config(
                 [
                     ["Write-Host", "I'm before extraction"],
@@ -109,7 +185,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                         "echo explicit cmd is allowed",
                     ],
                 ]
-            ).decode("utf-8")
+            )
         )
 
         script = config["command"][-1]
@@ -199,10 +275,8 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             self.assertTrue(contents.startswith(b"fake-launcher"))
             start = contents.index(EXE_WRAP_CONFIG_START_MARKER)
             end = contents.index(EXE_WRAP_CONFIG_END_MARKER)
-            config = json.loads(
-                contents[start + len(EXE_WRAP_CONFIG_START_MARKER) : end].decode(
-                    "utf-8"
-                )
+            config = _load_exewrap_config_for_assertion(
+                contents[start + len(EXE_WRAP_CONFIG_START_MARKER) : end]
             )
             self.assertEqual("powershell.exe", config["command"][0])
 
@@ -211,47 +285,71 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                     {
                         "demo-1.0.zip",
                         "install.cmd",
-                        "uninstall.cmd",
+                        "bin/install.ps1",
+                        "bin/uninstall.cmd",
+                        "bin/uninstall.ps1",
                     },
                     set(installer_zip.namelist()),
                 )
                 self.assertEqual(
-                    ["install.cmd", "uninstall.cmd", "demo-1.0.zip"],
+                    [
+                        "install.cmd",
+                        "bin/install.ps1",
+                        "bin/uninstall.cmd",
+                        "bin/uninstall.ps1",
+                        "demo-1.0.zip",
+                    ],
                     installer_zip.namelist(),
                 )
                 for info in installer_zip.infolist():
                     self.assertEqual(ZIP_STORED, info.compress_type)
                 self.assertNotIn("demo-1.0-manifest.json", installer_zip.namelist())
                 self.assertIn(
-                    "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass",
+                    'powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0bin\\install.ps1" %*',
                     installer_zip.read("install.cmd").decode("utf-8"),
                 )
-                install_cmd = installer_zip.read("install.cmd").decode("utf-8")
-                self.assertIn("$EmbeddedManifestJson = @'", install_cmd)
-                self.assertIn('"name": "Demo"', install_cmd)
+                install_ps1 = installer_zip.read("bin/install.ps1").decode("utf-8")
+                self.assertIn("$EmbeddedManifestJson = @'", install_ps1)
+                self.assertIn('"name": "Demo"', install_ps1)
                 self.assertIn(
-                    "Expand-AppBuilderPayloadArchive $PayloadPath $StagingDir $ScriptRoot",
-                    install_cmd,
+                    "Expand-AppBuilderPayloadArchive $PayloadPath $StagingDir $InstallerRoot",
+                    install_ps1,
                 )
-                self.assertIn("tar.exe -xf $PayloadPath -C $Destination", install_cmd)
-                self.assertIn("bin\\7z.exe", install_cmd)
-                self.assertIn("Bundled 7z.exe is missing", install_cmd)
-                self.assertIn("Get-AppBuilderExistingInstallKind", install_cmd)
-                self.assertIn("Test-AppBuilderLegacyInstall", install_cmd)
-                self.assertIn("Invoke-AppBuilderLegacyPreUninstall", install_cmd)
-                self.assertIn("Remove-AppBuilderBackupDirectory", install_cmd)
-                self.assertIn("Restore-AppBuilderDirectory", install_cmd)
+                self.assertIn("tar.exe -xf $PayloadPath -C $Destination", install_ps1)
+                self.assertIn("bin\\7z.exe", install_ps1)
+                self.assertIn("Bundled 7z.exe is missing", install_ps1)
+                self.assertIn("Get-AppBuilderExistingInstallKind", install_ps1)
+                self.assertIn("Test-AppBuilderLegacyInstall", install_ps1)
+                self.assertIn("Invoke-AppBuilderLegacyPreUninstall", install_ps1)
+                self.assertIn("Remove-AppBuilderBackupDirectory", install_ps1)
+                self.assertIn("Restore-AppBuilderDirectory", install_ps1)
                 self.assertIn(
                     "does not use payload files such as version.txt, python-version.txt, or gitinformation.json as install markers",
-                    install_cmd,
+                    install_ps1,
                 )
-                self.assertIn("New-AppBuilderStartMenuShortcuts", install_cmd)
-                self.assertIn("Invoke-AppBuilderHookList", install_cmd)
-                self.assertIn("app-builder-manifest.json", install_cmd)
-                uninstall_cmd = installer_zip.read("uninstall.cmd").decode("utf-8")
-                self.assertIn("Copy-AppBuilderPostUninstallEntrypoints", uninstall_cmd)
-                self.assertIn("Remove-AppBuilderInstallDirectory", uninstall_cmd)
-                self.assertNotIn("Start-AppBuilderDirectoryCleanup", uninstall_cmd)
+                self.assertIn("New-AppBuilderStartMenuShortcuts", install_ps1)
+                self.assertIn("Invoke-AppBuilderHookList", install_ps1)
+                self.assertIn("app-builder-manifest.json", install_ps1)
+                self.assertIn("Confirm-AppBuilderAction", install_ps1)
+                self.assertIn("Continue installing", install_ps1)
+                self.assertIn("Wait-AppBuilderBeforeExit", install_ps1)
+                self.assertIn("--yes", install_ps1)
+                self.assertIn("--no-wait", install_ps1)
+                self.assertNotIn("-noninteractive", install_ps1)
+                self.assertNotIn("--no-prompt", install_ps1)
+                self.assertNotIn("-nowait", install_ps1)
+                self.assertNotIn("--cli", install_ps1)
+                self.assertNotIn("-cli", install_ps1)
+                self.assertIn("Press Enter to close now", install_ps1)
+                self.assertIn("[ConsoleKey]::Enter", install_ps1)
+                self.assertNotIn("Press any key", install_ps1)
+                uninstall_cmd = installer_zip.read("bin/uninstall.cmd").decode("utf-8")
+                self.assertIn("-File \"%~dp0uninstall.ps1\" %*", uninstall_cmd)
+                uninstall_ps1 = installer_zip.read("bin/uninstall.ps1").decode("utf-8")
+                self.assertIn("Copy-AppBuilderPostUninstallEntrypoints", uninstall_ps1)
+                self.assertIn("Remove-AppBuilderInstallDirectory", uninstall_ps1)
+                self.assertIn("Continue uninstalling", uninstall_ps1)
+                self.assertNotIn("Start-AppBuilderDirectoryCleanup", uninstall_ps1)
 
     def test_manifest_embedding_rewrites_apostrophes_in_generated_scripts(
         self,
@@ -285,14 +383,16 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             )
 
             with ZipFile(installer) as installer_zip:
-                install_cmd = installer_zip.read("install.cmd").decode("utf-8")
-                uninstall_cmd = installer_zip.read("uninstall.cmd").decode("utf-8")
+                install_ps1 = installer_zip.read("bin/install.ps1").decode("utf-8")
+                uninstall_ps1 = installer_zip.read("bin/uninstall.ps1").decode(
+                    "utf-8"
+                )
 
-        self.assertIn("I\\u0027m Demo", install_cmd)
-        self.assertIn("it\\u0027s ok", install_cmd)
-        self.assertNotIn("I'm Demo", install_cmd)
-        self.assertNotIn("it's ok", install_cmd)
-        self.assertIn("I\\u0027m Demo", uninstall_cmd)
+        self.assertIn("I\\u0027m Demo", install_ps1)
+        self.assertIn("it\\u0027s ok", install_ps1)
+        self.assertNotIn("I'm Demo", install_ps1)
+        self.assertNotIn("it's ok", install_ps1)
+        self.assertNotIn("I\\u0027m Demo", uninstall_ps1)
 
     def test_installer_can_include_extra_top_layer_files(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
@@ -375,8 +475,9 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
 
             with ZipFile(installer) as installer_zip:
                 self.assertNotIn("uninstall.cmd", installer_zip.namelist())
-                self.assertNotIn("uninstall.ps1", installer_zip.namelist())
-                self.assertNotIn("install.ps1", installer_zip.namelist())
+                self.assertNotIn("bin/uninstall.cmd", installer_zip.namelist())
+                self.assertNotIn("bin/uninstall.ps1", installer_zip.namelist())
+                self.assertIn("bin/install.ps1", installer_zip.namelist())
 
     @unittest.skipIf(os.name != "nt", "generated installer scripts target Windows")
     def test_generated_scripts_install_and_uninstall_payload_on_windows(self) -> None:
@@ -451,6 +552,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                     "/C",
                     "call",
                     str(extraction_dir / "install.cmd"),
+                    "--yes",
                 ],
                 check=True,
                 env=env,
@@ -460,11 +562,19 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 "post-install",
                 (install_dir / "post-install.txt").read_text(encoding="utf-8").strip(),
             )
-            self.assertTrue((install_dir / "uninstall.cmd").exists())
+            self.assertTrue((install_dir / "bin" / "uninstall.cmd").exists())
+            self.assertTrue((install_dir / "bin" / "uninstall.ps1").exists())
             self.assertTrue((install_dir / "app-builder-manifest.json").exists())
 
             subprocess.run(
-                ["cmd.exe", "/D", "/C", "call", str(install_dir / "uninstall.cmd")],
+                [
+                    "cmd.exe",
+                    "/D",
+                    "/C",
+                    "call",
+                    str(install_dir / "bin" / "uninstall.cmd"),
+                    "--yes",
+                ],
                 check=True,
                 env=env,
             )
@@ -542,6 +652,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                     "/C",
                     "call",
                     str(extraction_dir / "install.cmd"),
+                    "--yes",
                 ],
                 capture_output=True,
                 text=True,
@@ -561,7 +672,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             self.assertFalse((install_dir / "hello.cmd").exists())
 
     @unittest.skipIf(os.name != "nt", "generated installer scripts target Windows")
-    def test_installer_adopts_legacy_directory_by_uninstall_contract(self) -> None:
+    def test_installer_adopts_legacy_directory_with_old_display_name(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
             payload = temp_dir / "demo.zip"
@@ -576,11 +687,11 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             extraction_dir.mkdir()
             (install_dir / "bin").mkdir(parents=True)
             (install_dir / "scripts").mkdir()
-            (install_dir / "bin" / "Uninstall Demo.bat").write_text(
+            (install_dir / "bin" / "Uninstall App Builder.bat").write_text(
                 "@echo off\nexit /b 0\n",
                 encoding="utf-8",
             )
-            (install_dir / "Uninstall Demo.lnk").write_text(
+            (install_dir / "Uninstall App Builder.lnk").write_text(
                 "legacy shortcut marker",
                 encoding="utf-8",
             )
@@ -594,7 +705,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             manifest.write_text(
                 json.dumps(
                     {
-                        "name": "Demo",
+                        "name": "app-builder",
                         "version": "1.0",
                         "install_directory": str(install_dir),
                         "payload_archive": payload.name,
@@ -630,6 +741,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                     "/C",
                     "call",
                     str(extraction_dir / "install.cmd"),
+                    "--yes",
                 ],
                 check=True,
                 env=env,
@@ -700,7 +812,14 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             with ZipFile(first_installer) as installer_zip:
                 installer_zip.extractall(first_extraction)
             subprocess.run(
-                ["cmd.exe", "/D", "/C", "call", str(first_extraction / "install.cmd")],
+                [
+                    "cmd.exe",
+                    "/D",
+                    "/C",
+                    "call",
+                    str(first_extraction / "install.cmd"),
+                    "--yes",
+                ],
                 check=True,
                 env=env,
             )
@@ -748,6 +867,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                     "/C",
                     "call",
                     str(second_extraction / "install.cmd"),
+                    "--yes",
                 ],
                 check=True,
                 env=env,

@@ -62,7 +62,7 @@ class InstallHooks:
 class BootstrapHooks:
     pre_extract: list[HookCommand] = config_field(
         default_factory=list,
-        description="Argv commands injected into the ExeWrap PowerShell bootstrap before the installer extracts its top layer. These commands cannot use payload files, install.cmd, uninstall.cmd, or bundled top-layer tools because none have been extracted yet.",
+        description="Argv commands run before the installer extracts its top layer. These commands cannot use payload files, installer scripts, or bundled top-layer tools because none have been extracted yet.",
     )
 
 
@@ -110,12 +110,12 @@ class InstallerOptions:
         example="MyApp",
     )
     install_directory: str = config_field(
-        description="Windows install directory. Percent-style environment variables are expanded at build time.",
+        description="Windows install directory. Use percent-style environment variables such as %localappdata% when the path must resolve on the user's machine; generated installer scripts expand them at install time.",
         example=r"%localappdata%\MyCompany\MyApp",
     )
     icon: str = config_field(
         default="application-templates/icon.ico",
-        description="Project-relative .ico file embedded into generated ExeWrap executables and used for Start Menu shortcuts when a shortcut does not specify its own icon.",
+        description="Project-relative .ico file used for generated executables and Start Menu shortcuts when a shortcut does not specify its own icon.",
         example="application-templates/icon.ico",
     )
     payload_format: str = config_field(
@@ -125,7 +125,7 @@ class InstallerOptions:
     )
     pause_on_exit: bool = config_field(
         default=True,
-        description="Whether generated installer scripts should pause before exiting.",
+        description="Whether generated installer scripts should wait briefly before exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait, while --no-wait skips only the wait.",
         example=True,
     )
     add_uninstaller: bool = config_field(
@@ -146,7 +146,7 @@ class InstallerOptions:
     )
     bootstrap_hooks: BootstrapHooks = config_field(
         default_factory=BootstrapHooks,
-        description="Early ExeWrap bootstrap hook command declarations.",
+        description="Early installer hook command declarations.",
     )
     install_hooks: InstallHooks = config_field(
         default_factory=InstallHooks,

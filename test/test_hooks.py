@@ -37,7 +37,7 @@ class TestHookCommandExecution(unittest.TestCase):
         self.assertEqual("1", kwargs["env"]["CUSTOM"])
         self.assertTrue(kwargs["check"])
 
-    def test_python_file_hook_requires_project_owned_python(self) -> None:
+    def test_python_file_hook_requires_configured_project_python(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             project_root = Path(temp_dir_str)
             script = project_root / "hook.py"
@@ -45,7 +45,7 @@ class TestHookCommandExecution(unittest.TestCase):
             missing_python = project_root / "venv" / "Scripts" / "python.exe"
 
             with patch("app_builder.hooks.subprocess.run") as subprocess_run:
-                with self.assertRaisesRegex(RuntimeError, "project-owned Python"):
+                with self.assertRaisesRegex(RuntimeError, "Python runtime configured"):
                     run_hook_commands(
                         project_root,
                         [["hook.py"]],

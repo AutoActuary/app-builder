@@ -13,5 +13,14 @@ The files were carried forward from the app-builder `0.x` branch:
 They are included in generated installer top layers only for 7z payload
 installers. ZIP payload installers do not carry these files.
 
+The 7z path is expected to preserve the app-builder installer contract:
+
+- remapped files are staged under their final archive names;
+- files that 7z cannot read directly because Windows has them locked are copied
+  to temp first;
+- routine 7-Zip banner, progress, and success noise is filtered while failures
+  remain visible.
+
 7-Zip is distributed under the 7-Zip license. If these binaries are replaced,
-record the source version, hashes, and run the 7z asset and installer tests.
+record the source version, hashes, and run the 7z asset, remap, locked-file,
+and installer tests.

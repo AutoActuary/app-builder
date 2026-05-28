@@ -1,78 +1,84 @@
 # app-builder
 
-`app-builder` is the 1.x rewrite of the old AutoActuary packaging tool: schema-first, Python-focused, and much less willing to hide build behavior in legacy magic.
+`app-builder` packages Windows-first applications from `app_builder.yaml`. It prepares configured Python runtimes, runs explicit hooks, builds a payload archive, creates an installer, writes an uninstaller, and can publish the resulting artifacts with GitHub CLI.
 
-## Current direction
+Full user help is available in [docs/app-builder-help.html](docs/app-builder-help.html). `app-builder --help` prints a link to that same file.
 
-- `app_builder.yaml` is the source of truth.
-- `app_builder_version` is read by a tiny meta CLI before the full app-builder package is imported. Missing, blank, or `current` runs the installed 1.x module; explicit 1.x refs are resolved through the managed version cache.
-- Legacy 0.x usage is explicit: run `app-builder 0.x <command>`. A legacy `application.yaml` produces repair instructions instead of silently dispatching old code.
-- The config model lives in code as plain dataclasses and can be loaded without `pydantic`.
-- Optional `pydantic` adapters exist for richer schema tooling when that dependency is present.
-- The release flow is explicit: build hooks, optional NuGet-sourced Python, optional Autory-style venv, payload packaging, ExeWrap-backed installer exe creation, and optional GitHub release upload.
-- Python dependencies are declared in `pyproject.toml` and resolved by Poetry; `app_builder.yaml` no longer carries pip requirement lists.
-- `python_venv` can stand alone: when `python_bundled` is disabled, app-builder materializes a self-contained NuGet Python under `venv/python` and ExeWrap-backed `venv/Scripts/python.exe` shims.
-- Automatic `.py` hook dispatch uses only project-owned Python from `python_bundled` or `python_venv`; app-builder does not assume system Python exists on the developer or user machine. Use an explicit argv such as `[python, script.py]` only when that assumption is intentional.
-- Release builds now emit a first-layer ExeWrap installer `.exe` with a stored ZIP payload appended after the ExeWrap config end marker. The vendored launcher carries an `asInvoker` manifest so Windows does not apply filename-based installer elevation heuristics. The bootstrap command uses PowerShell to extract itself with `tar.exe` into a random temp directory, run `install.cmd`, and clean up in `finally`; the generated installer then installs the payload into the configured install directory and writes an uninstall path when enabled.
-- `installer.icon` is the single icon field: app-builder embeds it into generated ExeWrap `.exe` files and also uses it as the default Start Menu shortcut icon.
-- `installer.payload_format` selects the inner payload archive. `zip` is the default; `7z` uses the vendored 7-Zip runtime, stages remapped and Windows-locked files safely, suppresses routine 7z noise, and includes `bin/7z.exe`/`bin/7z.dll` in the installer top layer for user-side extraction.
-- First-class `bin/...` runtime/tool features are retired except for Python. Use explicit hooks for project-specific tools or setup outside the Python runtime path.
-- `release-gh` uses GitHub CLI (`gh.exe`) for GitHub Releases. app-builder searches PATH, `where.exe` results, and common GitHub CLI install locations; if it still cannot find `gh.exe`, install it with `winget install --id GitHub.cli` and authenticate with `gh auth login`.
-- Config string values support `${...}` interpolation before schema validation. Supported namespaces are `ENV.*`, `GIT.*`, `APP.VERSION`, and `CONFIG.*`; interpolation is string-only and fails loudly for missing values, circular `CONFIG.*` references, or references to lists and mappings.
+## Quick Start
 
-## Commands
-
-Install the module in editable form while developing:
+Install app-builder while developing:
 
 ```text
 python -m pip install -e .
 ```
 
+Create starter config inside a git repository:
+
 ```text
 app-builder init
+```
+
+Edit `app_builder.yaml`, then build a local installer:
+
+```text
+app-builder release --version 0.1.0
+```
+
+Publish the same artifacts to GitHub Releases:
+
+```text
+app-builder release-gh --version 0.1.0 --draft
+```
+
+## Commands
+
+```text
+app-builder --help
+app-builder init [--force]
 app-builder python
 app-builder deps
 app-builder release [--version <version>]
-app-builder release-gh [--version <version>] [--draft]
+app-builder release-gh [--version <version>] [--draft | --no-draft]
 app-builder 0.x <legacy-command>
 ```
 
-## Template
+## Documentation
 
-Run `app-builder init` inside a git repository to generate:
+- [docs/app-builder-help.html](docs/app-builder-help.html): practical user guide.
+- [docs/configuration.md](docs/configuration.md): generated config reference.
+- [docs/release-pipeline.md](docs/release-pipeline.md): detailed release lifecycle and installer behavior.
+- [app_builder/assets/app_builder_template.yaml](app_builder/assets/app_builder_template.yaml): the config template used by `app-builder init`.
 
-- `app_builder.yaml`
-- `application-templates/icon.ico`
-- `application-templates/program.cmd`
+README is intentionally short. The release pipeline document exists separately because it is the lifecycle reference; it answers "what happens during a build/install/release?" without making the front page carry every implementation detail.
 
-The generated YAML file is intentionally heavily commented and is meant to double as real config, template, and documentation base.
-It is rendered from the same dataclass metadata as the [configuration reference](docs/configuration.md), and the packaged YAML snapshot is tested for drift.
+## Config Notes
 
-The release pipeline, including config interpolation, icon embedding, ZIP and 7z payloads, and GitHub release artifact selection, is documented in [docs/release-pipeline.md](docs/release-pipeline.md).
+`app_builder.yaml` is strict: unknown keys are rejected, old `application.yaml` shapes are rejected, and hooks are argv lists.
 
-## Config interpolation
-
-Use `${...}` inside YAML strings when config should be derived from the environment, git, the active release version, or another config string:
+Use `%localappdata%`, `%appdata%`, and other percent-style Windows variables for install paths that must resolve on the end user's machine:
 
 ```yaml
-app_builder_version: current
 installer:
   name: "MyApp ${APP.VERSION}"
-  install_directory: '${ENV.LOCALAPPDATA}\Acme\${CONFIG.installer.name}'
-  paths:
-    include:
-      - "build/${APP.VERSION}"
-    remap:
-      - [README.md, "docs/${CONFIG.installer.name}.md"]
+  install_directory: '%localappdata%\Acme\${CONFIG.installer.name}'
 ```
 
-Available values are `ENV.NAME`, `GIT.DESCRIBE`, `GIT.COMMIT`, `GIT.SHORT_COMMIT`, `GIT.BRANCH`, `GIT.TAG`, `GIT.IS_DIRTY`, `APP.VERSION`, and `CONFIG.path.to.value`.
+`${ENV.*}` is build-time interpolation. Use it only when you intentionally want the builder or CI environment baked into the config.
 
-`APP.VERSION` follows the release command's `--version` when supplied, otherwise it uses app-builder's git-based version detection. `CONFIG.*` resolves recursively, but the final target must be a string. Keep `app_builder_version` literal because the version dispatcher reads it from plain YAML before the full interpolation layer is loaded. For Windows paths, single-quoted YAML strings keep backslashes literal; double-quoted YAML strings need `\\`.
+## Installer Flags
+
+Generated install and uninstall scripts accept two runtime flags:
+
+- `--yes`: bypass confirmation questions and skip the final close wait.
+- `--no-wait`: skip only the final close wait.
+
+Without those flags, the scripts ask before mutating the target directory. When `installer.pause_on_exit` is true, the console closes after 30 seconds or when the user presses Enter.
 
 ## Testing
 
+Run tests against the `test` directory explicitly. A bare `python -m pytest` can wander into bundled compatibility dependencies.
+
 ```text
-python -m unittest discover -s test -v
-mypy --config-file mypy.ini
+python -m pytest test -q
+python -m mypy --config-file mypy.ini
 ```

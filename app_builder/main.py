@@ -11,7 +11,23 @@ from .python_runtime import ensure_bundled_python
 from .template import initialize_project
 
 
-@click.group(context_settings={"help_option_names": ["-h", "--help"]})
+def _help_html_url() -> str:
+    help_path = Path(__file__).resolve().parents[1] / "docs" / "app-builder-help.html"
+    return help_path.as_uri()
+
+
+class AppBuilderGroup(click.Group):
+    def format_help(
+        self, ctx: click.Context, formatter: click.HelpFormatter
+    ) -> None:
+        formatter.write(f"Full help: {_help_html_url()}\n\n")
+        super().format_help(ctx, formatter)
+
+
+@click.group(
+    cls=AppBuilderGroup,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
 @click.version_option(version=__version__, prog_name="app-builder")
 def main() -> None:
     """
