@@ -2,7 +2,7 @@
 
 `app-builder` packages Windows-first applications from `app_builder.yaml`. It prepares configured Python runtimes, runs explicit hooks, builds a payload archive, creates an installer, writes an uninstaller, and can publish the resulting artifacts with GitHub CLI.
 
-Full user help is available in [app-builder-help.html](app_builder/assets/app-builder-help.html). The same link is printed at the top of `app-builder --help`.
+Full user help is available in [docs/app-builder-help.html](docs/app-builder-help.html). The installed `app-builder --help` command prints a link to its packaged copy of the same file.
 
 ## Quick Start
 
@@ -44,12 +44,12 @@ app-builder 0.x <legacy-command>
 
 ## Documentation
 
-- [app-builder-help.html](app_builder/assets/app-builder-help.html): practical user guide.
+- [docs/app-builder-help.html](docs/app-builder-help.html): practical user guide.
 - [docs/configuration.md](docs/configuration.md): generated config reference.
 - [docs/release-pipeline.md](docs/release-pipeline.md): detailed release lifecycle and installer behavior.
 - [app_builder/assets/app_builder_template.yaml](app_builder/assets/app_builder_template.yaml): the config template used by `app-builder init`.
 
-README is intentionally short. The release pipeline document exists separately because it is the lifecycle reference; it answers “what happens during a build/install/release?” without making the front page carry every implementation detail.
+README is intentionally short. The release pipeline document exists separately because it is the lifecycle reference; it answers "what happens during a build/install/release?" without making the front page carry every implementation detail.
 
 ## Config Notes
 
