@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from app_builder import build as build_module
 from app_builder.config import load_project_config
 from app_builder.python_runtime import PythonEnvironmentResult, python_executable
+from app_builder.release_preflight import PublicationPreflightResult
 
 
 def _write_config(project_root: Path, build_hooks: str) -> None:
+    (project_root / "app.cmd").write_text("@echo off\n", encoding="utf-8")
     (project_root / "app_builder.yaml").write_text(
         f"""
 app_builder_version: v1.0.0
@@ -25,7 +28,7 @@ installer:
   install_directory: "%localappdata%\\\\Demo"
   dist: dist
   paths:
-    include: []
+    include: [app.cmd]
 build_hooks:
 {build_hooks}
 """.strip(),
@@ -58,27 +61,59 @@ class TestBuildHookPythonSelection(unittest.TestCase):
                 python_bundled=bundled_python,
                 python_venv=venv_python,
             )
+            events: list[str] = []
+            materializer = Mock()
+
+            def materialize_bundled() -> Path:
+                events.append("materialize-bundled")
+                return bundled_python
+
+            def materialize_venv() -> Path:
+                events.append("materialize-venv")
+                return venv_python
+
+            materializer.materialize_bundled.side_effect = materialize_bundled
+            materializer.materialize_venv.side_effect = materialize_venv
+            materializer.result.return_value = env_result
 
             with (
                 patch(
-                    "app_builder.build.materialize_python_environments",
-                    return_value=env_result,
+                    "app_builder.build.PythonEnvironmentMaterializer",
+                    return_value=materializer,
                 ),
-                patch("app_builder.build.run_hook_commands") as run_hooks,
+                patch(
+                    "app_builder.build.run_hook_commands",
+                    side_effect=lambda _root, commands, **_kwargs: events.append(
+                        commands[0][0]
+                    ),
+                ) as run_hooks,
             ):
                 self.assertEqual(
                     env_result, build_module._run_dependency_stages(project_root)
                 )
 
+        app_builder_python = Path(sys.executable).resolve()
         self.assertEqual(
             [
-                [venv_python, bundled_python],
-                [bundled_python, venv_python],
-                [bundled_python, venv_python],
-                [bundled_python, venv_python],
-                [venv_python, bundled_python],
+                [app_builder_python],
+                [app_builder_python],
+                [bundled_python, app_builder_python],
+                [bundled_python, app_builder_python],
+                [venv_python, bundled_python, app_builder_python],
             ],
             [call.kwargs["python_candidates"] for call in run_hooks.call_args_list],
+        )
+        self.assertEqual(
+            [
+                "pre-process",
+                "pre-bundled",
+                "materialize-bundled",
+                "post-bundled",
+                "pre-venv",
+                "materialize-venv",
+                "post-venv",
+            ],
+            events,
         )
         self.assertEqual(
             [
@@ -127,11 +162,15 @@ build_hooks:
                 python_bundled=None,
                 python_venv=venv_python,
             )
+            materializer = Mock()
+            materializer.materialize_bundled.return_value = None
+            materializer.materialize_venv.return_value = venv_python
+            materializer.result.return_value = env_result
 
             with (
                 patch(
-                    "app_builder.build.materialize_python_environments",
-                    return_value=env_result,
+                    "app_builder.build.PythonEnvironmentMaterializer",
+                    return_value=materializer,
                 ),
                 patch("app_builder.build.run_hook_commands") as run_hooks,
             ):
@@ -139,13 +178,14 @@ build_hooks:
                     env_result, build_module._run_dependency_stages(project_root)
                 )
 
+        app_builder_python = Path(sys.executable).resolve()
         self.assertEqual(
             [
-                [venv_python],
-                [venv_python],
-                [venv_python],
-                [venv_python],
-                [venv_python],
+                [app_builder_python],
+                [app_builder_python],
+                [app_builder_python],
+                [app_builder_python],
+                [venv_python, app_builder_python],
             ],
             [call.kwargs["python_candidates"] for call in run_hooks.call_args_list],
         )
@@ -160,8 +200,6 @@ build_hooks:
     - [pre-dist]
   post_dist:
     - [post-dist]
-  post_process:
-    - [post-process]
 """,
             )
             bundled_python = project_root / "bin" / "python" / "python" / "python.exe"
@@ -183,17 +221,18 @@ build_hooks:
         expected_candidates = [
             venv_python,
             bundled_python,
+            Path(sys.executable).resolve(),
         ]
         self.assertEqual(
-            [expected_candidates, expected_candidates, expected_candidates],
+            [expected_candidates, expected_candidates],
             [call.kwargs["python_candidates"] for call in run_hooks.call_args_list],
         )
         self.assertEqual(
-            [[["pre-dist"]], [["post-dist"]], [["post-process"]]],
+            [[["pre-dist"]], [["post-dist"]]],
             [call.args[1] for call in run_hooks.call_args_list],
         )
         self.assertEqual(
-            ["1.2.3", "1.2.3", "1.2.3"],
+            ["1.2.3", "1.2.3"],
             [
                 call.kwargs["environment"]["app_builder_version"]
                 for call in run_hooks.call_args_list
@@ -214,6 +253,7 @@ build_hooks:
             [
                 python_executable(project_root / "venv"),
                 project_root / "bin" / "python" / "python" / "python.exe",
+                Path(sys.executable).resolve(),
             ],
             candidates,
         )
@@ -237,6 +277,8 @@ build_hooks:
             payload_archive = dist_dir / "demo-1.2.3.zip"
             installer_archive = dist_dir / "demo-1.2.3-installer.exe"
             manifest_path = dist_dir / "demo-1.2.3-manifest.json"
+            checksums_path = dist_dir / "demo-1.2.3-SHA256SUMS.txt"
+            release_notes_path = dist_dir / "demo-1.2.3-release-notes.md"
             payload_archive.write_bytes(b"payload")
             installer_archive.write_bytes(b"installer")
             manifest_path.write_text('{"name": "Demo"}', encoding="utf-8")
@@ -245,6 +287,8 @@ build_hooks:
                 payload_archive=payload_archive,
                 installer_archive=installer_archive,
                 manifest_path=manifest_path,
+                checksums_path=checksums_path,
+                release_notes_path=release_notes_path,
             )
             gh_calls: list[list[str]] = []
             view_count = 0
@@ -261,6 +305,21 @@ build_hooks:
                 self.assertTrue(capture_output)
                 self.assertTrue(text)
                 gh_calls.append(args)
+                if args[1:3] == ["auth", "status"]:
+                    return subprocess.CompletedProcess(
+                        args=args, returncode=0, stdout="", stderr=""
+                    )
+                if args[1:3] == ["repo", "view"]:
+                    return subprocess.CompletedProcess(
+                        args=args,
+                        returncode=0,
+                        stdout="AutoActuary/demo\n",
+                        stderr="",
+                    )
+                if args[1] == "api":
+                    return subprocess.CompletedProcess(
+                        args=args, returncode=1, stdout="", stderr="HTTP 404"
+                    )
                 if args[1:3] == ["release", "view"]:
                     view_count += 1
                     if view_count == 1:
@@ -288,6 +347,13 @@ build_hooks:
                 patch(
                     "app_builder.build._resolve_github_cli", return_value=gh_executable
                 ),
+                patch(
+                    "app_builder.build.run_publication_preflight",
+                    return_value=PublicationPreflightResult(
+                        head_commit="a" * 40,
+                        origin_url="https://github.com/AutoActuary/demo.git",
+                    ),
+                ),
                 patch("app_builder.build.subprocess.run", side_effect=fake_run),
                 patch("app_builder.build.run_hook_commands") as run_hooks,
             ):
@@ -309,13 +375,18 @@ build_hooks:
                 for call in run_hooks.call_args_list
             ],
         )
-        create_call = gh_calls[1]
+        create_call = next(
+            call for call in gh_calls if call[1:3] == ["release", "create"]
+        )
         self.assertEqual([gh_executable, "release", "create", "1.2.3"], create_call[:4])
         self.assertIn(str(payload_archive), create_call)
         self.assertIn(str(installer_archive), create_call)
         self.assertIn(str(manifest_path), create_call)
+        self.assertIn(str(checksums_path), create_call)
+        self.assertIn(str(release_notes_path), create_call)
+        self.assertIn("a" * 40, create_call)
         self.assertIn("--draft", create_call)
-        self.assertEqual(
+        self.assertIn(
             [
                 gh_executable,
                 "release",
@@ -326,7 +397,7 @@ build_hooks:
                 "--jq",
                 ".url",
             ],
-            gh_calls[2],
+            gh_calls,
         )
 
     def test_github_release_requires_gh_cli(self) -> None:
@@ -338,6 +409,8 @@ build_hooks:
                 payload_archive=project_root / "payload.zip",
                 installer_archive=project_root / "installer.exe",
                 manifest_path=project_root / "manifest.json",
+                checksums_path=project_root / "checksums.txt",
+                release_notes_path=project_root / "release-notes.md",
             )
 
             with (
@@ -352,6 +425,90 @@ build_hooks:
                     build_module.upload_release_to_github(
                         project_root, release=release, draft=False
                     )
+
+    def test_existing_github_release_reconciles_notes_and_stale_assets(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            _write_config(project_root, "  pre_github_release: []")
+            dist_dir = project_root / "dist"
+            dist_dir.mkdir()
+            paths = {
+                "payload": dist_dir / "demo-1.2.3.zip",
+                "installer": dist_dir / "demo-1.2.3-installer.exe",
+                "manifest": dist_dir / "demo-1.2.3-manifest.json",
+                "checksums": dist_dir / "demo-1.2.3-SHA256SUMS.txt",
+                "notes": dist_dir / "demo-1.2.3-release-notes.md",
+            }
+            for path in paths.values():
+                path.write_text(path.name, encoding="utf-8")
+            release = build_module.ReleaseResult(
+                version="1.2.3",
+                payload_archive=paths["payload"],
+                installer_archive=paths["installer"],
+                manifest_path=paths["manifest"],
+                checksums_path=paths["checksums"],
+                release_notes_path=paths["notes"],
+            )
+            gh_calls: list[list[str]] = []
+
+            def fake_run(
+                args: list[str],
+                *,
+                cwd: Path,
+                capture_output: bool,
+                text: bool,
+            ) -> subprocess.CompletedProcess[str]:
+                gh_calls.append(args)
+                if args[1:3] == ["repo", "view"]:
+                    stdout = "AutoActuary/demo\n"
+                elif args[1] == "api":
+                    stdout = '{"object":{"type":"commit","sha":"' + ("b" * 40) + '"}}'
+                elif args[1:3] == ["release", "view"]:
+                    stdout = (
+                        '{"url":"https://github.example/releases/1.2.3",'
+                        '"assets":[{"name":"demo-1.2.3.zip"},'
+                        '{"name":"obsolete.zip"}]}'
+                    )
+                else:
+                    stdout = ""
+                return subprocess.CompletedProcess(
+                    args=args, returncode=0, stdout=stdout, stderr=""
+                )
+
+            with (
+                patch("app_builder.build._resolve_github_cli", return_value="gh.exe"),
+                patch(
+                    "app_builder.build.run_publication_preflight",
+                    return_value=PublicationPreflightResult(
+                        head_commit="b" * 40,
+                        origin_url="https://github.example/demo.git",
+                    ),
+                ),
+                patch("app_builder.build.subprocess.run", side_effect=fake_run),
+                patch("app_builder.build.run_hook_commands"),
+            ):
+                url = build_module.upload_release_to_github(
+                    project_root, release=release, draft=False
+                )
+
+        self.assertEqual("https://github.example/releases/1.2.3", url)
+        self.assertIn(
+            [
+                "gh.exe",
+                "release",
+                "delete-asset",
+                "1.2.3",
+                "obsolete.zip",
+                "--yes",
+            ],
+            gh_calls,
+        )
+        upload_call = next(
+            call for call in gh_calls if call[1:3] == ["release", "upload"]
+        )
+        self.assertIn(str(paths["checksums"]), upload_call)
+        edit_call = next(call for call in gh_calls if call[1:3] == ["release", "edit"])
+        self.assertIn(str(paths["notes"]), edit_call)
 
     def test_github_cli_resolver_uses_known_locations(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
@@ -368,6 +525,26 @@ build_hooks:
                 ),
             ):
                 self.assertEqual(str(gh_executable), build_module._resolve_github_cli())
+
+    def test_github_tag_preflight_rejects_different_commit(self) -> None:
+        response = subprocess.CompletedProcess(
+            args=["gh.exe", "api"],
+            returncode=0,
+            stdout='{"object":{"type":"commit","sha":"' + ("c" * 40) + '"}}',
+            stderr="",
+        )
+        with (
+            TemporaryDirectory() as temp_dir_str,
+            patch("app_builder.build._run_gh", return_value=response),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "tag.*not HEAD"):
+                build_module._validate_github_tag_target(
+                    Path(temp_dir_str),
+                    "gh.exe",
+                    repository="AutoActuary/demo",
+                    version="1.2.3",
+                    head_commit="b" * 40,
+                )
 
 
 if __name__ == "__main__":

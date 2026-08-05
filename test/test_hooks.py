@@ -45,7 +45,9 @@ class TestHookCommandExecution(unittest.TestCase):
             missing_python = project_root / "venv" / "Scripts" / "python.exe"
 
             with patch("app_builder.hooks.subprocess.run") as subprocess_run:
-                with self.assertRaisesRegex(RuntimeError, "Python runtime configured"):
+                with self.assertRaisesRegex(
+                    RuntimeError, "available at this hook stage"
+                ):
                     run_hook_commands(
                         project_root,
                         [["hook.py"]],

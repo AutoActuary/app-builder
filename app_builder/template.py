@@ -28,13 +28,14 @@ def render_config_template_yaml() -> str:
     lines = [
         "# app_builder.yaml",
         "# Generated from app_builder.schema metadata.",
-        "# Required and common optional fields contain examples; replace them for your app.",
+        "# Every supported config key is shown. Replace the starter values for your app.",
+        "# Empty lists are safe defaults; comments identify structured item fields.",
         "# String values can reference ${ENV.NAME}, ${GIT.DESCRIBE}, ${GIT.COMMIT},",
         "# ${GIT.SHORT_COMMIT}, ${GIT.BRANCH}, ${GIT.TAG}, ${GIT.IS_DIRTY},",
         "# ${APP.VERSION}, and ${CONFIG.path.to.value}.",
         "# Interpolation is string-only and runs before schema validation.",
-        "# Keep app_builder_version literal; the version dispatcher reads it before",
-        "# the full 1.x config interpolation layer is loaded.",
+        "# Keep app_builder_version literal; app-builder reads it before config",
+        "# interpolation is available.",
     ]
     _emit_dataclass_yaml(AppBuilderConfig, values, lines, indent=0)
     return _finish_text(lines)
@@ -58,7 +59,8 @@ def render_config_reference_markdown() -> str:
         "",
         "This is the full generated template. Required fields contain example "
         "values that you must replace for your app. Optional fields show their "
-        "defaults or empty lists.",
+        "defaults or empty lists. For an empty list of mappings, the adjacent "
+        "comment lists every supported item field.",
         "",
         "```yaml",
         render_config_template_yaml().rstrip(),
@@ -105,15 +107,15 @@ def render_config_reference_markdown() -> str:
         "path, but the final target must be a string. |",
         "",
         "`app_builder_version` is the exception to the usual interpolation "
-        "surface. The command dispatcher reads that selector from plain YAML "
-        "before importing the full 1.x app-builder package, so keep it literal "
+        "surface. app-builder reads that selector from plain YAML before config "
+        "interpolation is available, so keep it literal "
         "(`current`, a branch, a tag, or a commit).",
         "",
         "For Windows paths, single-quoted YAML strings are usually easiest "
         "because backslashes stay literal. If you use double-quoted YAML strings "
         "for Windows paths, write backslashes as `\\\\`.",
         "",
-        "Use percent-style Windows variables such as `%localappdata%` for "
+        "Use `%LOCALAPPDATA%`, `%APPDATA%`, or `%USERPROFILE%` for variable-root "
         "install paths that must resolve on the user's machine. `${ENV.*}` is "
         "resolved while building the release, so it bakes in the builder or CI "
         "environment.",
@@ -141,12 +143,10 @@ def render_config_reference_markdown() -> str:
             "Use an explicit shell argv, such as `[cmd, /c, ...]`, when shell "
             "behavior is required.",
             "",
-            "When a hook command's `argv[0]` is a `.py` file, app-builder runs it "
-            "with the Python runtime configured for the project, preferring "
-            "`python_venv` and then `python_bundled`. That means a hook such as "
-            "`[scripts/build.py]` does not need `python.exe` on PATH. Use an "
-            "explicit argv such as `[python, script.py]` only when the target "
-            "machine is expected to provide Python.",
+            "Automatic `.py` entrypoint dispatch is stage-aware. See "
+            "[Hook Python dispatch](app-builder-help.html#hook-python) for the "
+            "interpreter used at each lifecycle point. An explicit argv such as "
+            "`[python, script.py]` deliberately uses the machine's PATH.",
             "",
         ]
     )
@@ -175,7 +175,9 @@ def render_help_config_reference_html() -> str:
         "        <h3>Complete app_builder.yaml Template</h3>",
         "        <p>",
         "          This is the full generated template. Required fields contain example values that you must replace",
-        "          for your app. Optional fields show their defaults or empty lists.",
+        "          for your app. Optional fields show their defaults or empty lists. For an empty list of mappings,",
+        "          the adjacent comment lists every supported item field. Every hook key is shown; an empty list means",
+        "          that no commands run at that lifecycle point.",
         "        </p>",
         f"        <pre><code>{template}</code></pre>",
         "        <h3>How To Read The Reference</h3>",
@@ -207,11 +209,9 @@ def render_help_config_reference_html() -> str:
             "          required.",
             "        </p>",
             "        <p>",
-            "          When a hook command starts with an existing <code>.py</code> file, app-builder runs it with",
-            "          the Python runtime configured for the project, preferring <code>python_venv</code> and then",
-            "          <code>python_bundled</code>. A hook such as <code>[scripts/build.py]</code> does not need",
-            "          <code>python.exe</code> on PATH. Use <code>[python, scripts/build.py]</code> only when",
-            "          you deliberately want the machine's own <code>python</code>.",
+            "          Automatic <code>.py</code> entrypoint dispatch depends on the hook stage. See",
+            '          <a href="#hook-python">Hook Python dispatch</a> for the authoritative interpreter order.',
+            "          An explicit command such as <code>[python, scripts/build.py]</code> deliberately uses PATH.",
             "        </p>",
             "      </section>",
         ]
@@ -290,6 +290,8 @@ def _emit_list_of_dataclass_values(
     prefix = " " * indent
     if not values:
         lines.append(f"{prefix}{name}: []")
+        item_fields = ", ".join(field_.name for field_ in fields(item_type))
+        _append_comment(lines, f"Item fields: {item_fields}.", indent)
         return
     lines.append(f"{prefix}{name}:")
     for item in values:

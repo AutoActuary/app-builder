@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 import os
 import tempfile
 import unittest
@@ -13,8 +15,9 @@ from click.testing import CliRunner
 from app_builder.main import main
 from app_builder.poetry_dependencies import DEV_GROUP, MAIN_GROUP, PoetryLock
 from app_builder.python_runtime import (
-    ExeWrapPackage,
+    EXE_WRAP_VERSION,
     NuGetPythonPackage,
+    PythonEnvironmentMaterializer,
     PythonVersionNotFoundError,
     _copy_bundled_runtime_support,
     _create_self_contained_venv,
@@ -22,13 +25,16 @@ from app_builder.python_runtime import (
     _exe_wrap_launcher_matches,
     _exe_wrap_python_config,
     _extract_nuget_python_package,
+    _EXE_WRAP_DIGESTS,
+    _EXE_WRAP_SOURCE_MARKER,
     _install_exe_wrap_python_launchers,
     _matches_version_pattern,
+    _load_nuget_python_digest,
     _nuget_source_marker_matches,
     _nuget_python_download_url,
     _read_base_site_packages,
     _select_nuget_python_version,
-    _select_exe_wrap_package,
+    _resolve_exe_wrap_package,
     _self_contained_venv_matches,
     _self_contained_venv_python_executable,
     _venv_matches_bundled_python,
@@ -37,6 +43,8 @@ from app_builder.python_runtime import (
     ensure_python_environments,
 )
 from app_builder.schema import PythonVenvOptions
+
+_TEST_NUGET_DIGEST = "sha512:" + "0" * 128
 
 
 def _nuget_payload_member(relative_path: str) -> str:
@@ -50,6 +58,25 @@ def _write_fake_exe_wrap_package(package_path: Path) -> None:
 
 
 class TestNuGetPythonSelection(unittest.TestCase):
+    @patch("app_builder.python_runtime._load_nuget_json")
+    def test_reads_sha512_digest_from_registration_catalog_metadata(
+        self, load_json: object
+    ) -> None:
+        digest_bytes = bytes(range(64))
+        assert hasattr(load_json, "side_effect")
+        load_json.side_effect = [
+            {"catalogEntry": "https://api.nuget.org/catalog/python.json"},
+            {
+                "packageHashAlgorithm": "SHA512",
+                "packageHash": base64.b64encode(digest_bytes).decode("ascii"),
+            },
+        ]
+
+        self.assertEqual(
+            "sha512:" + digest_bytes.hex(),
+            _load_nuget_python_digest("3.12.10"),
+        )
+
     def test_matches_prefix_and_wildcard_versions(self) -> None:
         self.assertTrue(_matches_version_pattern("3.12", "3.12.10"))
         self.assertTrue(_matches_version_pattern("3.12.*", "3.12.10"))
@@ -108,6 +135,7 @@ class TestNuGetPythonExtraction(unittest.TestCase):
                 NuGetPythonPackage(
                     version="3.12.10",
                     download_url=_nuget_python_download_url("3.12.10"),
+                    digest=_TEST_NUGET_DIGEST,
                 ),
             )
 
@@ -156,32 +184,18 @@ class TestNuGetPythonExtraction(unittest.TestCase):
 
 
 class TestExeWrapPythonLaunchers(unittest.TestCase):
-    def test_selects_exe_wrap_release_asset_for_platform(self) -> None:
-        package = _select_exe_wrap_package(
-            {
-                "tag_name": "v1.1.0",
-                "assets": [
-                    {
-                        "name": "ExeWrap-v1.1.0-windows-x86.zip",
-                        "browser_download_url": "https://example.invalid/x86.zip",
-                    },
-                    {
-                        "name": "ExeWrap-v1.1.0-windows-x64.zip",
-                        "browser_download_url": "https://example.invalid/x64.zip",
-                        "digest": "sha256:abc123",
-                    },
-                ],
-            },
-            "windows-x64",
-        )
+    @patch(
+        "app_builder.python_runtime._exe_wrap_platform_tag",
+        return_value="windows-x64",
+    )
+    def test_resolves_pinned_exe_wrap_release_asset(self, _platform: object) -> None:
+        package = _resolve_exe_wrap_package()
 
+        self.assertEqual("ExeWrap-v2.1.0-windows-x64.zip", package.asset_name)
+        self.assertIn("/releases/download/v2.1.0/", package.download_url)
         self.assertEqual(
-            ExeWrapPackage(
-                asset_name="ExeWrap-v1.1.0-windows-x64.zip",
-                download_url="https://example.invalid/x64.zip",
-                digest="sha256:abc123",
-            ),
-            package,
+            "sha256:42c64c90d6620d4942b88e56b615679a8667eaa64902444aa7b21769998936cb",
+            package.digest,
         )
 
     def test_stamps_scripts_python_launchers_with_venv_python_targets(self) -> None:
@@ -238,6 +252,59 @@ class TestBundledPythonCli(unittest.TestCase):
 
 
 class TestPoetryDependencyPlacement(unittest.TestCase):
+    def test_materializer_exposes_real_bundled_and_venv_boundaries(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            (project_root / "app_builder.yaml").write_text(
+                """
+python_bundled:
+  path: bin/python
+python_venv:
+  path: venv
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+""".strip(),
+                encoding="utf-8",
+            )
+            bundled_python = project_root / "bin" / "python" / "python" / "python.exe"
+            venv_python = project_root / "venv" / "Scripts" / "python.exe"
+
+            with (
+                patch(
+                    "app_builder.python_runtime.ensure_poetry_lock",
+                    return_value=PoetryLock(packages=()),
+                ),
+                patch(
+                    "app_builder.python_runtime._ensure_bundled_python",
+                    return_value=bundled_python,
+                ) as ensure_bundled,
+                patch(
+                    "app_builder.python_runtime._create_venv_from_bundled_python",
+                    return_value=venv_python,
+                ) as create_venv,
+                patch("app_builder.python_runtime.install_locked_poetry_dependencies"),
+            ):
+                materializer = PythonEnvironmentMaterializer(project_root)
+
+                self.assertEqual(
+                    bundled_python,
+                    materializer.materialize_bundled(),
+                )
+                ensure_bundled.assert_called_once()
+                create_venv.assert_not_called()
+
+                self.assertEqual(venv_python, materializer.materialize_venv())
+                create_venv.assert_called_once_with(
+                    project_root / "venv",
+                    project_root / "bin" / "python",
+                )
+
+                result = materializer.result()
+
+        self.assertEqual(bundled_python, result.python_bundled)
+        self.assertEqual(venv_python, result.python_venv)
+
     def test_main_group_installs_to_bundled_python_and_dev_group_to_venv(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             project_root = Path(temp_dir_str)
@@ -367,6 +434,7 @@ class TestSelfContainedVenvSupport(unittest.TestCase):
                     return_value=NuGetPythonPackage(
                         version="3.12.10",
                         download_url="https://example.invalid/python.3.12.10.nupkg",
+                        digest=_TEST_NUGET_DIGEST,
                     ),
                 ),
                 patch(
@@ -426,6 +494,7 @@ class TestSelfContainedVenvSupport(unittest.TestCase):
                 NuGetPythonPackage(
                     version="3.12.10",
                     download_url="https://example.invalid/python.3.12.10.nupkg",
+                    digest=_TEST_NUGET_DIGEST,
                 ),
             )
             (venv_root / "Scripts" / "python.exe").write_bytes(
@@ -448,8 +517,25 @@ class TestSelfContainedVenvSupport(unittest.TestCase):
                 + b"8c0e8d4c-32af-4fd8-9c68-6a0f97efeb6a"
                 + _exe_wrap_python_config("pythonw.exe")
             )
+            platform_tag = "windows-x64"
+            (venv_root / _EXE_WRAP_SOURCE_MARKER).write_text(
+                json.dumps(
+                    {
+                        "version": EXE_WRAP_VERSION,
+                        "asset_name": f"ExeWrap-{EXE_WRAP_VERSION}-{platform_tag}.zip",
+                        "digest": _EXE_WRAP_DIGESTS[platform_tag],
+                    }
+                ),
+                encoding="utf-8",
+            )
 
-            with patch("app_builder.python_runtime._python_matches", return_value=True):
+            with (
+                patch("app_builder.python_runtime._python_matches", return_value=True),
+                patch(
+                    "app_builder.python_runtime._exe_wrap_platform_tag",
+                    return_value=platform_tag,
+                ),
+            ):
                 self.assertTrue(_self_contained_venv_matches(venv_root, "3.12"))
 
 

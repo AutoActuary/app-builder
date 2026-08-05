@@ -158,7 +158,7 @@
       <h1>app-builder Help</h1>
       <a href="#overview">Overview</a>
       <a href="#quick-start">Quick Start</a>
-      <a href="#mental-model">Mental Model</a>
+      <a href="#mental-model">Project To Installation</a>
       <a href="#commands">Commands</a>
       <a href="#config">Configuration</a>
       <a href="#config-variables">Variables</a>
@@ -192,36 +192,69 @@
         <h2>Quick Start</h2>
         <p>Start inside a git repository:</p>
         <pre><code>app-builder init</code></pre>
-        <p>Edit <code>app_builder.yaml</code>, then build local release artifacts:</p>
+        <p>
+          Edit <code>app_builder.yaml</code>. For a Python application, declare dependencies in
+          <code>pyproject.toml</code> and run <code>app-builder lock</code> before the first build. For an
+          application that does not ship Python, set both <code>python_bundled</code> and
+          <code>python_venv</code> to <code>null</code>.
+        </p>
+        <p>Then build local release files:</p>
         <pre><code>app-builder release --version 0.1.0</code></pre>
-        <p>Publish the same artifact set to GitHub Releases:</p>
+        <p>Build and publish the configured release files to GitHub Releases:</p>
         <pre><code>app-builder release-gh --version 0.1.0 --draft</code></pre>
         <p>
           Without <code>--version</code>, app-builder uses <code>git describe --tags --always --dirty</code>.
           If git cannot provide a version, it uses <code>0.0.0-dev</code>.
         </p>
+        <h3>Requirements</h3>
+        <table>
+          <thead>
+            <tr><th>Where</th><th>Required</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Build machine</td><td>Windows x64 and Git</td><td>Network access is needed when configured Python runtimes or dependencies are not cached. <code>gh.exe</code> is needed only for <code>release-gh</code>.</td></tr>
+            <tr><td>Installing machine</td><td>Modern Windows x64, PowerShell, and <code>tar.exe</code></td><td>The generated installer is per-user and does not require Python when the app ships its own runtime.</td></tr>
+            <tr><td>Signing</td><td>A project policy</td><td>app-builder does not sign executables automatically. Review signing status before publication.</td></tr>
+          </tbody>
+        </table>
       </section>
 
       <section id="mental-model">
-        <h2>Mental Model</h2>
-        <div class="grid">
-          <div class="tile">
-            <h3>Config</h3>
-            <p><code>app_builder.yaml</code> describes the app, install location, files, Python runtime, shortcuts, hooks, and app-builder version.</p>
-          </div>
-          <div class="tile">
-            <h3>Build</h3>
-            <p>Build hooks generate or verify assets. app-builder then collects files, applies remaps, and writes a payload archive.</p>
-          </div>
-          <div class="tile">
-            <h3>Install</h3>
-            <p>The installer extracts the payload, handles upgrades, runs install hooks, creates shortcuts, and writes uninstall records.</p>
-          </div>
-          <div class="tile">
-            <h3>Release</h3>
-            <p>The release command emits local artifacts. The GitHub release command uploads them through <code>gh.exe</code>.</p>
-          </div>
-        </div>
+        <h2>From Project To Installation</h2>
+        <pre><code>Project folder
+    |
+    |  app-builder release
+    v
+Release files in dist
+    |
+    +--&gt; installer.exe --&gt; User's computer
+    |
+    +--&gt; app-builder release-gh --&gt; GitHub Release</code></pre>
+
+        <h3>1. Your Project</h3>
+        <p>
+          Your source files, dependencies, icon, and <code>app_builder.yaml</code>. The config tells
+          app-builder what belongs in the application and how it should be installed.
+        </p>
+
+        <h3>2. The Release Files</h3>
+        <p>
+          <code>app-builder release</code> turns the project into distributable files under
+          <code>installer.dist</code>, which defaults to <code>dist</code>. These include the installer,
+          payload, manifest, checksums, release notes, and any additional configured assets.
+        </p>
+
+        <h3>3. The Installed Application</h3>
+        <p>
+          The generated installer runs on the user's computer. It installs or upgrades the application,
+          creates shortcuts, registers uninstall support, and carries everything the application needs to run.
+        </p>
+
+        <h3>4. Publishing Is Optional</h3>
+        <p>
+          <code>app-builder release-gh</code> publishes the selected release files to GitHub. It does not
+          change how the application is built or installed.
+        </p>
       </section>
 
       <section id="commands">
@@ -239,23 +272,35 @@
               <td>Shows command help. This works even when no project config exists.</td>
             </tr>
             <tr>
+              <td><code>app-builder --version</code></td>
+              <td>Shows the installed app-builder version. This works even when no project config exists.</td>
+            </tr>
+            <tr>
               <td><code>app-builder init [--force]</code></td>
               <td>Creates <code>app_builder.yaml</code> plus starter files under <code>application-templates</code>.</td>
             </tr>
             <tr>
               <td><code>app-builder python</code></td>
-              <td>Materializes only the configured bundled Python runtime.</td>
+              <td>Materializes only the configured bundled Python interpreter. It does not run build hooks or install project dependencies.</td>
             </tr>
             <tr>
               <td><code>app-builder deps</code></td>
-              <td>Materializes configured Python environments without building release artifacts.</td>
+              <td>Runs the dependency-stage hooks and materializes configured Python environments without building release artifacts.</td>
             </tr>
             <tr>
-              <td><code>app-builder release [--version &lt;version&gt;]</code></td>
-              <td>Builds payload, installer, and manifest files in <code>installer.dist</code>.</td>
+              <td><code>app-builder lock</code></td>
+              <td>Explicitly creates or refreshes <code>poetry.lock</code>; normal builds only verify it.</td>
             </tr>
             <tr>
-              <td><code>app-builder release-gh [--version &lt;version&gt;] [--draft | --no-draft]</code></td>
+              <td><code>app-builder versions list | remove &lt;ref&gt;</code></td>
+              <td>Inspects or deliberately evicts managed 1.x app-builder versions.</td>
+            </tr>
+            <tr>
+              <td><code>app-builder release [--version &lt;version&gt;] [--verbose]</code></td>
+              <td>Builds the payload, installer, manifest, named outputs, checksums, release notes, and diagnostic log in <code>installer.dist</code>.</td>
+            </tr>
+            <tr>
+              <td><code>app-builder release-gh [--version &lt;version&gt;] [--draft | --no-draft] [--verbose]</code></td>
               <td>Builds artifacts and uploads or updates a GitHub Release through GitHub CLI.</td>
             </tr>
             <tr>
@@ -284,21 +329,24 @@
         <h3>Complete app_builder.yaml Template</h3>
         <p>
           This is the full generated template. Required fields contain example values that you must replace
-          for your app. Optional fields show their defaults or empty lists.
+          for your app. Optional fields show their defaults or empty lists. For an empty list of mappings,
+          the adjacent comment lists every supported item field. Every hook key is shown; an empty list means
+          that no commands run at that lifecycle point.
         </p>
         <pre><code># app_builder.yaml
 # Generated from app_builder.schema metadata.
-# Required and common optional fields contain examples; replace them for your app.
+# Every supported config key is shown. Replace the starter values for your app.
+# Empty lists are safe defaults; comments identify structured item fields.
 # String values can reference ${ENV.NAME}, ${GIT.DESCRIBE}, ${GIT.COMMIT},
 # ${GIT.SHORT_COMMIT}, ${GIT.BRANCH}, ${GIT.TAG}, ${GIT.IS_DIRTY},
 # ${APP.VERSION}, and ${CONFIG.path.to.value}.
 # Interpolation is string-only and runs before schema validation.
-# Keep app_builder_version literal; the version dispatcher reads it before
-# the full 1.x config interpolation layer is loaded.
-# Optional, nullable string | null. Version selector read by the meta CLI before loading
-# the full config. Use current for the installed 1.x app-builder; explicit 1.x tags,
-# branches, or commits are resolved through the managed version cache. Use the command
-# line form app-builder 0.x for legacy 0.x projects. Default if omitted: current.
+# Keep app_builder_version literal; app-builder reads it before config
+# interpolation is available.
+# Optional, nullable string | null. Literal version selector read by the app-builder
+# launcher before config interpolation. Use current for the installed 1.x version;
+# explicit 1.x tags, branches, or commits use the managed version cache. Use app-builder
+# 0.x for legacy projects. Default if omitted: current.
 app_builder_version: current
 
 # Optional, nullable mapping | null. Optional bundled Python runtime. Set to null to
@@ -308,8 +356,8 @@ python_bundled:
   # materialized. Default if omitted: bin/python.
   path: bin/python
 
-  # Optional string. NuGet Python package version or version prefix to materialize.
-  # Default if omitted: 3.11.1.
+  # Optional string. Exact major.minor.patch NuGet Python package version to materialize
+  # reproducibly. Default if omitted: 3.11.1.
   python_version: 3.12.10
 
 # Optional, nullable mapping | null. Optional Poetry dev virtual environment derived from
@@ -320,24 +368,27 @@ python_venv:
   # is created. Default if omitted: venv.
   path: venv
 
-  # Optional string. NuGet Python package version or version prefix used when the virtual
-  # environment is self-contained because python_bundled is disabled. Default if omitted:
-  # 3.11.1.
+  # Optional string. Exact major.minor.patch NuGet Python package version used when the
+  # virtual environment is self-contained because python_bundled is disabled. Default if
+  # omitted: 3.11.1.
   python_version: 3.12.10
 
 # Required mapping. Required installer metadata and release payload settings.
 installer:
-  # Required string. Human-facing application name.
+  # Required string. Human-facing application name and Windows install identity. It must
+  # be a trimmed, filename-safe, non-reserved Windows name.
   name: MyApp
 
-  # Required string. Windows install directory. Use percent-style environment variables
-  # such as %localappdata% when the path must resolve on the user&#x27;s machine; generated
-  # installer scripts expand them at install time.
-  install_directory: &#x27;%localappdata%\MyCompany\MyApp&#x27;
+  # Required string. Windows install directory. A variable-root path must start with
+  # %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the
+  # installer expands it on the user&#x27;s machine. A fixed absolute path is also allowed when
+  # it is not a drive root or protected Windows directory.
+  install_directory: &#x27;%LOCALAPPDATA%\MyCompany\MyApp&#x27;
 
-  # Optional string. Project-relative .ico file used for generated executables and Start
-  # Menu shortcuts when a shortcut does not specify its own icon. Default if omitted:
-  # application-templates/icon.ico.
+  # Optional string. Project-relative .ico file embedded into generated executables. It is
+  # also the default install-relative Start Menu icon path, so include it at the same
+  # payload path or override the shortcut icon. Default if omitted: application-
+  # templates/icon.ico.
   icon: application-templates/icon.ico
 
   # Optional string. Inner payload archive format. Use zip for the Windows tar.exe path or
@@ -347,10 +398,11 @@ installer:
   # Optional boolean. Whether generated installer scripts should wait briefly before
   # exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait,
   # while --no-wait skips only the wait. Default if omitted: true.
-  pause_on_exit: true
+  wait_on_exit: true
 
-  # Optional boolean. Whether the installer bundle should include an uninstall script.
-  # Default if omitted: true.
+  # Optional boolean. Whether installation adds the installed uninstall scripts, Start
+  # Menu uninstall shortcut, and per-user Windows Installed Apps registration. Default if
+  # omitted: true.
   add_uninstaller: true
 
   # Optional list[mapping]. Windows Start Menu shortcut declarations. Default if omitted:
@@ -376,7 +428,8 @@ installer:
     pre_install: []
 
     # Optional list[list[string]]. Argv commands written into installer metadata to run
-    # after installation. Default if omitted: [].
+    # after payload files, shortcuts, uninstall support, and Windows Installed Apps
+    # registration are complete. Default if omitted: [].
     post_install: []
 
     # Optional list[list[string]]. Argv commands written into installer metadata to run
@@ -390,29 +443,37 @@ installer:
     # stages only argv[0] to temp before removal. Default if omitted: [].
     post_uninstall: []
 
-  # Optional string. Project-relative output directory for release artifacts. Default if
-  # omitted: dist.
+  # Optional string. Project-relative subdirectory inside the project where release
+  # artifacts and build logs are written. Default if omitted: dist.
   dist: dist
 
   # Optional mapping. Payload include, exclude, and remap rules. Default if omitted:
   # PathsMapping defaults.
   paths:
-    # Optional list[string]. Project-relative files or globs included in the release
-    # payload. Default if omitted: [].
+    # Optional list[string]. Required project-relative files or globs included in the
+    # release payload. Every entry must match, and the final payload must be nonempty
+    # after excludes. Default if omitted: [].
     include:
-      - src
       - app_builder.yaml
       - application-templates
+      - bin/python
 
-    # Optional list[string]. Project-relative files or globs excluded from the release
+    # Optional list[string]. Project-relative files or globs removed from the selected
     # payload. Default if omitted: [].
     exclude:
       - &#x27;**/__pycache__&#x27;
       - dist
       - venv
 
-    # Optional list[tuple[string, string]]. Two-item source and destination pairs for
-    # relocating payload files. Default if omitted: [].
+    # Optional boolean. Whether files beneath installer.dist may enter the application
+    # payload. The default excludes dist even when a broad include selects the project
+    # root, preventing old release files and build logs from being installed. Default if
+    # omitted: false.
+    include_dist: false
+
+    # Optional list[tuple[string, string]]. Two-item source and archive-destination pairs.
+    # Each source must be a selected literal project-relative path; destinations must be
+    # safe, unique archive paths. Default if omitted: [].
     remap:
       - [README.md, docs/README.md]
 
@@ -443,8 +504,10 @@ build_hooks:
   # assembled. Default if omitted: [].
   pre_dist: []
 
-  # Optional list[list[string]]. Argv commands run after the release payload is assembled.
-  # Default if omitted: [].
+  # Optional list[list[string]]. Argv commands run after installer assembly and stale
+  # named-output candidates are cleared, but before output collection, checksums, and
+  # release notes. This stage may create extra outputs or sign the installer; it must not
+  # modify the sealed payload or manifest. Default if omitted: [].
   post_dist: []
 
   # Optional list[list[string]]. Argv commands run before GitHub release upload. Default
@@ -455,9 +518,26 @@ build_hooks:
   # omitted: [].
   post_github_release: []
 
-  # Optional list[list[string]]. Argv commands run at the end of release processing.
-  # Default if omitted: [].
-  post_process: []
+# Optional list[mapping]. Named release output collections produced by hooks or other
+# project build steps and picked up from installer.dist. Default if omitted: [].
+outputs: []
+# Item fields: name, pattern, min_matches, max_matches.
+
+# Optional mapping. Explicit publication output selections. Default if omitted:
+# Publications defaults.
+publications:
+  # Optional mapping. GitHub release publication settings. Default if omitted:
+  # GitHubPublication defaults.
+  github:
+    # Optional list[string]. Exact logical output names uploaded to the GitHub release. A
+    # configured name expands to every matched file; unknown names and case-insensitive
+    # upload filename collisions are rejected. Default if omitted: [payload, installer,
+    # manifest, checksums].
+    outputs:
+      - payload
+      - installer
+      - manifest
+      - checksums
 </code></pre>
         <h3>How To Read The Reference</h3>
         <table>
@@ -496,7 +576,7 @@ build_hooks:
               <td>no</td>
               <td><code>current</code></td>
               <td><code>current</code></td>
-              <td>Version selector read by the meta CLI before loading the full config. Use current for the installed 1.x app-builder; explicit 1.x tags, branches, or commits are resolved through the managed version cache. Use the command line form app-builder 0.x for legacy 0.x projects.</td>
+              <td>Literal version selector read by the app-builder launcher before config interpolation. Use current for the installed 1.x version; explicit 1.x tags, branches, or commits use the managed version cache. Use app-builder 0.x for legacy projects.</td>
             </tr>
             <tr>
               <td><code>python_bundled</code></td>
@@ -530,6 +610,22 @@ build_hooks:
               <td></td>
               <td>Build and release hook command declarations.</td>
             </tr>
+            <tr>
+              <td><code>outputs</code></td>
+              <td><code>list[mapping]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Named release output collections produced by hooks or other project build steps and picked up from installer.dist.</td>
+            </tr>
+            <tr>
+              <td><code>publications</code></td>
+              <td><code>mapping</code></td>
+              <td>no</td>
+              <td><code>see nested defaults</code></td>
+              <td></td>
+              <td>Explicit publication output selections.</td>
+            </tr>
           </tbody>
         </table>
         <h4 id="config-reference-python_bundled">config.python_bundled</h4>
@@ -559,7 +655,7 @@ build_hooks:
               <td>no</td>
               <td><code>3.11.1</code></td>
               <td><code>3.12.10</code></td>
-              <td>NuGet Python package version or version prefix to materialize.</td>
+              <td>Exact major.minor.patch NuGet Python package version to materialize reproducibly.</td>
             </tr>
           </tbody>
         </table>
@@ -590,7 +686,7 @@ build_hooks:
               <td>no</td>
               <td><code>3.11.1</code></td>
               <td><code>3.12.10</code></td>
-              <td>NuGet Python package version or version prefix used when the virtual environment is self-contained because python_bundled is disabled.</td>
+              <td>Exact major.minor.patch NuGet Python package version used when the virtual environment is self-contained because python_bundled is disabled.</td>
             </tr>
           </tbody>
         </table>
@@ -613,15 +709,15 @@ build_hooks:
               <td>yes</td>
               <td></td>
               <td><code>MyApp</code></td>
-              <td>Human-facing application name.</td>
+              <td>Human-facing application name and Windows install identity. It must be a trimmed, filename-safe, non-reserved Windows name.</td>
             </tr>
             <tr>
               <td><code>install_directory</code></td>
               <td><code>string</code></td>
               <td>yes</td>
               <td></td>
-              <td><code>&#x27;%localappdata%\MyCompany\MyApp&#x27;</code></td>
-              <td>Windows install directory. Use percent-style environment variables such as %localappdata% when the path must resolve on the user&#x27;s machine; generated installer scripts expand them at install time.</td>
+              <td><code>&#x27;%LOCALAPPDATA%\MyCompany\MyApp&#x27;</code></td>
+              <td>Windows install directory. A variable-root path must start with %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the installer expands it on the user&#x27;s machine. A fixed absolute path is also allowed when it is not a drive root or protected Windows directory.</td>
             </tr>
             <tr>
               <td><code>icon</code></td>
@@ -629,7 +725,7 @@ build_hooks:
               <td>no</td>
               <td><code>application-templates/icon.ico</code></td>
               <td><code>application-templates/icon.ico</code></td>
-              <td>Project-relative .ico file used for generated executables and Start Menu shortcuts when a shortcut does not specify its own icon.</td>
+              <td>Project-relative .ico file embedded into generated executables. It is also the default install-relative Start Menu icon path, so include it at the same payload path or override the shortcut icon.</td>
             </tr>
             <tr>
               <td><code>payload_format</code></td>
@@ -640,7 +736,7 @@ build_hooks:
               <td>Inner payload archive format. Use zip for the Windows tar.exe path or 7z for stronger compression with bundled 7-Zip extraction.</td>
             </tr>
             <tr>
-              <td><code>pause_on_exit</code></td>
+              <td><code>wait_on_exit</code></td>
               <td><code>boolean</code></td>
               <td>no</td>
               <td><code>true</code></td>
@@ -653,7 +749,7 @@ build_hooks:
               <td>no</td>
               <td><code>true</code></td>
               <td><code>true</code></td>
-              <td>Whether the installer bundle should include an uninstall script.</td>
+              <td>Whether installation adds the installed uninstall scripts, Start Menu uninstall shortcut, and per-user Windows Installed Apps registration.</td>
             </tr>
             <tr>
               <td><code>start_menu</code></td>
@@ -685,7 +781,7 @@ build_hooks:
               <td>no</td>
               <td><code>dist</code></td>
               <td><code>dist</code></td>
-              <td>Project-relative output directory for release artifacts.</td>
+              <td>Project-relative subdirectory inside the project where release artifacts and build logs are written.</td>
             </tr>
             <tr>
               <td><code>paths</code></td>
@@ -716,7 +812,7 @@ build_hooks:
               <td>yes</td>
               <td></td>
               <td><code>application-templates/program.cmd</code></td>
-              <td>Project-relative command or file launched by the shortcut.</td>
+              <td>Install-relative command or file launched by the shortcut. The target must be present at that payload path after remapping.</td>
             </tr>
             <tr>
               <td><code>display_name</code></td>
@@ -732,7 +828,7 @@ build_hooks:
               <td>no</td>
               <td><code>null</code></td>
               <td><code>application-templates/icon.ico</code></td>
-              <td>Project-relative icon path for the shortcut.</td>
+              <td>Optional install-relative shortcut icon path. The icon must be present at that payload path after remapping; when omitted, installer.icon is used.</td>
             </tr>
           </tbody>
         </table>
@@ -786,7 +882,7 @@ build_hooks:
               <td>no</td>
               <td><code>[]</code></td>
               <td></td>
-              <td>Argv commands written into installer metadata to run after installation.</td>
+              <td>Argv commands written into installer metadata to run after payload files, shortcuts, uninstall support, and Windows Installed Apps registration are complete.</td>
             </tr>
             <tr>
               <td><code>pre_uninstall</code></td>
@@ -824,8 +920,8 @@ build_hooks:
               <td><code>list[string]</code></td>
               <td>no</td>
               <td><code>[]</code></td>
-              <td><code>[src, app_builder.yaml, application-templates]</code></td>
-              <td>Project-relative files or globs included in the release payload.</td>
+              <td><code>[app_builder.yaml, application-templates, bin/python]</code></td>
+              <td>Required project-relative files or globs included in the release payload. Every entry must match, and the final payload must be nonempty after excludes.</td>
             </tr>
             <tr>
               <td><code>exclude</code></td>
@@ -833,7 +929,15 @@ build_hooks:
               <td>no</td>
               <td><code>[]</code></td>
               <td><code>[&#x27;**/__pycache__&#x27;, dist, venv]</code></td>
-              <td>Project-relative files or globs excluded from the release payload.</td>
+              <td>Project-relative files or globs removed from the selected payload.</td>
+            </tr>
+            <tr>
+              <td><code>include_dist</code></td>
+              <td><code>boolean</code></td>
+              <td>no</td>
+              <td><code>false</code></td>
+              <td><code>false</code></td>
+              <td>Whether files beneath installer.dist may enter the application payload. The default excludes dist even when a broad include selects the project root, preventing old release files and build logs from being installed.</td>
             </tr>
             <tr>
               <td><code>remap</code></td>
@@ -841,7 +945,7 @@ build_hooks:
               <td>no</td>
               <td><code>[]</code></td>
               <td><code>[[README.md, docs/README.md]]</code></td>
-              <td>Two-item source and destination pairs for relocating payload files.</td>
+              <td>Two-item source and archive-destination pairs. Each source must be a selected literal project-relative path; destinations must be safe, unique archive paths.</td>
             </tr>
           </tbody>
         </table>
@@ -912,7 +1016,7 @@ build_hooks:
               <td>no</td>
               <td><code>[]</code></td>
               <td></td>
-              <td>Argv commands run after the release payload is assembled.</td>
+              <td>Argv commands run after installer assembly and stale named-output candidates are cleared, but before output collection, checksums, and release notes. This stage may create extra outputs or sign the installer; it must not modify the sealed payload or manifest.</td>
             </tr>
             <tr>
               <td><code>pre_github_release</code></td>
@@ -930,13 +1034,98 @@ build_hooks:
               <td></td>
               <td>Argv commands run after GitHub release upload.</td>
             </tr>
+          </tbody>
+        </table>
+        <h4 id="config-reference-outputs">config.outputs[]</h4>
+        <table>
+          <thead>
             <tr>
-              <td><code>post_process</code></td>
-              <td><code>list[list[string]]</code></td>
-              <td>no</td>
-              <td><code>[]</code></td>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Example</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>name</code></td>
+              <td><code>string</code></td>
+              <td>yes</td>
               <td></td>
-              <td>Argv commands run at the end of release processing.</td>
+              <td><code>wheels</code></td>
+              <td>Unique logical name used by publication targets. Built-in names such as payload, installer, manifest, and checksums are reserved.</td>
+            </tr>
+            <tr>
+              <td><code>pattern</code></td>
+              <td><code>string</code></td>
+              <td>yes</td>
+              <td></td>
+              <td><code>wheels/*.whl</code></td>
+              <td>Exact path or non-recursive glob relative to installer.dist. Wildcards are allowed only in the filename segment.</td>
+            </tr>
+            <tr>
+              <td><code>min_matches</code></td>
+              <td><code>integer</code></td>
+              <td>no</td>
+              <td><code>1</code></td>
+              <td><code>1</code></td>
+              <td>Minimum number of files the pattern must resolve; must be zero or greater.</td>
+            </tr>
+            <tr>
+              <td><code>max_matches</code></td>
+              <td><code>integer | null</code></td>
+              <td>no</td>
+              <td><code>1</code></td>
+              <td><code>null</code></td>
+              <td>Maximum number of files the pattern may resolve. It must be at least min_matches; set to null for no upper bound.</td>
+            </tr>
+          </tbody>
+        </table>
+        <h4 id="config-reference-publications">config.publications</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Example</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>github</code></td>
+              <td><code>mapping</code></td>
+              <td>no</td>
+              <td><code>see nested defaults</code></td>
+              <td></td>
+              <td>GitHub release publication settings.</td>
+            </tr>
+          </tbody>
+        </table>
+        <h4 id="config-reference-publications-github">config.publications.github</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Required</th>
+              <th>Default</th>
+              <th>Example</th>
+              <th>What it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>outputs</code></td>
+              <td><code>list[string]</code></td>
+              <td>no</td>
+              <td><code>[payload, installer, manifest, checksums]</code></td>
+              <td></td>
+              <td>Exact logical output names uploaded to the GitHub release. A configured name expands to every matched file; unknown names and case-insensitive upload filename collisions are rejected.</td>
             </tr>
           </tbody>
         </table>
@@ -947,11 +1136,9 @@ build_hooks:
           required.
         </p>
         <p>
-          When a hook command starts with an existing <code>.py</code> file, app-builder runs it with
-          the Python runtime configured for the project, preferring <code>python_venv</code> and then
-          <code>python_bundled</code>. A hook such as <code>[scripts/build.py]</code> does not need
-          <code>python.exe</code> on PATH. Use <code>[python, scripts/build.py]</code> only when
-          you deliberately want the machine's own <code>python</code>.
+          Automatic <code>.py</code> entrypoint dispatch depends on the hook stage. See
+          <a href="#hook-python">Hook Python dispatch</a> for the authoritative interpreter order.
+          An explicit command such as <code>[python, scripts/build.py]</code> deliberately uses PATH.
         </p>
       </section>
       <!-- END GENERATED CONFIG REFERENCE -->
@@ -966,7 +1153,7 @@ build_hooks:
         <div class="callout">
           <p>
             Interpolation is for ordinary config values, not for choosing the app-builder implementation.
-            <code>app_builder_version</code> is read first by the command dispatcher, so use a literal value
+            app-builder reads <code>app_builder_version</code> before interpolation, so use a literal value
             such as <code>current</code>, a tag, a branch, or a commit there.
           </p>
         </div>
@@ -981,8 +1168,8 @@ build_hooks:
           <tbody>
             <tr>
               <td>Windows environment expansion</td>
-              <td>Use percent-style variables in paths such as <code>%localappdata%</code>.</td>
-              <td><code>%LOCALAPPDATA%</code>, <code>%APPDATA%</code>, <code>%USERPROFILE%</code>, <code>%TEMP%</code>, plus normal Windows expansion.</td>
+              <td>Use a supported percent-style root in <code>installer.install_directory</code>.</td>
+              <td><code>%LOCALAPPDATA%</code>, <code>%APPDATA%</code>, or <code>%USERPROFILE%</code>. Other variable-root install paths are rejected.</td>
             </tr>
             <tr>
               <td>Release version</td>
@@ -1011,7 +1198,7 @@ build_hooks:
         </p>
         <div class="callout warning">
           <p>
-            Use percent-style Windows variables such as <code>%localappdata%</code> for install paths that must
+            Use <code>%LOCALAPPDATA%</code>, <code>%APPDATA%</code>, or <code>%USERPROFILE%</code> for install paths that must
             resolve on the user's machine. <code>${ENV.*}</code> is resolved while building the release, so it
             bakes in the builder or CI environment.
           </p>
@@ -1101,6 +1288,14 @@ build_hooks:
           app-builder also writes <code>version.txt</code> into the payload. That file is not used as an
           installer identity marker.
         </p>
+        <div class="callout">
+          <p>
+            Materializing a Python runtime does not implicitly add it to the payload. If the installed app
+            needs bundled Python, include its configured path, normally <code>bin/python</code>, in
+            <code>installer.paths.include</code>. The project venv is normally build-only and should be included
+            only when the installed application deliberately needs it.
+          </p>
+        </div>
       </section>
 
       <section id="python">
@@ -1131,55 +1326,74 @@ build_hooks:
             </tr>
             <tr>
               <td>Both disabled</td>
-              <td>No Python runtime is materialized. <code>.py</code> hooks cannot auto-dispatch unless you call an explicit Python executable yourself.</td>
+              <td>No project Python is packaged. Build hooks can still use app-builder's own Python where the stage table allows it; installed-app hooks cannot.</td>
             </tr>
           </tbody>
         </table>
         <p>
-          Downloaded NuGet packages are cached under <code>%TEMP%\app-builder-downloads</code>.
+          Python versions must use an exact <code>major.minor.patch</code> pin. Normal builds verify an existing
+          <code>poetry.lock</code> and install locked registry artifacts by SHA-256; use <code>app-builder lock</code>
+          when dependency declarations change. Git sources require a full resolved commit. Mutable Poetry
+          <code>file</code> and <code>directory</code> sources are rejected; publish a hashed artifact or use a
+          pinned Git source instead. Downloaded NuGet packages are cached under
+          <code>%TEMP%\app-builder-downloads</code> and verified against the SHA-512 digest published in NuGet catalog metadata.
         </p>
       </section>
 
       <section id="hooks">
         <h2>Hooks</h2>
         <p>
-          Hooks are always argv lists. Use an explicit shell when shell behavior is required.
+          Hooks let a project run its own commands at specific points in the pipeline, such as compiling
+          files before packaging or producing additional release assets. Hooks are always argv lists. Use an
+          explicit shell when shell behavior is required.
         </p>
         <pre><code>build_hooks:
   pre_dist:
-    - [python, scripts/generate_assets.py]
+    - [scripts/generate_assets.py]
   post_dist:
-    - [python, scripts/verify_dist.py]</code></pre>
+    - [scripts/verify_dist.py]</code></pre>
         <p>
-          Relative hook paths resolve from the project root during build hooks and from the install directory
-          during install hooks. If a hook command starts with an existing <code>.py</code> file, app-builder
-          runs that file with the configured project Python, preferring <code>python_venv</code> and then
-          <code>python_bundled</code>. That means <code>[scripts/build.py]</code> does not need
-          <code>python.exe</code> on PATH. Use <code>[python, scripts/build.py]</code> only when you
-          deliberately want the machine's own <code>python</code>. Existing <code>.ps1</code> files run through
-          PowerShell with execution policy bypass. Other commands are run directly as argv.
+          Relative paths resolve from the project root for build hooks and from the staged or installed app
+          for installer hooks. Existing <code>.ps1</code> files run through PowerShell; other commands run
+          directly as argv. An explicit command such as <code>[python, scripts/build.py]</code> deliberately
+          uses the machine's PATH.
         </p>
-        <h3>Build Hook Stages</h3>
+        <h3 id="hook-python">Build Hook Stages And Python</h3>
+        <p>
+          For an existing <code>.py</code> entrypoint such as <code>[scripts/build.py]</code>, app-builder chooses
+          Python by stage. "app-builder Python" means the interpreter currently running app-builder; it is
+          available before the project runtimes have been created.
+        </p>
         <table>
           <thead>
             <tr>
               <th>Hook</th>
               <th>Use it for</th>
+              <th>Automatic <code>.py</code> interpreter order</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td><code>pre_process</code></td><td>Early setup before dependency processing.</td></tr>
-            <tr><td><code>pre_python_bundled</code></td><td>Work that must happen before bundled Python is materialized.</td></tr>
-            <tr><td><code>post_python_bundled</code></td><td>Work after bundled Python exists.</td></tr>
-            <tr><td><code>pre_python_venv</code></td><td>Work around venv materialization.</td></tr>
-            <tr><td><code>post_python_venv</code></td><td>Work after the configured venv exists.</td></tr>
-            <tr><td><code>pre_dist</code></td><td>Generate files that must be included in the payload.</td></tr>
-            <tr><td><code>post_dist</code></td><td>Inspect or modify the finished local artifact set.</td></tr>
-            <tr><td><code>pre_github_release</code></td><td>Prepare before GitHub upload.</td></tr>
-            <tr><td><code>post_github_release</code></td><td>Notify, mark, or publish follow-up data after GitHub upload.</td></tr>
-            <tr><td><code>post_process</code></td><td>Final local cleanup after release build.</td></tr>
+            <tr><td><code>pre_process</code></td><td>Early setup before dependency processing.</td><td>app-builder Python</td></tr>
+            <tr><td><code>pre_python_bundled</code></td><td>Work before bundled Python is materialized.</td><td>app-builder Python</td></tr>
+            <tr><td><code>post_python_bundled</code></td><td>Work after bundled Python and its main dependencies exist.</td><td>bundled, then app-builder Python</td></tr>
+            <tr><td><code>pre_python_venv</code></td><td>Work before the project venv is materialized.</td><td>bundled, then app-builder Python</td></tr>
+            <tr><td><code>post_python_venv</code></td><td>Work after the project venv and its development dependencies exist.</td><td>venv, bundled, then app-builder Python</td></tr>
+            <tr><td><code>pre_dist</code></td><td>Generate files that must be included in the payload.</td><td>venv, bundled, then app-builder Python</td></tr>
+            <tr><td><code>post_dist</code></td><td>Create extra outputs, verify the release, or sign the final installer after stale named outputs are cleared. The embedded payload and manifest are sealed.</td><td>venv, bundled, then app-builder Python</td></tr>
+            <tr><td><code>pre_github_release</code></td><td>Prepare before GitHub upload.</td><td>venv, bundled, then app-builder Python</td></tr>
+            <tr><td><code>post_github_release</code></td><td>Notify, mark, or publish follow-up data after GitHub upload.</td><td>venv, bundled, then app-builder Python</td></tr>
           </tbody>
         </table>
+        <p>
+          Installer hooks run on the user's machine, where app-builder itself is not present. Automatic
+          <code>.py</code> dispatch for <code>pre_install</code>, <code>post_install</code>, and
+          <code>pre_uninstall</code> uses the configured <code>python_venv.path</code> and then
+          <code>python_bundled.path</code> interpreter included in the payload. These install-relative paths are
+          recorded in the manifest, so custom runtime directories work without an explicit Python argv.
+          <code>post_uninstall</code> runs after the install directory is removed, so its entrypoint must be a
+          self-contained <code>.cmd</code>, <code>.ps1</code>, or <code>.exe</code>; <code>.py</code> is not
+          auto-dispatched there.
+        </p>
 
         <h3>Hook Environment</h3>
         <table>
@@ -1210,11 +1424,42 @@ build_hooks:
           <li><code>&lt;slug&gt;-&lt;version&gt;.7z</code>: the payload when <code>installer.payload_format: 7z</code>.</li>
           <li><code>&lt;slug&gt;-&lt;version&gt;-installer.exe</code>: the self-extracting installer.</li>
           <li><code>&lt;slug&gt;-&lt;version&gt;-manifest.json</code>: the build manifest.</li>
+          <li><code>&lt;slug&gt;-&lt;version&gt;-SHA256SUMS.txt</code>: hashes for every resolved release output.</li>
+          <li><code>&lt;slug&gt;-&lt;version&gt;-release-notes.md</code>: generated release notes for publication.</li>
         </ul>
+        <p>
+          Named <code>outputs</code> can collect exact files or bounded filename globs created under
+          <code>installer.dist</code>. <code>publications.github.outputs</code> then selects the built-in and named
+          outputs uploaded to GitHub. Existing files matching those declarations are removed before
+          <code>post_dist</code>, so only outputs produced by the current build can be collected. Match counts,
+          duplicate paths, and GitHub filename collisions are enforced.
+        </p>
+        <pre><code>build_hooks:
+  post_dist:
+    - [scripts/build_wheels.py]
+outputs:
+  - name: wheels
+    pattern: wheels/*.whl
+    min_matches: 1
+    max_matches: null
+publications:
+  github:
+    outputs: [installer, manifest, checksums, wheels]</code></pre>
         <p>
           <code>installer.payload_format</code> selects the inner payload archive. <code>zip</code> is the
           default. <code>7z</code> uses bundled 7-Zip files in the outer installer layer and preserves remapped
           paths plus Windows locked-file staging.
+        </p>
+        <p>
+          Both payload formats reject paths that can leave the extraction root, Windows-reserved names,
+          generated paths such as <code>version.txt</code>, case-insensitive destination duplicates, and
+          file/directory collisions before archive creation begins.
+        </p>
+        <p>
+          <code>installer.dist</code> is excluded from the payload by default even when a broad include selects
+          it. <code>installer.paths.include_dist: true</code> is the explicit opt-in for the unusual case where
+          release output belongs inside the installed application. Shortcut targets and explicit icons must
+          resolve to real final payload paths after remapping.
         </p>
         <p>
           The installer extracts its outer ZIP layer to a random temp directory, runs the PowerShell installer,
@@ -1250,8 +1495,18 @@ bin/7z.dll              # only when installer.payload_format: 7z
           </tbody>
         </table>
         <p>
-          When <code>installer.pause_on_exit</code> is true and no bypass flag is supplied, the console closes
+          When <code>installer.wait_on_exit</code> is true and no bypass flag is supplied, the console closes
           after 30 seconds or when the user presses Enter. Other keys are ignored.
+        </p>
+        <p>
+          When <code>installer.add_uninstaller</code> is enabled, installation writes a per-user Windows
+          Installed Apps record with interactive and quiet uninstall commands. The cleanup worker removes that
+          record after the install directory has been removed.
+        </p>
+        <p>
+          <code>post_install</code> runs only after payload files, shortcuts, installed uninstall scripts, and the
+          Windows Installed Apps record are in place. If it fails, the installer rolls those changes back and
+          restores a recognized previous installation.
         </p>
         <h3>Existing Directory Rules</h3>
         <table>
@@ -1314,8 +1569,19 @@ bin/7z.dll              # only when installer.payload_format: 7z
 app-builder release-gh --version 1.2.3
 app-builder release-gh --version 1.2.3 --draft</code></pre>
         <p>
-          If the release already exists, app-builder uploads the current artifacts with <code>--clobber</code>.
-          Otherwise it creates a new release with the payload archive, installer exe, and manifest JSON.
+          Publication uploads exactly the built-in and named outputs selected by
+          <code>publications.github.outputs</code>. Generated release notes become the GitHub release body. A new
+          release targets the exact audited HEAD commit. An existing release has intended assets replaced, stale
+          assets removed, and its title and notes refreshed. <code>--draft</code> controls creation of a new
+          release; updating an existing release preserves its current draft or published state.
+        </p>
+        <p>
+          Before upload, app-builder requires a clean Git worktree outside <code>installer.dist</code>, validates
+          version and local/GitHub tag identity, verifies the manifest, outer installer layout, artifact inventory,
+          and SHA-256 checksums, and confirms that <code>gh.exe</code> is authenticated for the repository. The
+          standalone payload must match the bytes embedded in the installer, and the published manifest must
+          match the manifest embedded in its scripts. For app-builder itself, the release version must match
+          <code>pyproject.toml</code>.
         </p>
         <p>
           app-builder searches <code>where.exe</code>, PATH, and common GitHub CLI install locations. Install
@@ -1323,6 +1589,11 @@ app-builder release-gh --version 1.2.3 --draft</code></pre>
         </p>
         <pre><code>winget install --id GitHub.cli
 gh auth login</code></pre>
+        <p>
+          Builds announce eight timed stages immediately. A timestamped log under
+          <code>&lt;dist&gt;/build-logs</code> records the complete payload map, dependency provenance, output hashes, and
+          publication selection. Add <code>--verbose</code> to mirror those details to the terminal.
+        </p>
       </section>
 
       <section id="versions">
@@ -1339,14 +1610,17 @@ gh auth login</code></pre>
           </thead>
           <tbody>
             <tr><td>missing, blank, or <code>current</code></td><td>Use the installed 1.x app-builder.</td></tr>
-            <tr><td><code>v1.2.0</code>, branch, or commit</td><td>Check out that ref into the managed version cache and run it.</td></tr>
+            <tr><td><code>v1.0.0</code>, branch, or commit</td><td>Check out that ref into the managed version cache and run it.</td></tr>
             <tr><td><code>0.x</code> or <code>v0.*</code></td><td>Error. Use <code>app-builder 0.x &lt;command&gt;</code>.</td></tr>
           </tbody>
         </table>
         <p>
-          Managed versions are cached under the installed app-builder directory in <code>versions</code>. The
-          cache stores the requested ref, resolved commit, source repo, venv Python path, and dependency install
-          command in <code>version-manifest.json</code>.
+          Managed versions are cached under <code>%LOCALAPPDATA%\app-builder\cache</code>, or the path supplied by
+          <code>APP_BUILDER_CACHE_ROOT</code>. Cache keys include the source URL and requested ref. A branch is
+          refreshed when its remote commit changes; a moved cached tag is refused. Cache creation is locked per
+          ref, built privately, and atomically promoted, so concurrent commands cannot consume a partial cache. Use
+          <code>app-builder versions list</code> to inspect manifests and
+          <code>app-builder versions remove &lt;ref&gt;</code> for deliberate eviction.
         </p>
       </section>
 
@@ -1383,6 +1657,7 @@ installer:
       - src
       - "build/generated/${APP.VERSION}"
       - app.ico
+      - bin/python
     exclude:
       - build/generated/*.tmp
       - "**/__pycache__"
@@ -1402,11 +1677,11 @@ installer:
       - [hooks/post-uninstall.cmd]
 build_hooks:
   pre_dist:
-    - [python, scripts/generate_assets.py]
+    - [scripts/generate_assets.py]
   post_dist:
-    - [python, scripts/verify_dist.py]
+    - [scripts/verify_dist.py]
   pre_github_release:
-    - [python, scripts/mark_release.py]</code></pre>
+    - [scripts/mark_release.py]</code></pre>
 
         <h3>Non-Python Build Step</h3>
         <pre><code>python_bundled: null
@@ -1416,12 +1691,12 @@ installer:
   install_directory: "%localappdata%\\Acme\\NativeTool"
   paths:
     include:
-      - dist/native-tool.exe
+      - build/native-tool.exe
     remap:
-      - [dist/native-tool.exe, bin/native-tool.exe]
+      - [build/native-tool.exe, bin/native-tool.exe]
 build_hooks:
   pre_dist:
-    - [cmd.exe, /D, /C, cargo build --release ^& copy target\\release\\native-tool.exe dist\\native-tool.exe]</code></pre>
+    - [cmd.exe, /D, /C, cargo build --release ^& copy target\\release\\native-tool.exe build\\native-tool.exe]</code></pre>
       </section>
 
       <section id="troubleshooting">
@@ -1438,8 +1713,11 @@ build_hooks:
         </p>
         <h3>Python hook cannot run</h3>
         <p>
-          Enable and materialize <code>python_bundled</code> or <code>python_venv</code>, or call an explicit
-          Python executable in the hook argv.
+          Build hooks use the interpreter order in <a href="#hook-python">Build Hook Stages And Python</a>.
+          For an installer hook, make sure a configured project runtime and its interpreter were included in the
+          payload. The build fails when automatic <code>.py</code> hooks have no packaged interpreter. For
+          <code>post_uninstall</code>, use a self-contained <code>.cmd</code>, <code>.ps1</code>, or
+          <code>.exe</code>. An explicit <code>[python, ...]</code> command intentionally depends on PATH.
         </p>
         <h3>Config interpolation failed</h3>
         <p>
@@ -1449,8 +1727,8 @@ build_hooks:
         </p>
         <h3>NuGet Python version missing</h3>
         <p>
-          Use a broader prefix such as <code>3.12</code> or <code>3.12.*</code>. app-builder suggests nearby
-          available versions when selection fails.
+          Pin an exact available version such as <code>3.12.10</code>. Prefixes and wildcards are rejected so the
+          same config cannot silently select a newer runtime later.
         </p>
         <h3>GitHub release failed</h3>
         <p>
@@ -1460,6 +1738,18 @@ build_hooks:
         <p>
           The directory is not recognized as a current or legacy app-builder install for the same app. Choose a
           clean install directory or remove the old directory deliberately.
+        </p>
+        <h3>Upgrade is blocked by a locked file</h3>
+        <p>
+          Close the running application and retry. If Windows cannot move the existing install to its backup
+          sibling, app-builder stops before replacing it and leaves the old install in place; it does not force
+          unlock files, request elevation, or schedule deletion after restart.
+        </p>
+        <h3>Installer executable is blocked</h3>
+        <p>
+          Rename the installer from <code>.exe</code> to <code>.zip</code>, extract it with Windows, and run
+          <code>install.cmd</code>. The installing machine still needs PowerShell and <code>tar.exe</code> for the
+          supported installation path.
         </p>
         <h3>Uninstall leaves diagnostics in temp</h3>
         <p>

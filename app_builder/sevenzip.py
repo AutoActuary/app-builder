@@ -7,8 +7,10 @@ import re
 import shutil
 import subprocess
 from collections.abc import Mapping
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
+
+from .fileset import validate_archive_path, validate_remap_table
 
 SEVENZIP_EXE_SHA256 = "6b95e76bbe2147bdc6b0debbd28fd45ef160175fa22762f64ffdb0025e75e9e6"
 SEVENZIP_DLL_SHA256 = "84d2bcf774aba77e938d3f36bfe020e0d49cfb3074ad9de69b5af78054602b7e"
@@ -65,6 +67,7 @@ def create_7z_payload_archive(
     version: str,
     sevenzip_bin: Path | None = None,
 ) -> None:
+    validate_remap_table(remap_table, reserved_paths=("version.txt",))
     if sevenzip_bin is None:
         sevenzip_bin = vendored_7zip_executable()
 
@@ -112,25 +115,6 @@ def create_7z_payload_archive(
                 sevenzip_bin=sevenzip_bin,
                 append=archive_created,
             )
-
-
-def validate_archive_path(value: PurePosixPath | str) -> PurePosixPath:
-    raw_value = str(value).replace("\\", "/")
-    posix_path = PurePosixPath(raw_value)
-    windows_path = PureWindowsPath(raw_value)
-    if (
-        not raw_value
-        or raw_value.strip() != raw_value
-        or posix_path.is_absolute()
-        or windows_path.is_absolute()
-        or windows_path.drive
-    ):
-        raise ValueError(f"Unsafe archive path: {value!s}")
-    if any(part in ("", ".", "..") for part in posix_path.parts):
-        raise ValueError(f"Unsafe archive path: {value!s}")
-    if any(":" in part for part in posix_path.parts):
-        raise ValueError(f"Unsafe archive path: {value!s}")
-    return posix_path
 
 
 def can_7z_read_file(filepath: Path) -> bool:

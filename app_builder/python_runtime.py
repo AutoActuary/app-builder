@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import base64
 import hashlib
 import json
 import os
@@ -26,23 +27,30 @@ from .poetry_dependencies import (
     ensure_poetry_lock,
     install_locked_poetry_dependencies,
 )
-from .schema import PythonBundledOptions
-from .schema import PythonVenvOptions
+from .schema import PythonBundledOptions, PythonVenvOptions
 
 NUGET_PYTHON_PACKAGE_ID = "python"
 NUGET_FLAT_CONTAINER_BASE_URL = "https://api.nuget.org/v3-flatcontainer"
 NUGET_PYTHON_INDEX_URL = (
     f"{NUGET_FLAT_CONTAINER_BASE_URL}/{NUGET_PYTHON_PACKAGE_ID}/index.json"
 )
+NUGET_REGISTRATION_BASE_URL = "https://api.nuget.org/v3/registration5-semver1"
 _VERSION_PATTERN_RE = re.compile(r"^\d+(?:\.\d+)*(?:[-+][0-9A-Za-z_.-]+)?$")
 _NUGET_SOURCE_MARKER = ".app-builder-python-source.json"
 _NUGET_PACKAGE_PAYLOAD_ROOT = "tools"
-EXE_WRAP_LATEST_RELEASE_API_URL = (
-    "https://api.github.com/repos/AutoActuary/ExeWrap/releases/latest"
+EXE_WRAP_VERSION = "v2.1.0"
+_EXE_WRAP_RELEASE_BASE_URL = (
+    f"https://github.com/AutoActuary/ExeWrap/releases/download/{EXE_WRAP_VERSION}"
 )
+_EXE_WRAP_DIGESTS = {
+    "windows-arm64": "sha256:1e813291868052c8b7e65bebf127d62a4896ffbc506bb158b8be9c8c24035bc6",
+    "windows-x64": "sha256:42c64c90d6620d4942b88e56b615679a8667eaa64902444aa7b21769998936cb",
+    "windows-x86": "sha256:757d3260f648262fb2ab0198d1b57de18382c2e0ada10a60c819b58af8863905",
+}
 _EXE_WRAP_CONFIG_START_MARKER = b"8c0e8d4c-32af-4fd8-9c68-6a0f97efeb6a"
 _EXE_WRAP_CONSOLE_LAUNCHER = "ExeWrap-console.exe"
 _EXE_WRAP_WINDOWED_LAUNCHER = "ExeWrap-windowed.exe"
+_EXE_WRAP_SOURCE_MARKER = ".app-builder-exewrap-source.json"
 
 
 class PythonVersionNotFoundError(RuntimeError):
@@ -287,6 +295,7 @@ def _nuget_python_download_url(version: str) -> str:
 class NuGetPythonPackage:
     version: str
     download_url: str
+    digest: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -302,7 +311,55 @@ def _resolve_nuget_python_package(python_version: str | None) -> NuGetPythonPack
     return NuGetPythonPackage(
         version=selected_version,
         download_url=_nuget_python_download_url(selected_version),
+        digest=_load_nuget_python_digest(selected_version),
     )
+
+
+def _load_nuget_python_digest(version: str) -> str:
+    registration_url = (
+        f"{NUGET_REGISTRATION_BASE_URL}/{NUGET_PYTHON_PACKAGE_ID}/{version}.json"
+    )
+    registration = _load_nuget_json(registration_url)
+    catalog_url = registration.get("catalogEntry")
+    if not isinstance(catalog_url, str) or not catalog_url.startswith("https://"):
+        raise RuntimeError(
+            f"NuGet registration metadata did not provide a catalog entry for Python {version}."
+        )
+    catalog = _load_nuget_json(catalog_url)
+    algorithm = catalog.get("packageHashAlgorithm")
+    encoded = catalog.get("packageHash")
+    if algorithm != "SHA512" or not isinstance(encoded, str):
+        raise RuntimeError(
+            f"NuGet catalog metadata did not provide a SHA-512 package hash for Python {version}."
+        )
+    try:
+        digest = base64.b64decode(encoded, validate=True)
+    except ValueError as error:
+        raise RuntimeError(
+            f"NuGet returned an invalid SHA-512 package hash for Python {version}."
+        ) from error
+    if len(digest) != hashlib.sha512().digest_size:
+        raise RuntimeError(
+            f"NuGet returned an invalid SHA-512 package hash for Python {version}."
+        )
+    return "sha512:" + digest.hex()
+
+
+def _load_nuget_json(url: str) -> dict[str, Any]:
+    request = urllib.request.Request(
+        url,
+        headers={"Accept": "application/json", "User-Agent": "app-builder"},
+    )
+    try:
+        with urllib.request.urlopen(request) as response:
+            payload: Any = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            f"Could not read NuGet metadata from {url}: {error}."
+        ) from error
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Unexpected NuGet metadata response from {url}.")
+    return payload
 
 
 def _download_file(url: str, destination: Path) -> None:
@@ -335,24 +392,42 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _expected_sha256(digest: str | None) -> str | None:
+def _expected_digest(digest: str | None) -> tuple[str, str] | None:
     if digest is None:
         return None
-    if not digest.startswith("sha256:"):
-        return None
-    return digest.split(":", 1)[1].lower()
+    algorithm, separator, expected = digest.partition(":")
+    if separator != ":" or algorithm not in {"sha256", "sha512"}:
+        raise RuntimeError(f"Unsupported download digest {digest!r}.")
+    expected_length = hashlib.new(algorithm).digest_size * 2
+    if len(expected) != expected_length or any(
+        character not in "0123456789abcdefABCDEF" for character in expected
+    ):
+        raise RuntimeError(f"Invalid {algorithm} download digest {digest!r}.")
+    return algorithm, expected.lower()
+
+
+def _file_digest(path: Path, algorithm: str) -> str:
+    digest = hashlib.new(algorithm)
+    with path.open("rb") as input_file:
+        for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _ensure_downloaded_file(url: str, digest: str | None = None) -> Path:
     path = _download_cache_path(url)
-    expected = _expected_sha256(digest)
-    if path.exists() and expected is not None and _sha256_file(path) != expected:
+    expected = _expected_digest(digest)
+    if (
+        path.exists()
+        and expected is not None
+        and _file_digest(path, expected[0]) != expected[1]
+    ):
         path.unlink()
     if not path.exists():
         _download_file(url, path)
-    if expected is not None and _sha256_file(path) != expected:
+    if expected is not None and _file_digest(path, expected[0]) != expected[1]:
         raise RuntimeError(
-            f"Downloaded file {path} did not match expected sha256 digest."
+            f"Downloaded file {path} did not match expected {expected[0]} digest."
         )
     return path
 
@@ -370,62 +445,13 @@ def _exe_wrap_platform_tag() -> str:
     )
 
 
-def _load_latest_exe_wrap_release() -> Mapping[str, Any]:
-    request = urllib.request.Request(
-        EXE_WRAP_LATEST_RELEASE_API_URL,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "app-builder",
-        },
-    )
-    try:
-        with urllib.request.urlopen(request) as response:
-            payload: Any = json.loads(response.read().decode("utf-8"))
-    except urllib.error.URLError as error:
-        raise RuntimeError(
-            f"Could not query latest ExeWrap release from {EXE_WRAP_LATEST_RELEASE_API_URL}: {error}."
-        ) from error
-    if not isinstance(payload, Mapping):
-        raise RuntimeError("Unexpected ExeWrap release response: expected object.")
-    return payload
-
-
-def _select_exe_wrap_package(
-    release: Mapping[str, Any],
-    platform_tag: str,
-) -> ExeWrapPackage:
-    assets = release.get("assets")
-    if not isinstance(assets, list):
-        raise RuntimeError("Unexpected ExeWrap release response: expected assets list.")
-    expected_suffix = f"-{platform_tag}.zip"
-    for asset in assets:
-        if not isinstance(asset, Mapping):
-            continue
-        name = asset.get("name")
-        download_url = asset.get("browser_download_url")
-        digest = asset.get("digest")
-        if (
-            isinstance(name, str)
-            and name.endswith(expected_suffix)
-            and isinstance(download_url, str)
-            and (digest is None or isinstance(digest, str))
-        ):
-            return ExeWrapPackage(
-                asset_name=name,
-                download_url=download_url,
-                digest=digest,
-            )
-    tag_name = release.get("tag_name")
-    release_name = tag_name if isinstance(tag_name, str) else "latest"
-    raise RuntimeError(
-        f"ExeWrap release {release_name} does not contain a {platform_tag} zip asset."
-    )
-
-
 def _resolve_exe_wrap_package() -> ExeWrapPackage:
-    return _select_exe_wrap_package(
-        _load_latest_exe_wrap_release(),
-        _exe_wrap_platform_tag(),
+    platform_tag = _exe_wrap_platform_tag()
+    asset_name = f"ExeWrap-{EXE_WRAP_VERSION}-{platform_tag}.zip"
+    return ExeWrapPackage(
+        asset_name=asset_name,
+        download_url=f"{_EXE_WRAP_RELEASE_BASE_URL}/{asset_name}",
+        digest=_EXE_WRAP_DIGESTS[platform_tag],
     )
 
 
@@ -490,8 +516,10 @@ def _install_exe_wrap_python_launchers(
     *,
     package_path: Path | None = None,
 ) -> None:
+    package: ExeWrapPackage | None = None
     if package_path is None:
-        package_path = _exe_wrap_package_path()
+        package = _resolve_exe_wrap_package()
+        package_path = _ensure_downloaded_file(package.download_url, package.digest)
     with tempfile.TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
         console_launcher = temp_dir / _EXE_WRAP_CONSOLE_LAUNCHER
@@ -512,6 +540,19 @@ def _install_exe_wrap_python_launchers(
             _self_contained_venv_windowed_launcher_executable(venv_root),
             _exe_wrap_python_config("pythonw.exe"),
         )
+    if package is not None:
+        (venv_root / _EXE_WRAP_SOURCE_MARKER).write_text(
+            json.dumps(
+                {
+                    "version": EXE_WRAP_VERSION,
+                    "asset_name": package.asset_name,
+                    "download_url": package.download_url,
+                    "digest": package.digest,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
 
 def _source_marker_path(python_root: Path) -> Path:
@@ -528,6 +569,7 @@ def _write_nuget_source_marker(
                 "package_id": NUGET_PYTHON_PACKAGE_ID,
                 "version": package.version,
                 "download_url": package.download_url,
+                "digest": package.digest,
             },
             indent=2,
         ),
@@ -550,10 +592,13 @@ def _nuget_source_marker_matches(
         return False
     package_id = payload.get("package_id")
     version = payload.get("version")
+    digest = payload.get("digest")
     return (
         package_id == NUGET_PYTHON_PACKAGE_ID
         and isinstance(version, str)
         and _matches_version_pattern(python_version, version)
+        and isinstance(digest, str)
+        and _expected_digest(digest) is not None
     )
 
 
@@ -650,9 +695,7 @@ def establish_bundled_python(
         and _nuget_source_marker_matches(python_root, options.python_version)
     ):
         package = _resolve_nuget_python_package(options.python_version)
-        package_path = _download_cache_path(package.download_url)
-        if not package_path.exists():
-            _download_file(package.download_url, package_path)
+        package_path = _ensure_downloaded_file(package.download_url, package.digest)
         _extract_nuget_python_package(package_path, python_root)
         _write_nuget_source_marker(python_root, package)
 
@@ -808,6 +851,7 @@ def _self_contained_venv_matches(
             python_version,
         )
         and _nuget_source_marker_matches(venv_root, python_version)
+        and _exe_wrap_source_marker_matches(venv_root)
         and _exe_wrap_launcher_matches(
             _self_contained_venv_launcher_executable(venv_root),
             _exe_wrap_python_config("python.exe"),
@@ -816,6 +860,23 @@ def _self_contained_venv_matches(
             _self_contained_venv_windowed_launcher_executable(venv_root),
             _exe_wrap_python_config("pythonw.exe"),
         )
+    )
+
+
+def _exe_wrap_source_marker_matches(venv_root: Path) -> bool:
+    marker_path = venv_root / _EXE_WRAP_SOURCE_MARKER
+    try:
+        payload: Any = json.loads(marker_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, Mapping):
+        return False
+    platform_tag = _exe_wrap_platform_tag()
+    return (
+        payload.get("version") == EXE_WRAP_VERSION
+        and payload.get("asset_name")
+        == f"ExeWrap-{EXE_WRAP_VERSION}-{platform_tag}.zip"
+        and payload.get("digest") == _EXE_WRAP_DIGESTS[platform_tag]
     )
 
 
@@ -829,7 +890,7 @@ def _create_self_contained_venv(
         shutil.rmtree(venv_root)
 
     package = _resolve_nuget_python_package(options.python_version)
-    package_path = _ensure_downloaded_file(package.download_url)
+    package_path = _ensure_downloaded_file(package.download_url, package.digest)
     _extract_nuget_python_package(package_path, venv_root)
     _write_nuget_source_marker(venv_root, package)
     _ensure_pip(_self_contained_venv_python_executable(venv_root))
@@ -841,6 +902,106 @@ def _create_self_contained_venv(
 class PythonEnvironmentResult:
     python_bundled: Path | None
     python_venv: Path | None
+    build_inputs: tuple[dict[str, str], ...] = ()
+
+
+class PythonEnvironmentMaterializer:
+    """Materialize project Python runtimes in lifecycle-visible stages."""
+
+    def __init__(
+        self,
+        project_root: Path,
+        *,
+        app_version: str | None = None,
+    ) -> None:
+        self.project_root = project_root
+        _, self.config = load_project_config(
+            project_root,
+            app_version=app_version,
+        )
+        self.poetry_lock: PoetryLock | None = None
+        if (
+            self.config.python_bundled is not None
+            or self.config.python_venv is not None
+        ):
+            self.poetry_lock = ensure_poetry_lock(project_root)
+        self.python_bundled: Path | None = None
+        self.python_venv: Path | None = None
+        self._bundled_materialized = False
+        self._venv_materialized = False
+
+    def materialize_bundled(self) -> Path | None:
+        if self._bundled_materialized:
+            return self.python_bundled
+        if self.config.python_bundled is not None:
+            assert self.poetry_lock is not None
+            self.python_bundled = _ensure_bundled_python(
+                self.project_root,
+                self.config.python_bundled,
+                self.poetry_lock,
+            )
+        self._bundled_materialized = True
+        return self.python_bundled
+
+    def materialize_venv(self) -> Path | None:
+        if self._venv_materialized:
+            return self.python_venv
+        if not self._bundled_materialized:
+            raise RuntimeError(
+                "Bundled Python stage must complete before the venv stage."
+            )
+        if self.config.python_venv is not None:
+            assert self.poetry_lock is not None
+            venv_root = self.project_root / self.config.python_venv.path
+            if self.config.python_bundled is not None:
+                bundled_root = self.project_root / self.config.python_bundled.path
+                self.python_venv = _create_venv_from_bundled_python(
+                    venv_root,
+                    bundled_root,
+                )
+                venv_groups = {DEV_GROUP}
+            else:
+                self.python_venv = _create_self_contained_venv(
+                    venv_root,
+                    self.config.python_venv,
+                )
+                venv_groups = {MAIN_GROUP, DEV_GROUP}
+            install_locked_poetry_dependencies(
+                project_root=self.project_root,
+                python_executable=self.python_venv,
+                poetry_lock=self.poetry_lock,
+                groups=venv_groups,
+            )
+        self._venv_materialized = True
+        return self.python_venv
+
+    def result(self) -> PythonEnvironmentResult:
+        marker_roots = [
+            root
+            for root in (
+                (
+                    self.project_root / self.config.python_bundled.path
+                    if self._bundled_materialized
+                    and self.config.python_bundled is not None
+                    else None
+                ),
+                (
+                    self.project_root / self.config.python_venv.path
+                    if self._venv_materialized and self.config.python_venv is not None
+                    else None
+                ),
+            )
+            if root is not None
+        ]
+        return PythonEnvironmentResult(
+            python_bundled=self.python_bundled,
+            python_venv=self.python_venv,
+            build_inputs=_python_environment_build_inputs(
+                self.project_root,
+                self.poetry_lock,
+                marker_roots,
+            ),
+        )
 
 
 def ensure_bundled_python(project_root: Path) -> Path | None:
@@ -850,43 +1011,50 @@ def ensure_bundled_python(project_root: Path) -> Path | None:
     return establish_bundled_python(project_root, config.python_bundled)
 
 
-def ensure_python_environments(project_root: Path) -> PythonEnvironmentResult:
-    _, config = load_project_config(project_root)
-    bundled_python: Path | None = None
-    bundled_root: Path | None = None
-    venv_python: Path | None = None
-    poetry_lock: PoetryLock | None = None
-
-    if config.python_bundled is not None or config.python_venv is not None:
-        poetry_lock = ensure_poetry_lock(project_root)
-
-    if config.python_bundled is not None:
-        assert poetry_lock is not None
-        bundled_python = _ensure_bundled_python(
-            project_root, config.python_bundled, poetry_lock
-        )
-        bundled_root = project_root / config.python_bundled.path
-
-    if config.python_venv is not None:
-        assert poetry_lock is not None
-        venv_root = project_root / config.python_venv.path
-        if bundled_root is not None:
-            venv_python = _create_venv_from_bundled_python(venv_root, bundled_root)
-            venv_groups = {DEV_GROUP}
-        else:
-            venv_python = _create_self_contained_venv(
-                venv_root,
-                config.python_venv,
+def _python_environment_build_inputs(
+    project_root: Path,
+    poetry_lock: PoetryLock | None,
+    marker_roots: Sequence[Path],
+) -> tuple[dict[str, str], ...]:
+    build_inputs: list[dict[str, str]] = []
+    if poetry_lock is not None:
+        if poetry_lock.path is not None and poetry_lock.sha256 is not None:
+            build_inputs.append(
+                {
+                    "kind": "poetry_lock",
+                    "path": poetry_lock.path.relative_to(
+                        project_root.resolve()
+                    ).as_posix(),
+                    "sha256": poetry_lock.sha256,
+                    "content_hash": poetry_lock.content_hash or "",
+                }
             )
-            venv_groups = {MAIN_GROUP, DEV_GROUP}
-        install_locked_poetry_dependencies(
-            project_root=project_root,
-            python_executable=venv_python,
-            poetry_lock=poetry_lock,
-            groups=venv_groups,
-        )
+        for marker_root in marker_roots:
+            for marker_name, kind in (
+                (_NUGET_SOURCE_MARKER, "nuget_python"),
+                (_EXE_WRAP_SOURCE_MARKER, "exewrap"),
+            ):
+                marker_path = marker_root / marker_name
+                if not marker_path.is_file():
+                    continue
+                marker = json.loads(marker_path.read_text(encoding="utf-8"))
+                if not isinstance(marker, Mapping):
+                    continue
+                record = {"kind": kind}
+                record.update(
+                    {
+                        str(key): str(value)
+                        for key, value in marker.items()
+                        if value is not None
+                    }
+                )
+                if record not in build_inputs:
+                    build_inputs.append(record)
+    return tuple(build_inputs)
 
-    return PythonEnvironmentResult(
-        python_bundled=bundled_python,
-        python_venv=venv_python,
-    )
+
+def ensure_python_environments(project_root: Path) -> PythonEnvironmentResult:
+    materializer = PythonEnvironmentMaterializer(project_root)
+    materializer.materialize_bundled()
+    materializer.materialize_venv()
+    return materializer.result()

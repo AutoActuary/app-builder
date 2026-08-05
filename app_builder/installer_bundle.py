@@ -39,7 +39,7 @@ def create_exewrap_zip_installer(
     payload_archive: Path,
     manifest_path: Path,
     app_name: str,
-    pause_on_exit: bool,
+    wait_on_exit: bool,
     add_uninstaller: bool,
     icon_path: Path | None = None,
     top_layer_files: Mapping[Path, str] | None = None,
@@ -78,7 +78,7 @@ def create_exewrap_zip_installer(
             _render_install_powershell_script(
                 manifest_json=manifest_json,
                 uninstall_enabled=add_uninstaller,
-                pause_on_exit=pause_on_exit,
+                wait_on_exit=wait_on_exit,
             ),
             encoding="utf-8",
         )
@@ -88,7 +88,7 @@ def create_exewrap_zip_installer(
                 encoding="utf-8",
             )
             uninstall_ps1.write_text(
-                _render_uninstall_powershell_script(pause_on_exit=pause_on_exit),
+                _render_uninstall_powershell_script(wait_on_exit=wait_on_exit),
                 encoding="utf-8",
             )
 
@@ -235,8 +235,8 @@ def _embedded_manifest_assignment(manifest_json: str) -> str:
     return f"\n$EmbeddedManifestJson = @'\n{manifest_json}\n'@\n"
 
 
-def _default_wait_assignment(pause_on_exit: bool) -> str:
-    value = "$true" if pause_on_exit else "$false"
+def _default_wait_assignment(wait_on_exit: bool) -> str:
+    value = "$true" if wait_on_exit else "$false"
     return f"$AppBuilderDefaultWaitOnExit = {value}\n"
 
 
@@ -244,24 +244,24 @@ def _render_install_powershell_script(
     *,
     manifest_json: str,
     uninstall_enabled: bool,
-    pause_on_exit: bool,
+    wait_on_exit: bool,
 ) -> str:
     return _render_install_powershell(
         manifest_json=manifest_json,
         uninstall_enabled=uninstall_enabled,
-        pause_on_exit=pause_on_exit,
+        wait_on_exit=wait_on_exit,
     )
 
 
-def _render_uninstall_powershell_script(*, pause_on_exit: bool) -> str:
-    return _render_uninstall_powershell(pause_on_exit=pause_on_exit)
+def _render_uninstall_powershell_script(*, wait_on_exit: bool) -> str:
+    return _render_uninstall_powershell(wait_on_exit=wait_on_exit)
 
 
 def _render_install_powershell(
     *,
     manifest_json: str,
     uninstall_enabled: bool,
-    pause_on_exit: bool,
+    wait_on_exit: bool,
 ) -> str:
     uninstall_copy_block = ""
     uninstall_shortcut_block = ""
@@ -288,7 +288,8 @@ def _render_install_powershell(
         _powershell_common_functions()
         + _embedded_manifest_assignment(manifest_json)
         + f"$InstalledManifestName = '{_INSTALLED_MANIFEST_NAME}'\n"
-        + _default_wait_assignment(pause_on_exit)
+        + f"$AppBuilderUninstallEnabled = ${str(uninstall_enabled).lower()}\n"
+        + _default_wait_assignment(wait_on_exit)
         + """
 $AppBuilderScriptOptions = Get-AppBuilderScriptOptions -Arguments @($args) -DefaultWaitOnExit $AppBuilderDefaultWaitOnExit
 $AppBuilderExitCode = 0
@@ -296,6 +297,8 @@ try {
 $ScriptRoot = $PSScriptRoot
 $InstallerRoot = Split-Path -Parent $ScriptRoot
 $Manifest = Read-AppBuilderManifestJson $EmbeddedManifestJson
+$ManifestUninstallEnabled = Get-AppBuilderObjectProperty $Manifest 'add_uninstaller'
+$AppBuilderUninstallEnabled = $AppBuilderUninstallEnabled -and ($null -ne $ManifestUninstallEnabled) -and [bool]$ManifestUninstallEnabled
 $InstallDir = Resolve-AppBuilderPath ([string]$Manifest.install_directory) $null
 $PayloadPath = Join-Path $InstallerRoot ([string]$Manifest.payload_archive)
 $StagingDir = Join-Path $env:TEMP ('app-builder-install-' + [guid]::NewGuid().ToString('N'))
@@ -304,7 +307,15 @@ $StartMenuBackupDir = $null
 $StartMenuTouched = $false
 $MovedStaging = $false
 $ExistingInstallKind = $null
+$ExistingManifest = $null
 $StartMenuDir = Get-AppBuilderStartMenuDirectory $Manifest
+$UninstallRegistryPath = $null
+$UninstallRegistryExistedBefore = $false
+$UninstallRegistryTouched = $false
+if ($AppBuilderUninstallEnabled) {
+    $UninstallRegistryPath = Get-AppBuilderUninstallRegistryPath $InstallDir
+    $UninstallRegistryExistedBefore = Test-Path -LiteralPath $UninstallRegistryPath
+}
 
 Write-Host ('Ready to install {0} {1} to {2}' -f $Manifest.name, $Manifest.version, $InstallDir)
 Confirm-AppBuilderAction ('Continue installing {0}?' -f $Manifest.name) $AppBuilderScriptOptions.BypassQuestions
@@ -318,7 +329,7 @@ try {
     New-Item -ItemType Directory -Path $StagingDir | Out-Null
     Expand-AppBuilderPayloadArchive $PayloadPath $StagingDir $InstallerRoot
 
-    Invoke-AppBuilderHookList $Manifest.install_hooks.pre_install $StagingDir
+    Invoke-AppBuilderHookList $Manifest.install_hooks.pre_install $StagingDir $Manifest
 
     $InstallParent = Split-Path -Parent $InstallDir
     if ($InstallParent) {
@@ -352,12 +363,24 @@ try {
 """
         + uninstall_shortcut_block
         + """
-    Invoke-AppBuilderHookList $Manifest.install_hooks.post_install $InstallDir
+    if ($AppBuilderUninstallEnabled) {
+        $UninstallRegistryTouched = $true
+        Set-AppBuilderUninstallRegistryEntry $Manifest $InstallDir $UninstallRegistryPath
+    }
+
+    Invoke-AppBuilderHookList $Manifest.install_hooks.post_install $InstallDir $Manifest
 
     Remove-AppBuilderBackupDirectory $BackupDir 'previous install backup'
     Remove-AppBuilderBackupDirectory $StartMenuBackupDir 'previous Start Menu backup'
     Write-Host ('Installed to {0}' -f $InstallDir)
 } catch {
+    if ($UninstallRegistryTouched) {
+        if (($ExistingInstallKind -eq 'current') -and $UninstallRegistryExistedBefore -and $null -ne $ExistingManifest) {
+            Set-AppBuilderUninstallRegistryEntry $ExistingManifest $InstallDir $UninstallRegistryPath
+        } else {
+            Remove-AppBuilderUninstallRegistryEntry $UninstallRegistryPath
+        }
+    }
     if ($MovedStaging -and (Test-Path -LiteralPath $InstallDir)) {
         Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -387,11 +410,11 @@ exit $AppBuilderExitCode
     )
 
 
-def _render_uninstall_powershell(*, pause_on_exit: bool) -> str:
+def _render_uninstall_powershell(*, wait_on_exit: bool) -> str:
     return (
         _powershell_common_functions()
         + f"$InstalledManifestName = '{_INSTALLED_MANIFEST_NAME}'\n"
-        + _default_wait_assignment(pause_on_exit)
+        + _default_wait_assignment(wait_on_exit)
         + """
 $AppBuilderScriptOptions = Get-AppBuilderScriptOptions -Arguments @($args) -DefaultWaitOnExit $AppBuilderDefaultWaitOnExit
 $AppBuilderExitCode = 0
@@ -401,6 +424,7 @@ $InstallDir = Split-Path -Parent $ScriptRoot
 $ManifestPath = Join-Path $InstallDir $InstalledManifestName
 $Manifest = Read-AppBuilderManifestFile $ManifestPath
 $StartMenuDir = Get-AppBuilderStartMenuDirectory $Manifest
+$UninstallRegistryPath = Get-AppBuilderUninstallRegistryPath $InstallDir
 $PostUninstallDir = Join-Path $env:TEMP ('app-builder-post-uninstall-' + [guid]::NewGuid().ToString('N'))
 $StartedCleanup = $false
 
@@ -411,13 +435,13 @@ Set-AppBuilderEnvironment $Manifest $InstallDir $StartMenuDir
 
 try {
     $PostUninstallCommands = Copy-AppBuilderPostUninstallEntrypoints $Manifest.install_hooks.post_uninstall $InstallDir $PostUninstallDir
-    Invoke-AppBuilderHookList $Manifest.install_hooks.pre_uninstall $InstallDir
+    Invoke-AppBuilderHookList $Manifest.install_hooks.pre_uninstall $InstallDir $Manifest
     if (Test-Path -LiteralPath $StartMenuDir) {
         Remove-Item -LiteralPath $StartMenuDir -Recurse -Force
     }
 
     Set-Location $env:TEMP
-    Start-AppBuilderPostUninstallCleanup $InstallDir $PostUninstallCommands $PostUninstallDir
+    Start-AppBuilderPostUninstallCleanup $InstallDir $PostUninstallCommands $PostUninstallDir $UninstallRegistryPath
     $StartedCleanup = $true
 } finally {
     if ((-not $StartedCleanup) -and (Test-Path -LiteralPath $PostUninstallDir)) {
@@ -545,6 +569,72 @@ function Get-AppBuilderStartMenuDirectory {
     return Join-Path $Programs (Get-SafeShortcutName ([string]$Manifest.name))
 }
 
+function Get-AppBuilderUninstallRegistryPath {
+    param([string]$InstallDir)
+    $CanonicalPath = [System.IO.Path]::GetFullPath($InstallDir).TrimEnd([char[]]'\\/').ToLowerInvariant()
+    $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $HashBytes = $Sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($CanonicalPath))
+    } finally {
+        $Sha256.Dispose()
+    }
+    $Identity = ([System.BitConverter]::ToString($HashBytes)).Replace('-', '')
+    return 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AppBuilder-' + $Identity
+}
+
+function Set-AppBuilderUninstallRegistryEntry {
+    param($Manifest, [string]$InstallDir, [string]$RegistryPath)
+    if ([string]::IsNullOrWhiteSpace($RegistryPath)) {
+        throw 'Cannot register uninstall entry without a registry path.'
+    }
+    $UninstallScript = Join-Path $InstallDir 'bin\uninstall.ps1'
+    if (-not (Test-Path -LiteralPath $UninstallScript -PathType Leaf)) {
+        throw "Installed uninstaller was not found: $UninstallScript"
+    }
+    $PowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $CommandPrefix = '"' + $PowerShell + '" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + $UninstallScript + '"'
+    $Values = [ordered]@{
+        DisplayName = [string]$Manifest.name
+        DisplayVersion = [string]$Manifest.version
+        InstallLocation = $InstallDir
+        UninstallString = $CommandPrefix
+        QuietUninstallString = $CommandPrefix + ' --yes'
+        InstallDate = [DateTime]::Now.ToString('yyyyMMdd')
+        NoModify = 1
+        NoRepair = 1
+        WindowsInstaller = 0
+    }
+    $DisplayIcon = $null
+    foreach ($Item in @($Manifest.start_menu)) {
+        $Candidate = Resolve-AppBuilderPath ([string]$Item.target) $InstallDir
+        if (([System.IO.Path]::GetExtension($Candidate)).Equals('.exe', [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $Candidate -PathType Leaf)) {
+            $DisplayIcon = $Candidate
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($DisplayIcon)) {
+        $Candidate = Join-Path $InstallDir 'app-builder.exe'
+        if (Test-Path -LiteralPath $Candidate -PathType Leaf) {
+            $DisplayIcon = $Candidate
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($DisplayIcon)) {
+        $Values['DisplayIcon'] = $DisplayIcon
+    }
+
+    New-Item -Path $RegistryPath -Force | Out-Null
+    foreach ($Entry in $Values.GetEnumerator()) {
+        Set-ItemProperty -LiteralPath $RegistryPath -Name ([string]$Entry.Key) -Value $Entry.Value -Force
+    }
+}
+
+function Remove-AppBuilderUninstallRegistryEntry {
+    param([AllowNull()][string]$RegistryPath)
+    if (-not [string]::IsNullOrWhiteSpace($RegistryPath) -and (Test-Path -LiteralPath $RegistryPath)) {
+        Remove-Item -LiteralPath $RegistryPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Set-AppBuilderEnvironment {
     param($Manifest, [string]$InstallDir, [string]$StartMenuDir)
     $env:app_builder_name = [string]$Manifest.name
@@ -599,21 +689,18 @@ function Resolve-HookProgram {
 }
 
 function Select-HookPython {
-    param([string]$WorkingDirectory)
-    $Candidates = @(
-        (Join-Path $WorkingDirectory 'venv\Scripts\python.exe'),
-        (Join-Path $WorkingDirectory 'bin\python\python\python.exe')
-    )
-    foreach ($Candidate in $Candidates) {
+    param($Manifest, [string]$WorkingDirectory)
+    foreach ($RelativeCandidate in @($Manifest.hook_python_candidates)) {
+        $Candidate = Resolve-AppBuilderPath ([string]$RelativeCandidate) $WorkingDirectory
         if (Test-Path -LiteralPath $Candidate) {
             return $Candidate
         }
     }
-    throw "Cannot run Python hook from a .py entrypoint because app-builder could not find the Python runtime configured for this install in venv\Scripts\python.exe or bin\python\python\python.exe. Use an explicit command such as ['python', 'script.py'] if the target machine is expected to provide Python on PATH."
+    throw "Cannot run Python hook from a .py entrypoint because none of the configured project Python interpreters included in this installer are available. Use an explicit command such as ['python', 'script.py'] only if the target machine is expected to provide Python on PATH."
 }
 
 function Invoke-AppBuilderHook {
-    param($Command, [string]$WorkingDirectory)
+    param($Command, [string]$WorkingDirectory, $Manifest)
     if ($null -eq $Command) {
         return
     }
@@ -634,7 +721,7 @@ function Invoke-AppBuilderHook {
     if ((Test-Path -LiteralPath $Program) -and $Extension -eq '.ps1') {
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Program @Arguments
     } elseif ((Test-Path -LiteralPath $Program) -and $Extension -eq '.py') {
-        & (Select-HookPython $WorkingDirectory) $Program @Arguments
+        & (Select-HookPython $Manifest $WorkingDirectory) $Program @Arguments
     } else {
         & $Program @Arguments
     }
@@ -644,12 +731,12 @@ function Invoke-AppBuilderHook {
 }
 
 function Invoke-AppBuilderHookList {
-    param($Commands, [string]$WorkingDirectory)
+    param($Commands, [string]$WorkingDirectory, $Manifest)
     if ($null -eq $Commands) {
         return
     }
     foreach ($Command in @($Commands)) {
-        Invoke-AppBuilderHook $Command $WorkingDirectory
+        Invoke-AppBuilderHook $Command $WorkingDirectory $Manifest
     }
 }
 
@@ -949,8 +1036,14 @@ function Get-AppBuilderExistingInstallKind {
 function Invoke-AppBuilderCurrentPreUninstall {
     param($ExistingManifest, [string]$InstallDir)
     $InstallHooks = Get-AppBuilderObjectProperty $ExistingManifest 'install_hooks'
-    $PreUninstall = Get-AppBuilderObjectProperty $InstallHooks 'pre_uninstall'
-    Invoke-AppBuilderHookList $PreUninstall $InstallDir
+    $PreUninstall = $null
+    if ($null -ne $InstallHooks) {
+        $Property = $InstallHooks.PSObject.Properties['pre_uninstall']
+        if ($null -ne $Property) {
+            $PreUninstall = $Property.Value
+        }
+    }
+    Invoke-AppBuilderHookList $PreUninstall $InstallDir $ExistingManifest
 }
 
 function Invoke-AppBuilderLegacyPreUninstall {
@@ -979,13 +1072,85 @@ function Remove-AppBuilderLegacyInstall {
     param($Manifest, [string]$InstallDir, [string]$StartMenuDir)
     $Name = [string](Get-AppBuilderObjectProperty $Manifest 'name')
     Write-Host ('Removing legacy app-builder install for {0}' -f $Name)
-    if (-not [string]::IsNullOrWhiteSpace($Name)) {
-        Remove-Item -LiteralPath ('HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + $Name) -Recurse -Force -ErrorAction SilentlyContinue
-    }
+    Remove-AppBuilderLegacyUninstallRegistryEntries $Manifest $InstallDir
+    Remove-AppBuilderLegacyStartMenuEntries $Manifest $InstallDir
     if (Test-Path -LiteralPath $StartMenuDir) {
         Remove-AppBuilderInstallDirectory $StartMenuDir
     }
     Remove-AppBuilderInstallDirectory $InstallDir
+}
+
+function Test-AppBuilderRegistryEntryTargetsInstallDirectory {
+    param($Entry, [string]$InstallDir)
+    $CanonicalInstallDir = [System.IO.Path]::GetFullPath($InstallDir).TrimEnd([char[]]'\\/')
+    $InstallLocation = [string](Get-AppBuilderObjectProperty $Entry 'InstallLocation')
+    if (-not [string]::IsNullOrWhiteSpace($InstallLocation)) {
+        try {
+            $CanonicalLocation = [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($InstallLocation)).TrimEnd([char[]]'\\/')
+            if ($CanonicalLocation.Equals($CanonicalInstallDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+        } catch {
+        }
+    }
+    foreach ($PropertyName in @('UninstallString', 'QuietUninstallString')) {
+        $Command = [string](Get-AppBuilderObjectProperty $Entry $PropertyName)
+        if (-not [string]::IsNullOrWhiteSpace($Command) -and $Command.IndexOf($CanonicalInstallDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Remove-AppBuilderLegacyUninstallRegistryEntries {
+    param($Manifest, [string]$InstallDir)
+    $RegistryRoot = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+    if (-not (Test-Path -LiteralPath $RegistryRoot)) {
+        return
+    }
+    foreach ($Key in @(Get-ChildItem -LiteralPath $RegistryRoot -ErrorAction SilentlyContinue)) {
+        try {
+            $Entry = Get-ItemProperty -LiteralPath $Key.PSPath -ErrorAction Stop
+            $DisplayName = [string](Get-AppBuilderObjectProperty $Entry 'DisplayName')
+            if ((Test-AppBuilderLegacyNameMatchesManifest $DisplayName $Manifest) -and (Test-AppBuilderRegistryEntryTargetsInstallDirectory $Entry $InstallDir)) {
+                Remove-Item -LiteralPath $Key.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        } catch {
+        }
+    }
+}
+
+function Remove-AppBuilderLegacyStartMenuEntries {
+    param($Manifest, [string]$InstallDir)
+    $Programs = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
+    if (-not (Test-Path -LiteralPath $Programs -PathType Container)) {
+        return
+    }
+    $Shell = New-Object -ComObject WScript.Shell
+    foreach ($Shortcut in @(Get-ChildItem -LiteralPath $Programs -File -Filter 'Uninstall *.lnk' -Recurse -ErrorAction SilentlyContinue)) {
+        $DisplayName = Get-AppBuilderLegacyUninstallDisplayName $Shortcut.Name
+        if (-not (Test-AppBuilderLegacyNameMatchesManifest $DisplayName $Manifest)) {
+            continue
+        }
+        try {
+            $Link = $Shell.CreateShortcut($Shortcut.FullName)
+            $TargetEvidence = ([string]$Link.TargetPath) + ' ' + ([string]$Link.Arguments)
+            if ($TargetEvidence.IndexOf($InstallDir, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+                continue
+            }
+            Remove-Item -LiteralPath $Shortcut.FullName -Force -ErrorAction SilentlyContinue
+            $Parent = $Shortcut.Directory
+            while ($null -ne $Parent -and -not $Parent.FullName.Equals($Programs, [System.StringComparison]::OrdinalIgnoreCase)) {
+                if (@(Get-ChildItem -LiteralPath $Parent.FullName -Force -ErrorAction SilentlyContinue).Count -ne 0) {
+                    break
+                }
+                $NextParent = $Parent.Parent
+                Remove-Item -LiteralPath $Parent.FullName -Force -ErrorAction SilentlyContinue
+                $Parent = $NextParent
+            }
+        } catch {
+        }
+    }
 }
 
 function Remove-AppBuilderInstallDirectory {
@@ -1012,10 +1177,11 @@ function Remove-AppBuilderInstallDirectory {
 }
 
 function Start-AppBuilderPostUninstallCleanup {
-    param([string]$InstallDir, $Commands, [string]$PostUninstallDir)
+    param([string]$InstallDir, $Commands, [string]$PostUninstallDir, [string]$UninstallRegistryPath)
     $Payload = [ordered]@{
         install_directory = $InstallDir
         post_uninstall_directory = $PostUninstallDir
+        uninstall_registry_path = $UninstallRegistryPath
         commands = @($Commands)
         environment = [ordered]@{
             app_builder_name = $env:app_builder_name
@@ -1094,6 +1260,9 @@ try {
     Set-Location $env:TEMP
     Start-Sleep -Milliseconds 500
     Remove-DirectoryWithRetry ([string]$Payload.install_directory)
+    if (-not [string]::IsNullOrWhiteSpace([string]$Payload.uninstall_registry_path)) {
+        Remove-Item -LiteralPath ([string]$Payload.uninstall_registry_path) -Recurse -Force -ErrorAction SilentlyContinue
+    }
     foreach ($Command in @($Payload.commands)) {
         Invoke-PostUninstallHook $Command ([string]$Payload.post_uninstall_directory)
     }

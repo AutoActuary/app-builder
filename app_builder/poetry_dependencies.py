@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import os
+import re
 import subprocess
 import sys
+import tempfile
 import tomllib
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -22,11 +25,15 @@ class LockedPackage:
     optional: bool
     markers: object | None = None
     source: Mapping[str, Any] | None = None
+    files: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class PoetryLock:
     packages: tuple[LockedPackage, ...]
+    path: Path | None = None
+    sha256: str | None = None
+    content_hash: str | None = None
 
     def requirements_for_groups(
         self,
@@ -69,11 +76,39 @@ def ensure_poetry_lock(project_root: Path) -> PoetryLock:
             f"Could not find {pyproject_path}. Poetry dependencies must be declared in pyproject.toml."
         )
 
+    lock_path = project_root / "poetry.lock"
+    if not lock_path.exists():
+        raise FileNotFoundError(
+            f"Could not find {lock_path}. Normal builds never create or update the lock; run 'app-builder lock' explicitly."
+        )
+
+    _run_poetry_lock_command(project_root, ["check", "--lock"], action="verify")
+    return load_poetry_lock(lock_path)
+
+
+def refresh_poetry_lock(project_root: Path) -> PoetryLock:
+    pyproject_path = project_root / "pyproject.toml"
+    if not pyproject_path.exists():
+        raise FileNotFoundError(
+            f"Could not find {pyproject_path}. Poetry dependencies must be declared in pyproject.toml."
+        )
+    _run_poetry_lock_command(
+        project_root, ["lock", "--no-interaction"], action="refresh"
+    )
+    lock_path = project_root / "poetry.lock"
+    if not lock_path.exists():
+        raise FileNotFoundError(f"Poetry did not create {lock_path}.")
+    return load_poetry_lock(lock_path)
+
+
+def _run_poetry_lock_command(
+    project_root: Path, args: list[str], *, action: str
+) -> None:
     env = os.environ.copy()
     env["POETRY_VIRTUALENVS_CREATE"] = "false"
     env["POETRY_NO_INTERACTION"] = "1"
     completed = subprocess.run(
-        [sys.executable, "-m", "poetry", "lock", "--no-interaction"],
+        [sys.executable, "-m", "poetry", *args],
         cwd=project_root,
         env=env,
         check=False,
@@ -84,14 +119,9 @@ def ensure_poetry_lock(project_root: Path) -> PoetryLock:
         stderr = completed.stderr.strip()
         detail = f" Poetry said: {stderr}" if stderr else ""
         raise RuntimeError(
-            "Poetry failed to lock pyproject.toml. Install Poetry in the same "
+            f"Poetry failed to {action} poetry.lock. Install Poetry in the same "
             f"Python environment as app-builder and make sure pyproject.toml is valid.{detail}"
         )
-
-    lock_path = project_root / "poetry.lock"
-    if not lock_path.exists():
-        raise FileNotFoundError(f"Poetry did not create {lock_path}.")
-    return load_poetry_lock(lock_path)
 
 
 def load_poetry_lock(lock_path: Path) -> PoetryLock:
@@ -100,8 +130,15 @@ def load_poetry_lock(lock_path: Path) -> PoetryLock:
     packages = payload.get("package", [])
     if not isinstance(packages, list):
         raise RuntimeError(f"Unexpected Poetry lock layout in {lock_path}.")
+    metadata = payload.get("metadata", {})
+    content_hash = (
+        metadata.get("content-hash") if isinstance(metadata, Mapping) else None
+    )
     return PoetryLock(
-        packages=tuple(_locked_package_from_mapping(package) for package in packages)
+        packages=tuple(_locked_package_from_mapping(package) for package in packages),
+        path=lock_path.resolve(),
+        sha256=_sha256_file(lock_path),
+        content_hash=content_hash if isinstance(content_hash, str) else None,
     )
 
 
@@ -113,28 +150,70 @@ def install_locked_poetry_dependencies(
     groups: Iterable[str],
 ) -> None:
     selected_groups = frozenset(groups)
-    requirements = poetry_lock.requirements_for_groups(
-        selected_groups, project_root=project_root
-    )
-    if not requirements:
+    selected_packages = poetry_lock._selected_packages(selected_groups)
+    if not selected_packages:
         return
+    _reject_mutable_path_dependencies(selected_packages)
     index_urls = poetry_lock.index_urls_for_groups(selected_groups)
-    for requirement_chunk in _chunks(requirements, _PIP_INSTALL_CHUNK_SIZE):
-        command = [
-            str(python_executable),
-            "-E",
-            "-m",
-            "pip",
-            "install",
-            "--upgrade",
-            "--no-deps",
-            "--no-warn-script-location",
-            "--disable-pip-version-check",
-        ]
-        for index_url in index_urls:
-            command.extend(["--extra-index-url", index_url])
+    hashed_lines: list[str] = []
+    direct_requirements: list[str] = []
+    for package in selected_packages:
+        requirement = _requirement_for_package(package, selected_groups, project_root)
+        if package.source is None or package.source.get("type") in {"legacy", "url"}:
+            hashes = sorted(
+                digest for _, digest in package.files if digest.startswith("sha256:")
+            )
+            if not hashes:
+                raise RuntimeError(
+                    f"Poetry lock package {package.name!r} has no SHA-256 artifact hashes. "
+                    "Run 'app-builder lock' with a current Poetry version."
+                )
+            hashed_lines.append(
+                requirement
+                + " \\\n    "
+                + " \\\n    ".join(f"--hash={digest}" for digest in hashes)
+            )
+        else:
+            direct_requirements.append(requirement)
+
+    if hashed_lines:
+        with tempfile.TemporaryDirectory() as temp_dir_str:
+            requirements_path = Path(temp_dir_str) / "locked-requirements.txt"
+            requirements_path.write_text(
+                "\n".join(hashed_lines) + "\n", encoding="utf-8"
+            )
+            command = _pip_install_command(python_executable, index_urls)
+            command.extend(
+                ["--require-hashes", "--requirement", str(requirements_path)]
+            )
+            subprocess.run(command, check=True)
+
+    for requirement_chunk in _chunks(direct_requirements, _PIP_INSTALL_CHUNK_SIZE):
+        command = _pip_install_command(python_executable, index_urls)
         command.extend(requirement_chunk)
         subprocess.run(command, check=True)
+
+
+def _pip_install_command(
+    python_executable: Path, index_urls: Iterable[str]
+) -> list[str]:
+    command = [
+        str(python_executable),
+        "-E",
+        "-m",
+        "pip",
+        "install",
+        "--upgrade",
+        "--no-deps",
+        "--no-warn-script-location",
+        "--disable-pip-version-check",
+        "--quiet",
+        "--progress-bar",
+        "off",
+    ]
+    for index_url in index_urls:
+        command.extend(["--extra-index-url", index_url])
+    return command
 
 
 def _locked_package_from_mapping(value: object) -> LockedPackage:
@@ -153,6 +232,22 @@ def _locked_package_from_mapping(value: object) -> LockedPackage:
     source = value.get("source")
     if source is not None and not isinstance(source, Mapping):
         raise RuntimeError(f"Poetry lock package {name!r} has an invalid source block.")
+    files_value = value.get("files", [])
+    if not isinstance(files_value, list):
+        raise RuntimeError(f"Poetry lock package {name!r} has an invalid files list.")
+    locked_files: list[tuple[str, str]] = []
+    for file_value in files_value:
+        if not isinstance(file_value, Mapping):
+            raise RuntimeError(
+                f"Poetry lock package {name!r} has an invalid file entry."
+            )
+        filename = file_value.get("file")
+        digest = file_value.get("hash")
+        if not isinstance(filename, str) or not isinstance(digest, str):
+            raise RuntimeError(
+                f"Poetry lock package {name!r} has an invalid file digest."
+            )
+        locked_files.append((filename, digest))
     return LockedPackage(
         name=name,
         version=version,
@@ -160,6 +255,7 @@ def _locked_package_from_mapping(value: object) -> LockedPackage:
         optional=optional,
         markers=value.get("markers"),
         source=source,
+        files=tuple(locked_files),
     )
 
 
@@ -192,23 +288,39 @@ def _base_requirement_for_package(package: LockedPackage, project_root: Path) ->
         return f"{package.name}=={package.version}"
     if source_type == "git":
         url = _source_string(package, "url")
-        reference = package.source.get("resolved_reference") or package.source.get(
-            "reference"
-        )
-        reference_suffix = f"@{reference}" if isinstance(reference, str) else ""
-        return f"{package.name} @ git+{url}{reference_suffix}"
+        reference = package.source.get("resolved_reference")
+        if not isinstance(reference, str) or not re.fullmatch(
+            r"[0-9a-fA-F]{40}", reference
+        ):
+            raise RuntimeError(
+                f"Poetry lock git package {package.name!r} is not pinned to a full resolved commit."
+            )
+        return f"{package.name} @ git+{url}@{reference}"
     if source_type == "url":
         return f"{package.name} @ {_source_string(package, 'url')}"
     if source_type in {"file", "directory"}:
-        source_url = _source_string(package, "url")
-        source_path = Path(source_url)
-        if not source_path.is_absolute():
-            source_path = project_root / source_path
-        return f"{package.name} @ {source_path.resolve().as_uri()}"
+        raise RuntimeError(
+            f"Poetry dependency {package.name!r} uses mutable {source_type!r} "
+            "source. Release dependency inputs must be reproducible; publish the "
+            "dependency to an index with hashes or use a Git dependency whose "
+            "poetry.lock entry contains a full resolved commit."
+        )
 
     raise RuntimeError(
         f"Poetry lock package {package.name!r} uses unsupported source type {source_type!r}."
     )
+
+
+def _reject_mutable_path_dependencies(packages: Iterable[LockedPackage]) -> None:
+    for package in packages:
+        source_type = package.source.get("type") if package.source is not None else None
+        if source_type in {"file", "directory"}:
+            raise RuntimeError(
+                f"Poetry dependency {package.name!r} uses mutable {source_type!r} "
+                "source. Release dependency inputs must be reproducible; publish "
+                "the dependency to an index with hashes or use a Git dependency "
+                "whose poetry.lock entry contains a full resolved commit."
+            )
 
 
 def _source_string(package: LockedPackage, key: str) -> str:
@@ -244,3 +356,11 @@ def _marker_for_groups(
 def _chunks(values: Sequence[str], size: int) -> Iterable[list[str]]:
     for index in range(0, len(values), size):
         yield list(values[index : index + size])
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as input_file:
+        for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()

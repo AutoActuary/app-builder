@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import subprocess
 import time
@@ -43,6 +44,37 @@ def _expected_icon_group_resource(icon_path: Path) -> bytes:
 def _load_exewrap_config_for_assertion(config: bytes | str) -> dict[str, Any]:
     text = config.decode("utf-8") if isinstance(config, bytes) else config
     return cast(dict[str, Any], json.loads(text))
+
+
+def _uninstall_registry_subkey(install_dir: Path) -> str:
+    canonical = str(install_dir.resolve()).rstrip("\\/").lower()
+    identity = hashlib.sha256(canonical.encode("utf-8")).hexdigest().upper()
+    return r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AppBuilder-" + identity
+
+
+def _read_uninstall_registry_entry(subkey: str) -> dict[str, Any]:
+    import winreg
+
+    values: dict[str, Any] = {}
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, subkey) as key:
+        index = 0
+        while True:
+            try:
+                name, value, _ = winreg.EnumValue(key, index)
+            except OSError:
+                break
+            values[name] = value
+            index += 1
+    return values
+
+
+def _remove_uninstall_registry_entry(subkey: str) -> None:
+    import winreg
+
+    try:
+        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, subkey)
+    except FileNotFoundError:
+        pass
 
 
 class TestExeWrapInstallerBundle(unittest.TestCase):
@@ -263,7 +295,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 payload_archive=payload,
                 manifest_path=manifest,
                 app_name="Demo",
-                pause_on_exit=False,
+                wait_on_exit=False,
                 add_uninstaller=True,
                 launcher=b"fake-launcher",
             )
@@ -326,10 +358,20 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 )
                 self.assertIn("New-AppBuilderStartMenuShortcuts", install_ps1)
                 self.assertIn("Invoke-AppBuilderHookList", install_ps1)
+                self.assertLess(
+                    install_ps1.index(
+                        "Set-AppBuilderUninstallRegistryEntry $Manifest $InstallDir $UninstallRegistryPath"
+                    ),
+                    install_ps1.index(
+                        "Invoke-AppBuilderHookList $Manifest.install_hooks.post_install $InstallDir $Manifest"
+                    ),
+                )
+                self.assertNotIn("venv\\Scripts\\python.exe'),", install_ps1)
                 self.assertIn("app-builder-manifest.json", install_ps1)
                 self.assertIn("Confirm-AppBuilderAction", install_ps1)
                 self.assertIn("Continue installing", install_ps1)
                 self.assertIn("Wait-AppBuilderBeforeExit", install_ps1)
+                self.assertIn("$AppBuilderDefaultWaitOnExit = $false", install_ps1)
                 self.assertIn("--yes", install_ps1)
                 self.assertIn("--no-wait", install_ps1)
                 self.assertNotIn("-noninteractive", install_ps1)
@@ -341,8 +383,9 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 self.assertIn("[ConsoleKey]::Enter", install_ps1)
                 self.assertNotIn("Press any key", install_ps1)
                 uninstall_cmd = installer_zip.read("bin/uninstall.cmd").decode("utf-8")
-                self.assertIn('-File "%~dp0uninstall.ps1" %*', uninstall_cmd)
                 uninstall_ps1 = installer_zip.read("bin/uninstall.ps1").decode("utf-8")
+                self.assertIn("$AppBuilderDefaultWaitOnExit = $false", uninstall_ps1)
+                self.assertIn('-File "%~dp0uninstall.ps1" %*', uninstall_cmd)
                 self.assertIn("Copy-AppBuilderPostUninstallEntrypoints", uninstall_ps1)
                 self.assertIn("Remove-AppBuilderInstallDirectory", uninstall_ps1)
                 self.assertIn("Continue uninstalling", uninstall_ps1)
@@ -372,7 +415,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 payload_archive=payload,
                 manifest_path=manifest,
                 app_name="Demo",
-                pause_on_exit=False,
+                wait_on_exit=False,
                 add_uninstaller=True,
                 launcher=b"fake-launcher",
             )
@@ -405,7 +448,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 payload_archive=payload,
                 manifest_path=manifest,
                 app_name="Demo",
-                pause_on_exit=False,
+                wait_on_exit=False,
                 add_uninstaller=True,
                 top_layer_files={
                     sevenzip_exe: "bin/7z.exe",
@@ -436,7 +479,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 payload_archive=payload,
                 manifest_path=manifest,
                 app_name="Demo",
-                pause_on_exit=False,
+                wait_on_exit=False,
                 add_uninstaller=True,
                 icon_path=icon_path,
             )
@@ -461,7 +504,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 payload_archive=payload,
                 manifest_path=manifest,
                 app_name="Demo",
-                pause_on_exit=False,
+                wait_on_exit=False,
                 add_uninstaller=False,
                 launcher=b"fake-launcher",
             )
@@ -485,6 +528,8 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             env = os.environ.copy()
             env["APPDATA"] = str(appdata_dir)
             extraction_dir.mkdir()
+            registry_subkey = _uninstall_registry_subkey(install_dir)
+            self.addCleanup(_remove_uninstall_registry_entry, registry_subkey)
 
             hook_cmd = temp_dir / "post-install.cmd"
             post_uninstall_cmd = temp_dir / "post-uninstall.cmd"
@@ -510,6 +555,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                         "name": "Demo",
                         "version": "1.0",
                         "install_directory": str(install_dir),
+                        "add_uninstaller": True,
                         "payload_archive": payload.name,
                         "start_menu": [],
                         "install_hooks": {
@@ -530,7 +576,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 payload_archive=payload,
                 manifest_path=manifest,
                 app_name="Demo",
-                pause_on_exit=False,
+                wait_on_exit=False,
                 add_uninstaller=True,
                 launcher=b"fake-launcher",
             )
@@ -558,6 +604,15 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             self.assertTrue((install_dir / "bin" / "uninstall.cmd").exists())
             self.assertTrue((install_dir / "bin" / "uninstall.ps1").exists())
             self.assertTrue((install_dir / "app-builder-manifest.json").exists())
+            registry_entry = _read_uninstall_registry_entry(registry_subkey)
+            self.assertEqual("Demo", registry_entry["DisplayName"])
+            self.assertEqual("1.0", registry_entry["DisplayVersion"])
+            self.assertEqual(str(install_dir), registry_entry["InstallLocation"])
+            self.assertIn(
+                str(install_dir / "bin" / "uninstall.ps1"),
+                registry_entry["UninstallString"],
+            )
+            self.assertTrue(registry_entry["QuietUninstallString"].endswith(" --yes"))
 
             subprocess.run(
                 [
@@ -578,6 +633,8 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 time.sleep(0.1)
             self.assertFalse(install_dir.exists())
             self.assertTrue(post_uninstall_marker.exists())
+            with self.assertRaises(FileNotFoundError):
+                _read_uninstall_registry_entry(registry_subkey)
             self.assertEqual(
                 "post-uninstall",
                 post_uninstall_marker.read_text(encoding="utf-8").strip(),
@@ -630,7 +687,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 payload_archive=payload,
                 manifest_path=manifest,
                 app_name="Demo",
-                pause_on_exit=False,
+                wait_on_exit=False,
                 add_uninstaller=True,
                 launcher=b"fake-launcher",
             )
@@ -719,7 +776,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 payload_archive=payload,
                 manifest_path=manifest,
                 app_name="Demo",
-                pause_on_exit=False,
+                wait_on_exit=False,
                 add_uninstaller=True,
                 launcher=b"fake-launcher",
             )
@@ -758,16 +815,17 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             appdata_dir = temp_dir / "appdata"
             env = os.environ.copy()
             env["APPDATA"] = str(appdata_dir)
+            env["TEMP"] = str(temp_dir / "runtime-temp")
+            env["TMP"] = env["TEMP"]
+            Path(env["TEMP"]).mkdir()
             marker = temp_dir / "pre-uninstall.txt"
-            first_extraction = temp_dir / "first"
-            second_extraction = temp_dir / "second"
-            first_extraction.mkdir()
-            second_extraction.mkdir()
+            registry_subkey = _uninstall_registry_subkey(install_dir)
+            self.addCleanup(_remove_uninstall_registry_entry, registry_subkey)
 
             first_payload = temp_dir / "demo-1.zip"
             first_hook = temp_dir / "pre-uninstall.cmd"
             first_hook.write_text(
-                "@echo off\n" f'echo pre-uninstall>"{marker}"\n',
+                "@echo off\n" 'echo pre-uninstall>"%~1"\n',
                 encoding="utf-8",
             )
             with ZipFile(first_payload, "w") as payload_zip:
@@ -780,12 +838,13 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                         "name": "Demo",
                         "version": "1.0",
                         "install_directory": str(install_dir),
+                        "add_uninstaller": True,
                         "payload_archive": first_payload.name,
                         "start_menu": [],
                         "install_hooks": {
                             "pre_install": [],
                             "post_install": [],
-                            "pre_uninstall": [["pre-uninstall.cmd"]],
+                            "pre_uninstall": [["pre-uninstall.cmd", str(marker)]],
                             "post_uninstall": [],
                         },
                     }
@@ -798,21 +857,11 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 payload_archive=first_payload,
                 manifest_path=first_manifest,
                 app_name="Demo",
-                pause_on_exit=False,
+                wait_on_exit=False,
                 add_uninstaller=True,
-                launcher=b"fake-launcher",
             )
-            with ZipFile(first_installer) as installer_zip:
-                installer_zip.extractall(first_extraction)
             subprocess.run(
-                [
-                    "cmd.exe",
-                    "/D",
-                    "/C",
-                    "call",
-                    str(first_extraction / "install.cmd"),
-                    "--yes",
-                ],
+                [str(first_installer), "--yes", "--no-wait"],
                 check=True,
                 env=env,
             )
@@ -828,6 +877,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                         "name": "Demo",
                         "version": "2.0",
                         "install_directory": str(install_dir),
+                        "add_uninstaller": True,
                         "payload_archive": second_payload.name,
                         "start_menu": [],
                         "install_hooks": {
@@ -846,22 +896,12 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 payload_archive=second_payload,
                 manifest_path=second_manifest,
                 app_name="Demo",
-                pause_on_exit=False,
+                wait_on_exit=False,
                 add_uninstaller=True,
-                launcher=b"fake-launcher",
             )
-            with ZipFile(second_installer) as installer_zip:
-                installer_zip.extractall(second_extraction)
 
             subprocess.run(
-                [
-                    "cmd.exe",
-                    "/D",
-                    "/C",
-                    "call",
-                    str(second_extraction / "install.cmd"),
-                    "--yes",
-                ],
+                [str(second_installer), "--yes", "--no-wait"],
                 check=True,
                 env=env,
             )
@@ -870,3 +910,25 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             self.assertEqual(
                 "pre-uninstall", marker.read_text(encoding="utf-8").strip()
             )
+            self.assertEqual(
+                "2.0", _read_uninstall_registry_entry(registry_subkey)["DisplayVersion"]
+            )
+
+            subprocess.run(
+                [
+                    "cmd.exe",
+                    "/D",
+                    "/C",
+                    "call",
+                    str(install_dir / "bin" / "uninstall.cmd"),
+                    "--yes",
+                ],
+                check=True,
+                env=env,
+            )
+            deadline = time.monotonic() + 10
+            while install_dir.exists() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            self.assertFalse(install_dir.exists())
+            with self.assertRaises(FileNotFoundError):
+                _read_uninstall_registry_entry(registry_subkey)

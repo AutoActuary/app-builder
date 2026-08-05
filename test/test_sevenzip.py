@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from app_builder import sevenzip
+from app_builder.fileset import validate_archive_path
 
 
 class TestSevenZipPayloadArchive(unittest.TestCase):
@@ -46,7 +47,7 @@ class TestSevenZipPayloadArchive(unittest.TestCase):
         ):
             with self.subTest(value=value):
                 with self.assertRaises(ValueError):
-                    sevenzip.validate_archive_path(value)
+                    validate_archive_path(value)
 
     @unittest.skipIf(os.name != "nt", "vendored 7z.exe runs on Windows")
     def test_create_7z_payload_supports_remap_and_version_quietly(self) -> None:

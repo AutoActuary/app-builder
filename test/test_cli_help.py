@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 from urllib.parse import unquote, urlparse
 
 from click.testing import CliRunner
 
-from app_builder.main import main
+from app_builder.main import _help_html_url, main
 
 
 class TestCliHelp(unittest.TestCase):
@@ -24,7 +26,12 @@ class TestCliHelp(unittest.TestCase):
         )
 
         self.assertTrue(help_path.is_file())
-        self.assertIn("app-builder Help", help_path.read_text(encoding="utf-8"))
+        help_html = help_path.read_text(encoding="utf-8")
+        self.assertIn("app-builder Help", help_html)
+        self.assertIn("From Project To Installation", help_html)
+        self.assertIn("Project folder", help_html)
+        self.assertIn("Publishing Is Optional", help_html)
+        self.assertNotIn("<h3>Config</h3>", help_html)
 
     def test_help_link_points_to_docs_copy(self) -> None:
         result = CliRunner().invoke(main, ["--help"])
@@ -49,6 +56,24 @@ class TestCliHelp(unittest.TestCase):
 
         self.assertTrue(docs_help.is_file())
         self.assertFalse(old_assets_help.exists())
+
+    def test_wheel_data_file_location_is_used_outside_source_checkout(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            prefix = Path(temp_dir_str) / "venv"
+            package_file = prefix / "Lib" / "site-packages" / "app_builder" / "main.py"
+            installed_help = (
+                prefix / "share" / "app-builder" / "docs" / "app-builder-help.html"
+            )
+            installed_help.parent.mkdir(parents=True)
+            installed_help.write_text("installed help", encoding="utf-8")
+
+            with (
+                patch("app_builder.main.__file__", str(package_file)),
+                patch("app_builder.main.sys.prefix", str(prefix)),
+            ):
+                help_url = _help_html_url()
+
+        self.assertEqual(installed_help.resolve().as_uri(), help_url)
 
 
 if __name__ == "__main__":
