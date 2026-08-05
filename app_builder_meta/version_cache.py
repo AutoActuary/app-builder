@@ -14,7 +14,26 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator
+from typing import BinaryIO, Iterator
+
+if sys.platform == "win32":
+    import msvcrt
+
+    def _acquire_platform_lock(lock_file: BinaryIO) -> None:
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+
+    def _release_platform_lock(lock_file: BinaryIO) -> None:
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+
+else:
+    import fcntl
+
+    def _acquire_platform_lock(lock_file: BinaryIO) -> None:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def _release_platform_lock(lock_file: BinaryIO) -> None:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
 
 APP_BUILDER_REPOSITORY_URL = "https://github.com/AutoActuary/app-builder.git"
 
@@ -316,17 +335,7 @@ def _exclusive_cache_lock(
         while True:
             lock_file.seek(0)
             try:
-                if os.name == "nt":
-                    import msvcrt
-
-                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(  # type: ignore[attr-defined]
-                        lock_file.fileno(),
-                        fcntl.LOCK_EX | fcntl.LOCK_NB,  # type: ignore[attr-defined]
-                    )
+                _acquire_platform_lock(lock_file)
                 break
             except OSError:
                 if time.monotonic() >= deadline:
@@ -338,16 +347,7 @@ def _exclusive_cache_lock(
             yield
         finally:
             lock_file.seek(0)
-            if os.name == "nt":
-                import msvcrt
-
-                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(  # type: ignore[attr-defined]
-                    lock_file.fileno(), fcntl.LOCK_UN  # type: ignore[attr-defined]
-                )
+            _release_platform_lock(lock_file)
 
 
 def _prepend_path(value: str, existing: str) -> str:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import importlib
 import os
 import subprocess
 import time
@@ -52,8 +53,16 @@ def _uninstall_registry_subkey(install_dir: Path) -> str:
     return r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AppBuilder-" + identity
 
 
+def _winreg() -> Any:
+    return cast(Any, importlib.import_module("winreg"))
+
+
+def _canonical_windows_path(value: str | Path) -> str:
+    return os.path.normcase(str(Path(value).resolve()))
+
+
 def _read_uninstall_registry_entry(subkey: str) -> dict[str, Any]:
-    import winreg
+    winreg = _winreg()
 
     values: dict[str, Any] = {}
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, subkey) as key:
@@ -69,7 +78,7 @@ def _read_uninstall_registry_entry(subkey: str) -> dict[str, Any]:
 
 
 def _remove_uninstall_registry_entry(subkey: str) -> None:
-    import winreg
+    winreg = _winreg()
 
     try:
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, subkey)
@@ -607,7 +616,10 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             registry_entry = _read_uninstall_registry_entry(registry_subkey)
             self.assertEqual("Demo", registry_entry["DisplayName"])
             self.assertEqual("1.0", registry_entry["DisplayVersion"])
-            self.assertEqual(str(install_dir), registry_entry["InstallLocation"])
+            self.assertEqual(
+                _canonical_windows_path(install_dir),
+                _canonical_windows_path(registry_entry["InstallLocation"]),
+            )
             self.assertIn(
                 str(install_dir / "bin" / "uninstall.ps1"),
                 registry_entry["UninstallString"],

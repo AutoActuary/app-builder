@@ -145,7 +145,7 @@ build_hooks: {}
             assert release.build_log_path is not None
             build_log = release.build_log_path.read_text(encoding="utf-8")
             self.assertIn("Payload file selection", build_log)
-            self.assertIn("src\\hello.py -> src/hello.py", build_log)
+            self.assertIn(f"{Path('src') / 'hello.py'} -> src/hello.py", build_log)
             self.assertEqual(".exe", release.installer_archive.suffix)
 
             manifest = json.loads(release.manifest_path.read_text(encoding="utf-8"))

@@ -70,7 +70,7 @@ class TestAppBuilderMetaDispatch(unittest.TestCase):
 
             target = choose_target(["release"], temp_dir)
 
-        self.assertEqual(LegacyConfigErrorTarget(path=legacy_config), target)
+        self.assertEqual(LegacyConfigErrorTarget(path=legacy_config.resolve()), target)
 
     def test_current_version_routes_to_current(self) -> None:
         with TemporaryDirectory() as temp_dir_str:

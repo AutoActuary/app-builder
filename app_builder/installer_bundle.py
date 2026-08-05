@@ -440,7 +440,11 @@ try {
         Remove-Item -LiteralPath $StartMenuDir -Recurse -Force
     }
 
-    Set-Location $env:TEMP
+    if (-not [string]::IsNullOrWhiteSpace($env:SystemRoot)) {
+        Set-Location $env:SystemRoot
+    } else {
+        Set-Location $env:TEMP
+    }
     Start-AppBuilderPostUninstallCleanup $InstallDir $PostUninstallCommands $PostUninstallDir $UninstallRegistryPath
     $StartedCleanup = $true
 } finally {
@@ -1257,7 +1261,11 @@ foreach ($Property in $Payload.environment.PSObject.Properties) {
 }
 $Succeeded = $false
 try {
-    Set-Location $env:TEMP
+    if (-not [string]::IsNullOrWhiteSpace($env:SystemRoot)) {
+        Set-Location $env:SystemRoot
+    } else {
+        Set-Location $env:TEMP
+    }
     Start-Sleep -Milliseconds 500
     Remove-DirectoryWithRetry ([string]$Payload.install_directory)
     if (-not [string]::IsNullOrWhiteSpace([string]$Payload.uninstall_registry_path)) {
@@ -1286,6 +1294,7 @@ try {
 }
 '@.Replace('__APP_BUILDER_PAYLOAD__', $PayloadBase64)
     $EncodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($CleanupScript))
-    Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $EncodedCommand) -WindowStyle Hidden
+    $SafeWorkingDirectory = if (-not [string]::IsNullOrWhiteSpace($env:SystemRoot)) { $env:SystemRoot } else { $env:TEMP }
+    Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $EncodedCommand) -WorkingDirectory $SafeWorkingDirectory -WindowStyle Hidden
 }
 """

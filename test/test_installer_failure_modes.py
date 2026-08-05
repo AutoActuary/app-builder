@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import os
 import subprocess
 import time
@@ -8,8 +9,21 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
+from typing import Any, cast
 
 from app_builder.installer_bundle import create_exewrap_zip_installer
+
+
+def _winreg() -> Any:
+    return cast(Any, importlib.import_module("winreg"))
+
+
+def _canonical_windows_path(value: str | Path) -> str:
+    return os.path.normcase(str(Path(value).resolve()))
+
+
+def _single_line(value: str) -> str:
+    return " ".join(value.split())
 
 
 def _write_manifest(
@@ -107,7 +121,7 @@ def _run_uninstall(
 
 
 def _registry_entries_for_install(install_dir: Path) -> list[tuple[str, str]]:
-    import winreg
+    winreg = _winreg()
 
     root_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
     matches: list[tuple[str, str]] = []
@@ -125,13 +139,15 @@ def _registry_entries_for_install(install_dir: Path) -> list[tuple[str, str]]:
                     display_name = str(winreg.QueryValueEx(key, "DisplayName")[0])
             except (FileNotFoundError, OSError):
                 continue
-            if Path(location) == install_dir:
+            if _canonical_windows_path(location) == _canonical_windows_path(
+                install_dir
+            ):
                 matches.append((key_name, display_name))
     return matches
 
 
 def _remove_registry_entries_for_install(install_dir: Path) -> None:
-    import winreg
+    winreg = _winreg()
 
     root_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
     for key_name, _ in _registry_entries_for_install(install_dir):
@@ -146,7 +162,7 @@ class TestInstallerFailureModes(unittest.TestCase):
     def test_legacy_upgrade_removes_validated_registry_and_vendor_shortcut(
         self,
     ) -> None:
-        import winreg
+        winreg = _winreg()
 
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
@@ -297,7 +313,7 @@ class TestInstallerFailureModes(unittest.TestCase):
             result = _run_install(extraction_dir, appdata_dir=appdata_dir)
 
             self.assertNotEqual(0, result.returncode)
-            self.assertIn("manifest is corrupt", result.stderr)
+            self.assertIn("manifest is corrupt", _single_line(result.stderr))
             self.assertIn("unreadable", result.stderr)
             self.assertEqual("old", (install_dir / "old.txt").read_text())
             self.assertFalse((install_dir / "new.txt").exists())
@@ -494,7 +510,10 @@ class TestInstallerFailureModes(unittest.TestCase):
                 result = _run_install(extraction_dir, appdata_dir=appdata_dir)
 
             self.assertNotEqual(0, result.returncode)
-            self.assertIn("Failed to move existing install directory", result.stderr)
+            self.assertIn(
+                "Failed to move existing install directory",
+                _single_line(result.stderr),
+            )
             self.assertEqual("old locked", locked_file.read_text(encoding="utf-8"))
             self.assertFalse((install_dir / "new.txt").exists())
             self.assertEqual(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import ntpath
 import re
 import subprocess
 from pathlib import Path, PureWindowsPath
@@ -128,9 +129,9 @@ def _validate_install_directory(value: str) -> None:
             "installer.install_directory must not be a drive or filesystem root."
         )
 
-    resolved = os.path.normcase(os.path.abspath(os.path.expandvars(value)))
+    resolved = _normalize_windows_path(value)
     user_roots = {
-        os.path.normcase(os.path.abspath(path))
+        _normalize_windows_path(path)
         for path in (
             os.environ.get("LOCALAPPDATA", ""),
             os.environ.get("APPDATA", ""),
@@ -139,7 +140,7 @@ def _validate_install_directory(value: str) -> None:
         if path
     }
     protected_roots = {
-        os.path.normcase(os.path.abspath(path))
+        _normalize_windows_path(path)
         for path in (
             os.environ.get("WINDIR", ""),
             os.environ.get("ProgramFiles", ""),
@@ -152,16 +153,22 @@ def _validate_install_directory(value: str) -> None:
             "installer.install_directory must name an application subdirectory."
         )
     for protected_root in protected_roots:
-        try:
-            is_protected = (
-                os.path.commonpath((resolved, protected_root)) == protected_root
-            )
-        except ValueError:
-            continue
-        if is_protected:
+        if _is_same_or_child_windows_path(resolved, protected_root):
             raise ValueError(
                 "installer.install_directory must not be inside a protected Windows directory."
             )
+
+
+def _normalize_windows_path(value: str) -> str:
+    return ntpath.normcase(ntpath.normpath(value))
+
+
+def _is_same_or_child_windows_path(candidate: str, root: str) -> bool:
+    candidate_parts = PureWindowsPath(candidate).parts
+    root_parts = PureWindowsPath(root).parts
+    return len(candidate_parts) >= len(root_parts) and (
+        candidate_parts[: len(root_parts)] == root_parts
+    )
 
 
 def _validate_python_version(options: object | None, *, label: str) -> None:
