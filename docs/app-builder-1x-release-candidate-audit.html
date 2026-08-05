@@ -129,7 +129,7 @@
     <div class="inner">
       <h1>app-builder 1.x Release Candidate Audit</h1>
       <p class="lede">Release-candidate record for app-builder 1.3.0, based on code inspection, the complete automated suite, a dogfood build and installation, and real Windows installer execution.</p>
-      <p class="meta">Verified 5 August 2026 &middot; branch <code>codex/1x-release-blockers</code> &middot; candidate version <code>1.3.0</code></p>
+      <p class="meta">Verified 5 August 2026 &middot; release PR <a href="https://github.com/AutoActuary/app-builder/pull/68">#68</a> into <code>1.x</code> &middot; candidate version <code>1.3.0</code></p>
     </div>
   </header>
 
@@ -138,8 +138,8 @@
       <div class="verdict">
         <strong>READY</strong>
         <div>
-          <h2>The implementation is ready for the release PR</h2>
-          <p>Every behavioral blocker, contract gap, and hardening item found by the audit has been implemented and exercised. The exact committed revision must still pass the required GitHub Actions jobs before publication; that is the release gate, not unfinished product behavior.</p>
+          <h2>The candidate is ready to merge and release</h2>
+          <p>Every behavioral blocker, contract gap, and hardening item found by the audit has been implemented and exercised. Pull request #68 passed Black, mypy, Python 3.11, 3.12, and 3.13 on Linux, plus the full final-installer suite on Windows.</p>
           <p>The product now matches the intended 1.x boundary: strict project config, reproducible inputs, multiple selected outputs, self-contained Windows installation, managed version dispatch, and enforceable publication preflight.</p>
         </div>
       </div>
@@ -163,7 +163,7 @@
       <article class="finding blocker">
         <h3><span class="tag">PROCEDURE</span>Exact-revision release gate</h3>
         <p><strong>Implementation:</strong> the package and dogfood release version are <code>1.3.0</code>, avoiding the already-published 1.2.0 identity. The workflow includes Linux coverage and a Windows job that launches final installer executables.</p>
-        <p class="evidence"><strong>Release gate:</strong> commit this complete candidate, open the release PR, and require all checks on that exact revision before creating the GitHub release.</p>
+        <p class="evidence"><strong>Verification:</strong> the complete candidate is committed in pull request #68. Its Linux, Windows, Black, and mypy checks all pass; publication still requires merging the reviewed PR and tagging that resulting audited commit.</p>
       </article>
     </section>
 
@@ -251,10 +251,9 @@
     <section id="next">
       <h2>Remaining Release Procedure</h2>
       <ol>
-        <li>Commit the complete 1.3.0 candidate and open the release PR.</li>
-        <li>Require green Linux and Windows jobs on that exact commit.</li>
-        <li>Review generated notes, artifact inventory, checksums, and signing status.</li>
-        <li>Create the 1.3.0 tag at the audited commit and run <code>app-builder release-gh --version 1.3.0</code>.</li>
+        <li>Review and merge pull request #68 into <code>1.x</code>.</li>
+        <li>Build 1.3.0 from the merged commit and review generated notes, artifact inventory, checksums, and signing status.</li>
+        <li>Create the 1.3.0 tag at that commit and run <code>app-builder release-gh --version 1.3.0</code>.</li>
       </ol>
     </section>
   </main>
