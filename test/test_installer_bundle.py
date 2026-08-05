@@ -621,8 +621,8 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 _canonical_windows_path(registry_entry["InstallLocation"]),
             )
             self.assertIn(
-                str(install_dir / "bin" / "uninstall.ps1"),
-                registry_entry["UninstallString"],
+                _canonical_windows_path(install_dir / "bin" / "uninstall.ps1"),
+                str(registry_entry["UninstallString"]).casefold(),
             )
             self.assertTrue(registry_entry["QuietUninstallString"].endswith(" --yes"))
 
