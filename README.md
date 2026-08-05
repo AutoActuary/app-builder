@@ -18,27 +18,47 @@ Create starter config inside a git repository:
 app-builder init
 ```
 
-Edit `app_builder.yaml`, then build a local installer:
+Edit `app_builder.yaml`. A Python project must declare dependencies in
+`pyproject.toml` and run `app-builder lock` before its first build. A project
+that does not ship Python should set both `python_bundled` and `python_venv` to
+`null`.
+
+Then build a local installer:
 
 ```text
 app-builder release --version 0.1.0
 ```
 
-Publish the same artifacts to GitHub Releases:
+Build and publish the configured release files to GitHub Releases:
 
 ```text
 app-builder release-gh --version 0.1.0 --draft
 ```
 
+Local releases also create a SHA-256 checksum file and generated release notes.
+Named `outputs` can collect hook-generated files under `installer.dist`, and
+`publications.github.outputs` selects exactly which built-in and named outputs
+are uploaded.
+They print timed build stages immediately and keep a detailed diagnostic log
+under the configured dist directory's `build-logs` folder.
+Before GitHub publication, app-builder requires a clean Git worktree outside
+the configured dist directory, validates the artifact set and checksums, verifies
+version and tag identity, checks `gh auth status`, and targets the exact audited
+HEAD commit.
+
 ## Commands
 
 ```text
 app-builder --help
+app-builder --version
 app-builder init [--force]
 app-builder python
 app-builder deps
-app-builder release [--version <version>]
-app-builder release-gh [--version <version>] [--draft | --no-draft]
+app-builder lock
+app-builder versions list
+app-builder versions remove <ref>
+app-builder release [--version <version>] [--verbose]
+app-builder release-gh [--version <version>] [--draft | --no-draft] [--verbose]
 app-builder 0.x <legacy-command>
 ```
 
@@ -55,15 +75,35 @@ README is intentionally short. The release pipeline document exists separately b
 
 `app_builder.yaml` is strict: unknown keys are rejected, old `application.yaml` shapes are rejected, and hooks are argv lists.
 
-Use `%localappdata%`, `%appdata%`, and other percent-style Windows variables for install paths that must resolve on the end user's machine:
+Normal builds verify an existing `poetry.lock` and install locked registry
+artifacts by SHA-256. They never rewrite the lock. Run `app-builder lock`
+deliberately when dependencies change. Python runtime versions must be exact
+`major.minor.patch` pins. Mutable Poetry `file` and `directory` dependencies are
+rejected for releases; use a hashed index artifact or a Git source pinned to a
+full resolved commit.
+
+Use `%LOCALAPPDATA%`, `%APPDATA%`, or `%USERPROFILE%` as the root for install
+paths that must resolve on the end user's machine. Other variable-root install
+paths are rejected by release preflight:
 
 ```yaml
 installer:
   name: "MyApp ${APP.VERSION}"
-  install_directory: '%localappdata%\Acme\${CONFIG.installer.name}'
+  install_directory: '%LOCALAPPDATA%\Acme\${CONFIG.installer.name}'
 ```
 
 `${ENV.*}` is build-time interpolation. Use it only when you intentionally want the builder or CI environment baked into the config.
+
+Configured Python environments are created inside the project but are not added
+to the payload implicitly. Include `python_bundled.path`, normally `bin/python`,
+under `installer.paths.include` when the installed application needs that runtime.
+Installer `.py` hooks use those configured payload paths rather than fixed runtime
+directory names.
+
+`installer.dist` is excluded from the installed payload by default, including
+when a broad include selects it. Named output pickup is cleared before
+`post_dist`, and the payload and manifest are sealed once embedded into the
+installer.
 
 ## Installer Flags
 
@@ -72,7 +112,7 @@ Generated install and uninstall scripts accept two runtime flags:
 - `--yes`: bypass confirmation questions and skip the final close wait.
 - `--no-wait`: skip only the final close wait.
 
-Without those flags, the scripts ask before mutating the target directory. When `installer.pause_on_exit` is true, the console closes after 30 seconds or when the user presses Enter.
+Without those flags, the scripts ask before mutating the target directory. When `installer.wait_on_exit` is true, the console closes after 30 seconds or when the user presses Enter.
 
 ## Testing
 
@@ -80,5 +120,5 @@ Run tests against the `test` directory explicitly. A bare `python -m pytest` can
 
 ```text
 python -m pytest test -q
-python -m mypy --config-file mypy.ini
+python -m mypy app_builder app_builder_meta test
 ```

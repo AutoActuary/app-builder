@@ -1,6 +1,6 @@
 # Vendored 7-Zip runtime
 
-This directory contains the 7-Zip console runtime used when
+This directory contains the 7-Zip 24.04 console runtime used when
 `installer.payload_format: 7z` is selected.
 
 The files were carried forward from the app-builder `0.x` branch:

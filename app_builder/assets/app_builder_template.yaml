@@ -1,16 +1,17 @@
 # app_builder.yaml
 # Generated from app_builder.schema metadata.
-# Required and common optional fields contain examples; replace them for your app.
+# Every supported config key is shown. Replace the starter values for your app.
+# Empty lists are safe defaults; comments identify structured item fields.
 # String values can reference ${ENV.NAME}, ${GIT.DESCRIBE}, ${GIT.COMMIT},
 # ${GIT.SHORT_COMMIT}, ${GIT.BRANCH}, ${GIT.TAG}, ${GIT.IS_DIRTY},
 # ${APP.VERSION}, and ${CONFIG.path.to.value}.
 # Interpolation is string-only and runs before schema validation.
-# Keep app_builder_version literal; the version dispatcher reads it before
-# the full 1.x config interpolation layer is loaded.
-# Optional, nullable string | null. Version selector read by the meta CLI before loading
-# the full config. Use current for the installed 1.x app-builder; explicit 1.x tags,
-# branches, or commits are resolved through the managed version cache. Use the command
-# line form app-builder 0.x for legacy 0.x projects. Default if omitted: current.
+# Keep app_builder_version literal; app-builder reads it before config
+# interpolation is available.
+# Optional, nullable string | null. Literal version selector read by the app-builder
+# launcher before config interpolation. Use current for the installed 1.x version;
+# explicit 1.x tags, branches, or commits use the managed version cache. Use app-builder
+# 0.x for legacy projects. Default if omitted: current.
 app_builder_version: current
 
 # Optional, nullable mapping | null. Optional bundled Python runtime. Set to null to
@@ -20,8 +21,8 @@ python_bundled:
   # materialized. Default if omitted: bin/python.
   path: bin/python
 
-  # Optional string. NuGet Python package version or version prefix to materialize.
-  # Default if omitted: 3.11.1.
+  # Optional string. Exact major.minor.patch NuGet Python package version to materialize
+  # reproducibly. Default if omitted: 3.11.1.
   python_version: 3.12.10
 
 # Optional, nullable mapping | null. Optional Poetry dev virtual environment derived from
@@ -32,24 +33,27 @@ python_venv:
   # is created. Default if omitted: venv.
   path: venv
 
-  # Optional string. NuGet Python package version or version prefix used when the virtual
-  # environment is self-contained because python_bundled is disabled. Default if omitted:
-  # 3.11.1.
+  # Optional string. Exact major.minor.patch NuGet Python package version used when the
+  # virtual environment is self-contained because python_bundled is disabled. Default if
+  # omitted: 3.11.1.
   python_version: 3.12.10
 
 # Required mapping. Required installer metadata and release payload settings.
 installer:
-  # Required string. Human-facing application name.
+  # Required string. Human-facing application name and Windows install identity. It must
+  # be a trimmed, filename-safe, non-reserved Windows name.
   name: MyApp
 
-  # Required string. Windows install directory. Use percent-style environment variables
-  # such as %localappdata% when the path must resolve on the user's machine; generated
-  # installer scripts expand them at install time.
-  install_directory: '%localappdata%\MyCompany\MyApp'
+  # Required string. Windows install directory. A variable-root path must start with
+  # %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the
+  # installer expands it on the user's machine. A fixed absolute path is also allowed when
+  # it is not a drive root or protected Windows directory.
+  install_directory: '%LOCALAPPDATA%\MyCompany\MyApp'
 
-  # Optional string. Project-relative .ico file used for generated executables and Start
-  # Menu shortcuts when a shortcut does not specify its own icon. Default if omitted:
-  # application-templates/icon.ico.
+  # Optional string. Project-relative .ico file embedded into generated executables. It is
+  # also the default install-relative Start Menu icon path, so include it at the same
+  # payload path or override the shortcut icon. Default if omitted: application-
+  # templates/icon.ico.
   icon: application-templates/icon.ico
 
   # Optional string. Inner payload archive format. Use zip for the Windows tar.exe path or
@@ -59,10 +63,11 @@ installer:
   # Optional boolean. Whether generated installer scripts should wait briefly before
   # exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait,
   # while --no-wait skips only the wait. Default if omitted: true.
-  pause_on_exit: true
+  wait_on_exit: true
 
-  # Optional boolean. Whether the installer bundle should include an uninstall script.
-  # Default if omitted: true.
+  # Optional boolean. Whether installation adds the installed uninstall scripts, Start
+  # Menu uninstall shortcut, and per-user Windows Installed Apps registration. Default if
+  # omitted: true.
   add_uninstaller: true
 
   # Optional list[mapping]. Windows Start Menu shortcut declarations. Default if omitted:
@@ -88,7 +93,8 @@ installer:
     pre_install: []
 
     # Optional list[list[string]]. Argv commands written into installer metadata to run
-    # after installation. Default if omitted: [].
+    # after payload files, shortcuts, uninstall support, and Windows Installed Apps
+    # registration are complete. Default if omitted: [].
     post_install: []
 
     # Optional list[list[string]]. Argv commands written into installer metadata to run
@@ -102,29 +108,37 @@ installer:
     # stages only argv[0] to temp before removal. Default if omitted: [].
     post_uninstall: []
 
-  # Optional string. Project-relative output directory for release artifacts. Default if
-  # omitted: dist.
+  # Optional string. Project-relative subdirectory inside the project where release
+  # artifacts and build logs are written. Default if omitted: dist.
   dist: dist
 
   # Optional mapping. Payload include, exclude, and remap rules. Default if omitted:
   # PathsMapping defaults.
   paths:
-    # Optional list[string]. Project-relative files or globs included in the release
-    # payload. Default if omitted: [].
+    # Optional list[string]. Required project-relative files or globs included in the
+    # release payload. Every entry must match, and the final payload must be nonempty
+    # after excludes. Default if omitted: [].
     include:
-      - src
       - app_builder.yaml
       - application-templates
+      - bin/python
 
-    # Optional list[string]. Project-relative files or globs excluded from the release
+    # Optional list[string]. Project-relative files or globs removed from the selected
     # payload. Default if omitted: [].
     exclude:
       - '**/__pycache__'
       - dist
       - venv
 
-    # Optional list[tuple[string, string]]. Two-item source and destination pairs for
-    # relocating payload files. Default if omitted: [].
+    # Optional boolean. Whether files beneath installer.dist may enter the application
+    # payload. The default excludes dist even when a broad include selects the project
+    # root, preventing old release files and build logs from being installed. Default if
+    # omitted: false.
+    include_dist: false
+
+    # Optional list[tuple[string, string]]. Two-item source and archive-destination pairs.
+    # Each source must be a selected literal project-relative path; destinations must be
+    # safe, unique archive paths. Default if omitted: [].
     remap:
       - [README.md, docs/README.md]
 
@@ -155,8 +169,10 @@ build_hooks:
   # assembled. Default if omitted: [].
   pre_dist: []
 
-  # Optional list[list[string]]. Argv commands run after the release payload is assembled.
-  # Default if omitted: [].
+  # Optional list[list[string]]. Argv commands run after installer assembly and stale
+  # named-output candidates are cleared, but before output collection, checksums, and
+  # release notes. This stage may create extra outputs or sign the installer; it must not
+  # modify the sealed payload or manifest. Default if omitted: [].
   post_dist: []
 
   # Optional list[list[string]]. Argv commands run before GitHub release upload. Default
@@ -167,6 +183,23 @@ build_hooks:
   # omitted: [].
   post_github_release: []
 
-  # Optional list[list[string]]. Argv commands run at the end of release processing.
-  # Default if omitted: [].
-  post_process: []
+# Optional list[mapping]. Named release output collections produced by hooks or other
+# project build steps and picked up from installer.dist. Default if omitted: [].
+outputs: []
+# Item fields: name, pattern, min_matches, max_matches.
+
+# Optional mapping. Explicit publication output selections. Default if omitted:
+# Publications defaults.
+publications:
+  # Optional mapping. GitHub release publication settings. Default if omitted:
+  # GitHubPublication defaults.
+  github:
+    # Optional list[string]. Exact logical output names uploaded to the GitHub release. A
+    # configured name expands to every matched file; unknown names and case-insensitive
+    # upload filename collisions are rejected. Default if omitted: [payload, installer,
+    # manifest, checksums].
+    outputs:
+      - payload
+      - installer
+      - manifest
+      - checksums

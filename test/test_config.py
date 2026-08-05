@@ -122,6 +122,28 @@ installer:
         self.assertEqual([], config.installer.paths.include)
         self.assertEqual([], config.installer.bootstrap_hooks.pre_extract)
         self.assertEqual([], config.installer.install_hooks.post_install)
+        self.assertTrue(config.installer.wait_on_exit)
+
+    def test_wait_on_exit_uses_new_name_and_rejects_old_name(self) -> None:
+        config = self._load_yaml("""
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+  wait_on_exit: false
+""")
+
+        self.assertFalse(config.installer.wait_on_exit)
+
+        with self.assertRaisesRegex(
+            ConfigError,
+            r"config\.installer: unknown key 'pause_on_exit'\.",
+        ):
+            self._load_yaml("""
+installer:
+  name: Demo
+  install_directory: "%localappdata%\\\\Demo"
+  pause_on_exit: false
+""")
 
     def test_bootstrap_pre_extract_hooks_are_argv_lists(self) -> None:
         config = self._load_yaml("""

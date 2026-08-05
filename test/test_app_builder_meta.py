@@ -24,6 +24,11 @@ from app_builder_meta.legacy_0x import run_legacy_bridge
 from app_builder_meta.version_cache import (
     ManagedVersion,
     _cache_key,
+    _exclusive_cache_lock,
+    _resolve_source_ref,
+    default_cache_root,
+    managed_version_manifests,
+    remove_managed_version,
     run_managed_version,
 )
 
@@ -65,7 +70,7 @@ class TestAppBuilderMetaDispatch(unittest.TestCase):
 
             target = choose_target(["release"], temp_dir)
 
-        self.assertEqual(LegacyConfigErrorTarget(path=legacy_config), target)
+        self.assertEqual(LegacyConfigErrorTarget(path=legacy_config.resolve()), target)
 
     def test_current_version_routes_to_current(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
@@ -173,8 +178,90 @@ class TestAppBuilderMetaExecutionAdapters(unittest.TestCase):
         self.assertIn(str(repo_path), kwargs["env"]["PYTHONPATH"])
 
     def test_cache_key_keeps_refs_filesystem_safe(self) -> None:
-        self.assertEqual("feature-demo", _cache_key("feature/demo"))
-        self.assertEqual("unnamed-ref", _cache_key("///"))
+        slash_key = _cache_key("feature/demo")
+        hyphen_key = _cache_key("feature-demo")
+        self.assertRegex(slash_key, r"^feature-demo-[0-9a-f]{12}$")
+        self.assertRegex(_cache_key("///"), r"^unnamed-ref-[0-9a-f]{12}$")
+        self.assertNotEqual(slash_key, hyphen_key)
+
+    def test_default_cache_root_is_user_local_and_overrideable(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            with patch.dict(
+                "os.environ", {"APP_BUILDER_CACHE_ROOT": temp_dir_str}, clear=False
+            ):
+                self.assertEqual(Path(temp_dir_str).resolve(), default_cache_root())
+
+    def test_resolves_tags_as_immutable_and_branches_at_current_remote_head(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            repository = Path(temp_dir_str) / "repo"
+            repository.mkdir()
+            subprocess.run(
+                ["git", "init"], cwd=repository, check=True, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.email", "cache@example.invalid"],
+                cwd=repository,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "cache test"],
+                cwd=repository,
+                check=True,
+            )
+            (repository / "tracked.txt").write_text("one", encoding="utf-8")
+            subprocess.run(["git", "add", "."], cwd=repository, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "one"],
+                cwd=repository,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=repository, check=True)
+            branch = subprocess.run(
+                ["git", "branch", "--show-current"],
+                cwd=repository,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            subprocess.run(
+                ["git", "update-ref", f"refs/remotes/origin/{branch}", "HEAD"],
+                cwd=repository,
+                check=True,
+            )
+
+            tag_commit, tag_kind = _resolve_source_ref(repository, "v1.0.0")
+            branch_commit, branch_kind = _resolve_source_ref(repository, branch)
+
+        self.assertEqual("tag", tag_kind)
+        self.assertEqual("branch", branch_kind)
+        self.assertEqual(tag_commit, branch_commit)
+
+    def test_managed_cache_can_be_listed_and_removed_by_ref(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            cache_root = Path(temp_dir_str)
+            managed_root = cache_root / "versions" / _cache_key("feature/demo")
+            managed_root.mkdir(parents=True)
+            (managed_root / "version-manifest.json").write_text(
+                '{"requested_ref":"feature/demo","resolved_commit":"abc","ref_kind":"branch"}',
+                encoding="utf-8",
+            )
+
+            manifests = managed_version_manifests(cache_root=cache_root)
+            removed = remove_managed_version("feature/demo", cache_root=cache_root)
+
+        self.assertEqual("feature/demo", manifests[0]["requested_ref"])
+        self.assertTrue(removed)
+
+    def test_managed_cache_lock_rejects_concurrent_writer(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            lock_path = Path(temp_dir_str) / "versions" / ".locks" / "demo.lock"
+            with _exclusive_cache_lock(lock_path):
+                with self.assertRaisesRegex(TimeoutError, "cache lock"):
+                    with _exclusive_cache_lock(lock_path, timeout_seconds=0.05):
+                        self.fail("concurrent cache writer unexpectedly acquired lock")
 
 
 if __name__ == "__main__":

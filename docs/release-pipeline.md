@@ -5,17 +5,29 @@ This is the current 1.x release path from `app_builder.yaml` to local artifacts 
 ## 1. Command Entry
 
 ```text
-app-builder release [--version <version>]
-app-builder release-gh [--version <version>] [--draft | --no-draft]
+app-builder release [--version <version>] [--verbose]
+app-builder release-gh [--version <version>] [--draft | --no-draft] [--verbose]
 ```
 
-`release` creates local artifacts. `release-gh` runs the same local build first, then uploads the resulting artifact set with GitHub CLI (`gh.exe`).
+`release` creates local artifacts. `release-gh` runs a local build first, then uploads the outputs selected by `publications.github.outputs` with GitHub CLI (`gh.exe`).
 
 When `--version` is omitted, app-builder uses git-based version detection and falls back to `0.0.0-dev`.
+
+For app-builder's own publication, the release version must equal the version in
+`pyproject.toml`. The installed dogfood CLI reads its version from the installed
+manifest, so the installer identity and `app-builder --version` cannot diverge.
 
 ## 2. Config Loading
 
 `app_builder.yaml` is parsed as YAML, then string interpolation runs before dataclass schema validation.
+
+Before dependencies or hooks run, release preflight rejects unsafe Windows app
+names, invalid Git tag versions, dangerous install roots, non-exact Python
+versions, empty hook argv, and unsafe dist/runtime write paths. Dist,
+`python_bundled.path`, and `python_venv.path` must resolve to project
+subdirectories. Install paths must be an
+absolute application subdirectory or live beneath `%LOCALAPPDATA%`, `%APPDATA%`,
+or `%USERPROFILE%`.
 
 Supported interpolation variables:
 
@@ -29,7 +41,7 @@ Supported interpolation variables:
 - `${APP.VERSION}`
 - `${CONFIG.path.to.value}`
 
-Interpolation is string-only. References to lists or mappings fail loudly, as do missing values and circular `CONFIG.*` references. `app_builder_version` stays literal because the command dispatcher reads it from plain YAML before importing the full 1.x application code.
+Interpolation is string-only. References to lists or mappings fail loudly, as do missing values and circular `CONFIG.*` references. `app_builder_version` stays literal because app-builder reads it from plain YAML before config interpolation is available.
 
 ## 3. Dependency And Build Hooks
 
@@ -37,14 +49,29 @@ The release path runs dependency stages before file collection:
 
 - `pre_process`
 - `pre_python_bundled`
+- materialize bundled Python and its main dependencies
 - `post_python_bundled`
 - `pre_python_venv`
+- materialize the project venv and its development dependencies
 - `post_python_venv`
 - `pre_dist`
 
-Python dependencies come from `pyproject.toml` and Poetry. If a hook command starts with an existing `.py` file, app-builder runs it with the Python runtime configured for the project, preferring `python_venv` and then `python_bundled`. A hook such as `[scripts/build.py]` does not need `python.exe` on PATH. A hook such as `[python, scripts/build.py]` intentionally uses whatever `python` the machine provides.
+Python dependencies come from `pyproject.toml` and an existing `poetry.lock`.
+Normal builds run Poetry's read-only lock check and never regenerate the lock;
+`app-builder lock` is the explicit lock-changing command. Registry artifacts are
+installed with pip hash checking, Git sources require a full resolved commit,
+mutable Poetry `file` and `directory` sources are rejected,
+NuGet Python downloads are verified against the SHA-512 hash in NuGet catalog metadata, and
+ExeWrap is pinned to a versioned asset and SHA-256 digest. The installer manifest
+records this build-input provenance.
 
-`pre_dist` is the last hook that can generate files for the payload through normal include/remap rules.
+Automatic `.py` entrypoint dispatch follows runtime availability: the two hooks before bundled-Python materialization use app-builder's current interpreter; hooks after that prefer bundled Python; hooks after venv materialization prefer the venv, then bundled Python, then app-builder's interpreter. The authoritative per-hook table is in [Hook Python dispatch](app-builder-help.html#hook-python). An explicit command such as `[python, scripts/build.py]` intentionally uses whatever `python` the machine provides.
+
+`app-builder deps` runs this sequence through `post_python_venv` without building
+release files. `app-builder python` is narrower: it materializes only the bundled
+interpreter and does not run these hooks or install project dependencies.
+
+`pre_dist` is the last hook that can generate files for the payload through normal include/remap rules. After the installer is assembled, app-builder removes files that could satisfy configured named outputs, then `post_dist` creates the current build's extra outputs. It may also sign the final installer, but it cannot modify the payload or manifest because those bytes are already embedded. Checksums and release notes are generated afterward.
 
 ## 4. Payload Build
 
@@ -54,7 +81,25 @@ app-builder collects project-relative files with:
 - `installer.paths.exclude`
 - `installer.paths.remap`
 
-Remap entries are source and destination pairs. Archive destinations are validated so a remap cannot write outside the staged payload root.
+Every include must match, the final payload must contain at least one file, and
+every literal remap source must exist and be selected. Symlink or traversal paths
+that escape the project are rejected. The detailed build log records every
+resolved source-to-archive mapping.
+
+The configured `installer.dist` directory is excluded from the payload even if a
+broad include selects it. Set `installer.paths.include_dist: true` only when
+release output genuinely belongs in the installed application.
+
+Configured Python environments are materialized into the project but are not
+implicitly selected for the payload. An installed app that needs bundled Python
+must include `python_bundled.path`, normally `bin/python`, in
+`installer.paths.include`. The project venv is normally a build environment and
+is packaged only when selected deliberately.
+
+Remap entries are source and destination pairs. Archive destinations are validated
+before either writer runs. ZIP and 7-Zip both reject absolute paths, traversal,
+Windows-reserved names, generated paths such as `version.txt`, case-insensitive
+duplicate destinations, and file/directory collisions.
 
 Generated payload metadata includes `version.txt`. That file is not an install identity marker; current installer identity comes from the embedded manifest.
 
@@ -75,7 +120,8 @@ The release manifest is written next to the artifacts and embedded into the inst
 - uninstaller flag;
 - Start Menu entries;
 - install and uninstall hook argv lists;
-- included payload file records.
+- included payload file records;
+- locked dependency and downloaded-tool provenance used for the build.
 
 The installed uninstaller reads the manifest for metadata and hooks. It does not use the manifest as authority for the deletion root.
 
@@ -129,8 +175,14 @@ Because this hook runs before extraction, it cannot use the app payload, `instal
 - writes the installed manifest;
 - copies `bin\uninstall.cmd` and `bin\uninstall.ps1` into the installed app's own `bin` directory when enabled;
 - creates Start Menu shortcuts;
-- runs `post_install`;
+- registers a per-user Windows Installed Apps entry when the uninstaller is enabled;
+- runs `post_install` after files, shortcuts, uninstall support, and Installed Apps registration are complete;
 - waits before closing when configured.
+
+For existing `.py` installer-hook entrypoints, automatic dispatch checks
+the configured `python_venv.path` and then `python_bundled.path` interpreter
+locations recorded in the installer manifest. Each interpreter must be included
+in the final payload. An explicit `[python, ...]` still deliberately uses PATH.
 
 Installer runtime flags:
 
@@ -139,7 +191,7 @@ Installer runtime flags:
 - `--no-wait`
   - skip only the final close wait.
 
-When `installer.pause_on_exit` is true and no bypass flag is supplied, the console closes after 30 seconds or when the user presses Enter. Other keys are ignored.
+When `installer.wait_on_exit` is true and no bypass flag is supplied, the console closes after 30 seconds or when the user presses Enter. Other keys are ignored.
 
 ## 10. Uninstall Runtime
 
@@ -170,6 +222,7 @@ Uninstall flow:
 - remove Start Menu entries;
 - stage allowed `post_uninstall` entrypoints to temp;
 - remove the install directory;
+- remove the Windows Installed Apps entry after the install directory is gone;
 - run `post_uninstall` from the temp staging directory;
 - preserve temp diagnostics if post-uninstall cleanup fails.
 
@@ -181,15 +234,45 @@ If a `post_uninstall` entrypoint points inside the install directory, it must be
 
 For app-builder's dogfood build, the same icon is embedded into the generated payload `app-builder.exe`.
 
-## 12. Release Artifacts
+## 12. Release Outputs And Assets
 
 A local release produces:
 
 - the inner payload archive, `.zip` or `.7z`;
 - the installer executable, `<slug>-<version>-installer.exe`;
-- the manifest JSON, `<slug>-<version>-manifest.json`.
+- the manifest JSON, `<slug>-<version>-manifest.json`;
+- `<slug>-<version>-SHA256SUMS.txt` covering every resolved release output;
+- `<slug>-<version>-release-notes.md`, generated from Git history and the artifact inventory.
 
-`release-gh` uploads exactly those same artifacts through GitHub CLI. If the release tag already exists, app-builder uploads assets with `--clobber`. If the tag does not exist, app-builder creates it with the version as tag and title.
+Projects can declare named `outputs` as exact files or bounded filename globs
+under `installer.dist`. A declaration can collect one file or a deterministic
+collection such as wheels produced by `post_dist`. `publications.github.outputs`
+selects built-in names (`payload`, `installer`, `manifest`, `checksums`) and
+configured names explicitly. Unknown selections, duplicate paths, broad recursive
+globs, unmet match counts, and case-insensitive GitHub filename collisions fail.
+Files matching named-output declarations are removed before `post_dist`, so a
+successful build cannot silently republish an asset left by an earlier run.
+
+`release-gh` uploads exactly that selected set through GitHub CLI. The generated
+notes become the GitHub release body rather than a duplicate asset.
+
+Before upload, publication preflight enforces:
+
+- a valid Git tag name and clean Git worktree outside the dist directory;
+- package/release version agreement for app-builder itself;
+- local and authenticated GitHub tag targets that either do not exist yet or point to HEAD;
+- nonempty artifacts inside the configured dist directory;
+- matching manifest identity and payload name;
+- a readable outer installer ZIP with its required bootstrap files;
+- byte-for-byte agreement between the standalone payload and the payload embedded
+  in the installer, plus semantic agreement between published and embedded manifests;
+- matching SHA-256 checksums and no unexpected same-version files;
+- authenticated `gh.exe` and a resolvable GitHub repository.
+
+New releases target the exact audited HEAD commit. Existing releases have their
+intended assets replaced, stale assets removed, and title and notes refreshed.
+`--draft` controls newly created releases; an existing release keeps its current
+draft or published state when it is updated.
 
 GitHub CLI requirements:
 
@@ -199,3 +282,45 @@ gh auth login
 ```
 
 app-builder searches PATH, `where.exe`, Program Files, LocalAppData, WinGet, Chocolatey, Scoop, and package-local candidates before reporting that `gh.exe` is missing.
+
+## 13. Build Progress And Logs
+
+Release builds print eight named stages as they begin and end, including elapsed
+time and failure context. Dependency installation uses quiet pip output so a
+normal build remains readable. Every run writes a timestamped diagnostic log to
+`<dist>/build-logs`; it includes resolved payload mappings, pinned build inputs,
+output sizes and hashes, and the final publication selection. `--verbose` also
+prints those details to the terminal.
+
+## 14. Managed App-Builder Versions
+
+An explicit 1.x `app_builder_version` ref is resolved from the app-builder Git
+repository into the user cache at `%LOCALAPPDATA%\app-builder\cache` (or
+`APP_BUILDER_CACHE_ROOT`). Cache keys include the source URL and requested ref.
+The manifest records the requested ref, whether it resolved as a tag, branch, or
+commit, and the exact commit used. Tags are immutable and a moved cached tag is
+refused; branch refs are refreshed and rebuilt when their remote commit changes.
+Source refresh and per-ref creation use cross-process locks. A new cache is built
+in a private sibling directory and atomically promoted only after its environment
+and manifest are complete.
+
+Use `app-builder versions list` to inspect the cache and
+`app-builder versions remove <ref>` for deliberate eviction.
+
+## 15. Release Owner Checklist
+
+1. When dependencies changed, run `app-builder lock` deliberately and commit both
+   `pyproject.toml` and `poetry.lock`.
+2. From a clean checkout, run `app-builder release --version <version> --verbose`.
+3. Review the resolved output inventory, checksums, generated notes, build log,
+   and executable signing status.
+4. Exercise the actual installer executable in a disposable user environment:
+   fresh install, application launch, same-app replacement, and uninstall through
+   the generated shortcut or Windows Installed Apps entry.
+5. Confirm the intended tag and HEAD, then run
+   `app-builder release-gh --version <version>`; publication preflight repeats the
+   identity and artifact checks before upload.
+
+The Windows CI job runs the full suite and launches the final ExeWrap installer
+executable. Retain a recorded local rehearsal for public releases as an additional
+check of the exact candidate and local Windows environment.

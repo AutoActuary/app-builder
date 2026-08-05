@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import os
 import subprocess
 import time
@@ -8,8 +9,21 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
+from typing import Any, cast
 
 from app_builder.installer_bundle import create_exewrap_zip_installer
+
+
+def _winreg() -> Any:
+    return cast(Any, importlib.import_module("winreg"))
+
+
+def _canonical_windows_path(value: str | Path) -> str:
+    return os.path.normcase(str(Path(value).resolve()))
+
+
+def _single_line(value: str) -> str:
+    return " ".join(value.split())
 
 
 def _write_manifest(
@@ -64,7 +78,7 @@ def _build_and_extract_installer(
         payload_archive=payload,
         manifest_path=manifest,
         app_name=app_name,
-        pause_on_exit=False,
+        wait_on_exit=False,
         add_uninstaller=True,
         launcher=b"fake-launcher",
     )
@@ -106,8 +120,160 @@ def _run_uninstall(
     )
 
 
+def _registry_entries_for_install(install_dir: Path) -> list[tuple[str, str]]:
+    winreg = _winreg()
+
+    root_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+    matches: list[tuple[str, str]] = []
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, root_path) as root:
+        index = 0
+        while True:
+            try:
+                key_name = winreg.EnumKey(root, index)
+            except OSError:
+                break
+            index += 1
+            try:
+                with winreg.OpenKey(root, key_name) as key:
+                    location = str(winreg.QueryValueEx(key, "InstallLocation")[0])
+                    display_name = str(winreg.QueryValueEx(key, "DisplayName")[0])
+            except (FileNotFoundError, OSError):
+                continue
+            if _canonical_windows_path(location) == _canonical_windows_path(
+                install_dir
+            ):
+                matches.append((key_name, display_name))
+    return matches
+
+
+def _remove_registry_entries_for_install(install_dir: Path) -> None:
+    winreg = _winreg()
+
+    root_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+    for key_name, _ in _registry_entries_for_install(install_dir):
+        try:
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, root_path + "\\" + key_name)
+        except FileNotFoundError:
+            pass
+
+
 @unittest.skipIf(os.name != "nt", "generated installer scripts target Windows")
 class TestInstallerFailureModes(unittest.TestCase):
+    def test_legacy_upgrade_removes_validated_registry_and_vendor_shortcut(
+        self,
+    ) -> None:
+        winreg = _winreg()
+
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            appdata_dir = temp_dir / "appdata"
+            install_dir = temp_dir / "legacy app-builder"
+            (install_dir / "bin").mkdir(parents=True)
+            (install_dir / "scripts").mkdir()
+            legacy_uninstall = install_dir / "bin" / "Uninstall App Builder.bat"
+            legacy_uninstall.write_text("@echo off\nexit /b 0\n", encoding="utf-8")
+            (install_dir / "Uninstall App Builder.lnk").write_text(
+                "legacy contract marker", encoding="utf-8"
+            )
+            (install_dir / "old.txt").write_text("old", encoding="utf-8")
+
+            vendor_shortcut = (
+                appdata_dir
+                / "Microsoft"
+                / "Windows"
+                / "Start Menu"
+                / "Programs"
+                / "AutoActuary"
+                / "App Builder"
+                / "Uninstall App Builder.lnk"
+            )
+            vendor_shortcut.parent.mkdir(parents=True)
+            link_env = os.environ.copy()
+            link_env["APP_BUILDER_TEST_LINK"] = str(vendor_shortcut)
+            link_env["APP_BUILDER_TEST_TARGET"] = str(legacy_uninstall)
+            subprocess.run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-Command",
+                    "$Shell = New-Object -ComObject WScript.Shell; "
+                    "$Link = $Shell.CreateShortcut($env:APP_BUILDER_TEST_LINK); "
+                    "$Link.TargetPath = $env:APP_BUILDER_TEST_TARGET; $Link.Save()",
+                ],
+                env=link_env,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            registry_root = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+            legacy_key_name = "AppBuilder-Legacy-Test-" + temp_dir.name
+            with winreg.CreateKey(
+                winreg.HKEY_CURRENT_USER, registry_root + "\\" + legacy_key_name
+            ) as key:
+                winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "App Builder")
+                winreg.SetValueEx(
+                    key, "InstallLocation", 0, winreg.REG_SZ, str(install_dir)
+                )
+                winreg.SetValueEx(
+                    key,
+                    "UninstallString",
+                    0,
+                    winreg.REG_SZ,
+                    f'"{legacy_uninstall}"',
+                )
+            self.addCleanup(_remove_registry_entries_for_install, install_dir)
+
+            payload = temp_dir / "payload.zip"
+            _write_payload(payload, {"new.txt": "new"})
+            manifest = temp_dir / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "name": "app-builder",
+                        "version": "1.3.0",
+                        "install_directory": str(install_dir),
+                        "add_uninstaller": True,
+                        "payload_archive": payload.name,
+                        "start_menu": [],
+                        "install_hooks": {
+                            "pre_install": [],
+                            "post_install": [],
+                            "pre_uninstall": [],
+                            "post_uninstall": [],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            extraction_dir = _build_and_extract_installer(
+                temp_dir,
+                payload=payload,
+                manifest=manifest,
+                app_name="app-builder",
+            )
+
+            result = _run_install(extraction_dir, appdata_dir=appdata_dir)
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertFalse(vendor_shortcut.exists())
+            entries = _registry_entries_for_install(install_dir)
+            self.assertEqual(1, len(entries))
+            self.assertEqual("app-builder", entries[0][1])
+            self.assertNotEqual(legacy_key_name, entries[0][0])
+
+            uninstall_result = _run_uninstall(
+                install_dir / "bin" / "uninstall.cmd", appdata_dir=appdata_dir
+            )
+            self.assertEqual(0, uninstall_result.returncode, uninstall_result.stderr)
+            deadline = time.monotonic() + 10
+            while (
+                install_dir.exists() or _registry_entries_for_install(install_dir)
+            ) and time.monotonic() < deadline:
+                time.sleep(0.1)
+            self.assertFalse(install_dir.exists())
+            self.assertEqual([], _registry_entries_for_install(install_dir))
+
     def test_corrupt_existing_manifest_refuses_and_preserves_directory(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
@@ -147,7 +313,7 @@ class TestInstallerFailureModes(unittest.TestCase):
             result = _run_install(extraction_dir, appdata_dir=appdata_dir)
 
             self.assertNotEqual(0, result.returncode)
-            self.assertIn("manifest is corrupt", result.stderr)
+            self.assertIn("manifest is corrupt", _single_line(result.stderr))
             self.assertIn("unreadable", result.stderr)
             self.assertEqual("old", (install_dir / "old.txt").read_text())
             self.assertFalse((install_dir / "new.txt").exists())
@@ -344,7 +510,10 @@ class TestInstallerFailureModes(unittest.TestCase):
                 result = _run_install(extraction_dir, appdata_dir=appdata_dir)
 
             self.assertNotEqual(0, result.returncode)
-            self.assertIn("Failed to move existing install directory", result.stderr)
+            self.assertIn(
+                "Failed to move existing install directory",
+                _single_line(result.stderr),
+            )
             self.assertEqual("old locked", locked_file.read_text(encoding="utf-8"))
             self.assertFalse((install_dir / "new.txt").exists())
             self.assertEqual(
