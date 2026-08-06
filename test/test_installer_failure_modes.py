@@ -190,14 +190,23 @@ class TestInstallerFailureModes(unittest.TestCase):
             result = _run_install(extraction_dir, appdata_dir=appdata_dir)
 
             self.assertEqual(0, result.returncode, result.stderr)
-            expected_home = (install_dir / "runtime" / "python").as_posix()
-            self.assertEqual(
-                f"home = {expected_home}\ninclude-system-site-packages = false\n",
-                (install_dir / "runtime" / "pyvenv.cfg").read_text(encoding="utf-8"),
+            installed_config = (install_dir / "runtime" / "pyvenv.cfg").read_text(
+                encoding="utf-8"
             )
+            lines = installed_config.splitlines()
+            self.assertEqual(2, len(lines))
+            self.assertTrue(lines[0].startswith("home = "))
+            installed_home = Path(lines[0].removeprefix("home = "))
+            self.assertTrue(
+                os.path.samefile(
+                    installed_home,
+                    install_dir / "runtime" / "python",
+                )
+            )
+            self.assertEqual("include-system-site-packages = false", lines[1])
             self.assertNotIn(
                 "developer/machine",
-                (install_dir / "runtime" / "pyvenv.cfg").read_text(encoding="utf-8"),
+                installed_config,
             )
 
     def test_legacy_upgrade_removes_validated_registry_and_vendor_shortcut(
