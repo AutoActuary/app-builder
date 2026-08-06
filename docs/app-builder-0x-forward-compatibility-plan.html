@@ -160,6 +160,7 @@ __app_builder_0x_version_bridge__/
             context.py
             promote.py
     wheelhouse/
+        app_builder-&lt;app-builder-version&gt;-py3-none-any.whl
         app_builder_0x_version_bridge-&lt;bridge-version&gt;-py3-none-any.whl
     tests/
         ...
@@ -171,14 +172,13 @@ __app_builder_0x__/          # generated and ignored
       <p>The root shipper contains only:</p>
       <pre><code>-r __app_builder_0x_version_bridge__/requirements.txt</code></pre>
 
-      <p>The nested file owns the normal 1.x dependencies and selects the vendored bridge wheel:</p>
+      <p>The nested file selects only the vendored bridge wheel:</p>
       <pre><code>--find-links wheelhouse
-app-builder-0x-version-bridge==&lt;bridge-version&gt;
-click==8.*
-poetry==2.*
-pyyaml==6.*</code></pre>
+app-builder-0x-version-bridge==&lt;bridge-version&gt;</code></pre>
 
-      <p>The wheel is rebuilt and verified by the release pipeline whenever bridge source changes. Both source and wheel are committed because an already-shipped 0.x versioner only sees files present in the requested Git ref.</p>
+      <p>The bridge wheel has one generated dependency: an exact requirement on the matching <code>app-builder</code> version. The matching normal app-builder wheel is kept in the same wheelhouse. That wheel obtains <code>click</code>, <code>poetry</code>, <code>PyYAML</code>, and future runtime dependencies from the root <code>pyproject.toml</code> metadata, so dependency names and ranges are never maintained in the bridge requirements file.</p>
+      <p>A release build reads the root and bridge project metadata and generates the nested requirements file and both wheels. CI runs the generator in check mode and rejects stale files, a bridge pointing at the wrong app-builder version, or wheel dependency metadata that differs from the root project. Developers edit dependencies only in the root <code>pyproject.toml</code>.</p>
+      <p>The generated requirements file and wheels are committed because an already-shipped 0.x versioner only sees files present in the requested Git ref.</p>
     </section>
 
     <section id="activation">
@@ -277,7 +277,7 @@ pyyaml==6.*</code></pre>
         <li><strong>Finish and merge the directory rename.</strong> Rebuild the dogfood bridge and prove <code>app-builder 0.x --help</code> uses <code>__app_builder_0x__</code>.</li>
         <li><strong>Create the committed bridge package.</strong> Add context recognition, the <code>.pth</code> activator, receipts, and strict no-op behavior.</li>
         <li><strong>Make both entry styles valid.</strong> Support direct execution of 1.x <code>app_builder\main.py</code> and module execution without duplicating CLI behavior.</li>
-        <li><strong>Turn root requirements into the shipper.</strong> Generate the bridge wheel, place it in the local wheelhouse, and make the nested requirements file own 1.x dependencies.</li>
+        <li><strong>Turn root requirements into the shipper.</strong> Generate the app-builder and bridge wheels from project metadata, place both in the local wheelhouse, and generate a nested requirements file that selects only the bridge. The root <code>pyproject.toml</code> remains the sole dependency source.</li>
         <li><strong>Prove cache-only forward dispatch.</strong> Test real historical launcher code before adding any outer-install mutation.</li>
         <li><strong>Add verified deferred promotion.</strong> Reuse the released 1.x installer and keep this feature independently disableable until its Windows matrix is green.</li>
         <li><strong>Document the user-visible contract.</strong> Explain that a 0.x installation can run a configured 1.x ref and may promote itself after the command completes; keep package-layout details out of normal user help.</li>
