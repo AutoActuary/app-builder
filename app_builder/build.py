@@ -138,6 +138,9 @@ def build_release(
         installer_hook_python_candidates = _installer_hook_python_candidates(
             project_root, config, remap_table
         )
+        installer_bundled_python_path = _installer_bundled_python_path(
+            project_root, config, remap_table
+        )
         _validate_installer_payload_contract(
             config,
             remap_table,
@@ -172,6 +175,7 @@ def build_release(
             "add_uninstaller": config.installer.add_uninstaller,
             "payload_archive": payload_archive.name,
             "hook_python_candidates": installer_hook_python_candidates,
+            "python_bundled_path": installer_bundled_python_path,
             "start_menu": [
                 {
                     "target": item.target,
@@ -525,6 +529,40 @@ def _installer_hook_python_candidates(
         if destination is not None:
             destinations.append(destination.as_posix().replace("/", "\\"))
     return destinations
+
+
+def _installer_bundled_python_path(
+    project_root: Path,
+    config: AppBuilderConfig,
+    remap_table: Mapping[Path, PurePosixPath],
+) -> str | None:
+    if config.python_bundled is None:
+        return None
+
+    bundled_root = (project_root / config.python_bundled.path).resolve()
+    source_python = bundled_python_executable(bundled_root).resolve()
+    source_config = (bundled_root / "pyvenv.cfg").resolve()
+    resolved_remaps = {
+        source.resolve(): destination for source, destination in remap_table.items()
+    }
+    installed_python = resolved_remaps.get(source_python)
+    installed_config = resolved_remaps.get(source_config)
+    if installed_python is None and installed_config is None:
+        return None
+    if installed_python is None or installed_config is None:
+        raise ValueError(
+            "An installed python_bundled runtime must include both its base "
+            "python.exe and pyvenv.cfg after remapping."
+        )
+
+    installed_root = installed_python.parent.parent
+    expected_config = installed_root / "pyvenv.cfg"
+    if installed_config.as_posix().casefold() != expected_config.as_posix().casefold():
+        raise ValueError(
+            "python_bundled remaps must preserve pyvenv.cfg beside the runtime's "
+            "python directory."
+        )
+    return installed_root.as_posix()
 
 
 def _validate_installer_payload_contract(

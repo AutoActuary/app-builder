@@ -339,6 +339,52 @@ build_hooks: {}
                 install_script,
             )
 
+    def test_installer_manifest_tracks_remapped_bundled_python_root(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            subprocess.run(
+                ["git", "init"], cwd=project_root, check=True, capture_output=True
+            )
+            bundled_root = project_root / "runtime"
+            bundled_python = bundled_root / "python" / "python.exe"
+            bundled_python.parent.mkdir(parents=True)
+            bundled_python.write_bytes(b"fixture")
+            (bundled_root / "pyvenv.cfg").write_text(
+                f"home = {(bundled_root / 'python').as_posix()}\n"
+                "include-system-site-packages = false\n",
+                encoding="utf-8",
+            )
+            (project_root / "app_builder.yaml").write_text(
+                """
+app_builder_version: current
+python_bundled:
+  python_version: 3.13.5
+  path: runtime
+python_venv: null
+installer:
+  name: Bundled Python Paths
+  install_directory: '%localappdata%\\BundledPythonPaths'
+  icon: ""
+  paths:
+    include: [runtime]
+    remap:
+      - [runtime, app/runtime]
+build_hooks: {}
+""".strip(),
+                encoding="utf-8",
+            )
+            environment = PythonEnvironmentResult(
+                python_bundled=bundled_python,
+                python_venv=None,
+            )
+            with patch(
+                "app_builder.build._run_dependency_stages", return_value=environment
+            ):
+                release = build_release(project_root, version="1.0.0")
+
+            manifest = json.loads(release.manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual("app/runtime", manifest["python_bundled_path"])
+
     def test_zip_release_rejects_unsafe_or_colliding_remap_destinations(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             project_root = Path(temp_dir_str)

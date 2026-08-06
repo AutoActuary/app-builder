@@ -96,6 +96,12 @@ must include `python_bundled.path`, normally `bin/python`, in
 `installer.paths.include`. The project venv is normally a build environment and
 is packaged only when selected deliberately.
 
+When bundled Python is selected, the manifest records its final install-relative
+root. After the payload reaches the installation directory, the installer
+rewrites that runtime's `pyvenv.cfg` to its installed `python` directory before
+running post-install hooks. Build-machine paths therefore cannot leak into
+`sys._base_executable`, and the installed runtime remains able to create venvs.
+
 Remap entries are source and destination pairs. Archive destinations are validated
 before either writer runs. ZIP and 7-Zip both reject absolute paths, traversal,
 Windows-reserved names, generated paths such as `version.txt`, case-insensitive
@@ -120,6 +126,7 @@ The release manifest is written next to the artifacts and embedded into the inst
 - uninstaller flag;
 - Start Menu entries;
 - install and uninstall hook argv lists;
+- the installed bundled-Python root when that runtime is in the payload;
 - included payload file records;
 - locked dependency and downloaded-tool provenance used for the build.
 

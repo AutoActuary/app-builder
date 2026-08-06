@@ -1314,7 +1314,7 @@ publications:
           <tbody>
             <tr>
               <td><code>python_bundled</code> enabled</td>
-              <td>NuGet Python is materialized under <code>bin/python</code>. Main dependencies are installed into that runtime.</td>
+              <td>NuGet Python is materialized under <code>bin/python</code>. Main dependencies are installed into that runtime. When selected for the installed payload, its <code>pyvenv.cfg</code> is relocated to the final install directory before post-install hooks run.</td>
             </tr>
             <tr>
               <td><code>python_venv</code> enabled with bundled Python</td>
