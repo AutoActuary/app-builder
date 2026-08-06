@@ -108,7 +108,7 @@
     <section id="decision">
       <div class="summary">
         <h2>Decision</h2>
-        <p>The committed compatibility package will be named <code>__app_builder_0x_version_bridge__</code>. The root <code>requirements.txt</code> becomes a small shipper into that directory. Installing those requirements plants a relocation-safe bridge in the legacy version venv; the bridge activates only when that venv is launched from a proven 0.x version-cache layout.</p>
+      <p>The committed compatibility package will be named <code>__app_builder_0x_version_bridge__</code>. The root <code>requirements.txt</code> becomes a small shipper into that source directory. Pip builds a temporary wheel during installation; no wheel is committed. The installed bridge activates only when its venv is launched from a proven 0.x version-cache layout.</p>
         <p>The bridge first makes the requested 1.x ref runnable. Promotion of the outer 0.x installation is a separate, deferred operation performed by the real 1.x installer after the old process exits.</p>
       </div>
     </section>
@@ -143,7 +143,7 @@
         <p>The 3sl installation runs pip from its repository root. The legacy app-builder versioner does not change into the cloned app-builder checkout before invoking pip. A literal <code>./__app_builder_0x_version_bridge__</code> would therefore resolve against the user's application directory and fail.</p>
       </div>
 
-      <p>The location-safe form is a nested requirements file. Pip resolves a nested <code>-r</code> path and its <code>--find-links</code> path relative to the requirements file that contains them. This behavior was verified locally with pip 26.1 and a built wheel.</p>
+      <p>The location-safe form is a nested requirements file and a tiny local HTML package index. Pip resolves both relative to the file that contains them, follows the HTML link back to the unpacked bridge source, and builds its normal temporary wheel. This was verified from an unrelated working directory with the historical pip 23.2.1 and current pip 26.1.</p>
     </section>
 
     <section id="layout">
@@ -152,6 +152,7 @@
 __app_builder_0x_version_bridge__/
     requirements.txt
     pyproject.toml
+    bridge-links.html
     README.md
     src/
         __app_builder_0x_version_bridge__/
@@ -159,11 +160,6 @@ __app_builder_0x_version_bridge__/
             activate.py
             context.py
             promote.py
-    wheelhouse/
-        app_builder-&lt;app-builder-version&gt;-py3-none-any.whl
-        app_builder_0x_version_bridge-&lt;bridge-version&gt;-py3-none-any.whl
-    tests/
-        ...
 
 __app_builder_0x__/          # generated and ignored
     app-builder.exe          # explicit `app-builder 0.x` runtime
@@ -172,13 +168,12 @@ __app_builder_0x__/          # generated and ignored
       <p>The root shipper contains only:</p>
       <pre><code>-r __app_builder_0x_version_bridge__/requirements.txt</code></pre>
 
-      <p>The nested file selects only the vendored bridge wheel:</p>
-      <pre><code>--find-links wheelhouse
+      <p>The nested file selects only the local bridge package:</p>
+      <pre><code>--find-links bridge-links.html
 app-builder-0x-version-bridge==&lt;bridge-version&gt;</code></pre>
 
-      <p>The bridge wheel has one generated dependency: an exact requirement on the matching <code>app-builder</code> version. The matching normal app-builder wheel is kept in the same wheelhouse. That wheel obtains <code>click</code>, <code>poetry</code>, <code>PyYAML</code>, and future runtime dependencies from the root <code>pyproject.toml</code> metadata, so dependency names and ranges are never maintained in the bridge requirements file.</p>
-      <p>A release build reads the root and bridge project metadata and generates the nested requirements file and both wheels. CI runs the generator in check mode and rejects stale files, a bridge pointing at the wrong app-builder version, or wheel dependency metadata that differs from the root project. Developers edit dependencies only in the root <code>pyproject.toml</code>.</p>
-      <p>The generated requirements file and wheels are committed because an already-shipped 0.x versioner only sees files present in the requested Git ref.</p>
+      <p><code>bridge-links.html</code> contains one relative link back to the directory containing it. This gives pip a package candidate without assuming the caller's working directory. Pip builds an ephemeral wheel in its own temporary cache and installs it normally; source is committed, generated wheels are not.</p>
+      <p>The bridge build metadata reads the application dependencies directly from the root <code>pyproject.toml</code>. It does not repeat <code>click</code>, <code>poetry</code>, <code>PyYAML</code>, or future dependencies. Developers edit dependencies only in the root project.</p>
     </section>
 
     <section id="activation">
@@ -277,7 +272,7 @@ app-builder-0x-version-bridge==&lt;bridge-version&gt;</code></pre>
         <li><strong>Finish and merge the directory rename.</strong> Rebuild the dogfood bridge and prove <code>app-builder 0.x --help</code> uses <code>__app_builder_0x__</code>.</li>
         <li><strong>Create the committed bridge package.</strong> Add context recognition, the <code>.pth</code> activator, receipts, and strict no-op behavior.</li>
         <li><strong>Make both entry styles valid.</strong> Support direct execution of 1.x <code>app_builder\main.py</code> and module execution without duplicating CLI behavior.</li>
-        <li><strong>Turn root requirements into the shipper.</strong> Generate the app-builder and bridge wheels from project metadata, place both in the local wheelhouse, and generate a nested requirements file that selects only the bridge. The root <code>pyproject.toml</code> remains the sole dependency source.</li>
+        <li><strong>Turn root requirements into the shipper.</strong> Add the nested requirements file and local HTML source link. The bridge reads dependency metadata from the root <code>pyproject.toml</code>, and pip builds its wheel ephemerally.</li>
         <li><strong>Prove cache-only forward dispatch.</strong> Test real historical launcher code before adding any outer-install mutation.</li>
         <li><strong>Add verified deferred promotion.</strong> Reuse the released 1.x installer and keep this feature independently disableable until its Windows matrix is green.</li>
         <li><strong>Document the user-visible contract.</strong> Explain that a 0.x installation can run a configured 1.x ref and may promote itself after the command completes; keep package-layout details out of normal user help.</li>
@@ -285,7 +280,8 @@ app-builder-0x-version-bridge==&lt;bridge-version&gt;</code></pre>
     </section>
 
     <section id="tests">
-      <h2>Acceptance Matrix</h2>
+      <h2>Focused Verification</h2>
+      <p>No tests are packaged inside <code>__app_builder_0x_version_bridge__</code> or included in the installer. A small set of repository-level tests remains necessary because this one-time path can replace an installed app-builder and must continue to work from every future 1.x tag.</p>
       <table>
         <thead>
           <tr><th>Case</th><th>Required proof</th></tr>
