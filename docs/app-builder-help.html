@@ -1636,6 +1636,18 @@ gh auth login</code></pre>
           The compatibility bridge is built from the old app-builder source with
           <code>scripts/build_legacy_0x_bridge.py</code>. It is intentionally isolated from the 1.x package.
         </p>
+        <p>
+          A project that has already migrated to <code>app_builder.yaml</code> may retain a minimal
+          <code>application.yaml</code> solely so an already-installed 0.x launcher can forward into a 1.x tag:
+        </p>
+        <pre><code>app_builder: 1.5.0
+# Compatibility shim for installed app-builder 0.x launchers.
+# The real project configuration is app_builder.yaml.</code></pre>
+        <p>
+          The old launcher creates its normal version cache, installs the selected 1.x ref's compatibility-only
+          root requirements file, and then runs the 1.x CLI against <code>app_builder.yaml</code>. The helper is inert
+          outside that exact legacy cache layout and does not replace the outer app-builder installation.
+        </p>
       </section>
 
       <section id="examples">

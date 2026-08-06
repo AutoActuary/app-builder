@@ -13,7 +13,8 @@ installer:
     include:
       - app_builder
       - app_builder_meta
-      - __app_builder_0.x__
+      - __app_builder_0x_version_bridge__
+      - __app_builder_0x__
       - bin/python
       - pyproject.toml
       - requirements.txt
@@ -25,6 +26,8 @@ installer:
       - scripts/post-uninstall.ps1
     exclude:
       - "**/__pycache__"
+      - __app_builder_0x_version_bridge__/build
+      - __app_builder_0x_version_bridge__/src/*.egg-info
       - dist
       - .git
       - .mypy_cache

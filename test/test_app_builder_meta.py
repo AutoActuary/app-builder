@@ -20,7 +20,7 @@ from app_builder_meta.dispatch import (
     dispatch,
     run_target,
 )
-from app_builder_meta.legacy_0x import run_legacy_bridge
+from app_builder_meta.legacy_0x import bridge_executable, run_legacy_bridge
 from app_builder_meta.version_cache import (
     ManagedVersion,
     _cache_key,
@@ -134,10 +134,18 @@ class TestAppBuilderMetaDispatch(unittest.TestCase):
 
 
 class TestAppBuilderMetaExecutionAdapters(unittest.TestCase):
+    def test_legacy_bridge_uses_import_safe_directory_name(self) -> None:
+        install_root = Path("C:/app-builder")
+
+        self.assertEqual(
+            install_root / "__app_builder_0x__" / "app-builder.exe",
+            bridge_executable(install_root),
+        )
+
     def test_missing_legacy_bridge_reports_expected_path(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             install_root = Path(temp_dir_str)
-            with self.assertRaisesRegex(RuntimeError, "__app_builder_0.x__"):
+            with self.assertRaisesRegex(RuntimeError, "__app_builder_0x__"):
                 run_legacy_bridge(
                     ["--help"], cwd=install_root, install_root=install_root
                 )

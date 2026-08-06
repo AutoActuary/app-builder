@@ -5,6 +5,14 @@ from pathlib import Path
 
 import click
 
+if __name__ == "__main__" and not __package__:
+    import runpy
+
+    project_root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(project_root))
+    runpy.run_module("app_builder", run_name="__main__")
+    raise SystemExit(0)
+
 from app_builder_meta.version_cache import (
     default_cache_root,
     managed_version_manifests,
