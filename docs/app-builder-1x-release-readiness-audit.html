@@ -546,7 +546,7 @@
               <tr>
                 <td>Typing, documented/CI command after a build</td>
                 <td><span class="status partial">Not supported</span></td>
-                <td>The documented command scopes mypy to source and tests. A bare <code>mypy .</code> still sees the generated <code>__app_builder_0.x__\app_builder</code> as a duplicate module.</td>
+                <td>The documented command scopes mypy to source and tests. A bare <code>mypy .</code> still sees the generated <code>__app_builder_0x__\app_builder</code> as a duplicate module.</td>
               </tr>
               <tr>
                 <td>Clean dogfood build</td>
@@ -1070,7 +1070,7 @@ installer.exe
                 <td>Build into a clean, version-scoped staging directory. Keep old releases in GitHub, not mixed into the active local release directory.</td>
               </tr>
               <tr>
-                <td>Generated <code>__app_builder_0.x__</code>, <code>bin</code>, and <code>build</code></td>
+                <td>Generated <code>__app_builder_0x__</code>, <code>bin</code>, and <code>build</code></td>
                 <td><span class="status info">Not deadwood</span></td>
                 <td>They are intentional dogfood outputs. Exclude them consistently from mypy, searches, and source packaging.</td>
               </tr>

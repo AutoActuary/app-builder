@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>app-builder 0.x Forward Compatibility Plan</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18212a;
+      --muted: #5a6570;
+      --line: #d7dde2;
+      --paper: #ffffff;
+      --wash: #f4f6f7;
+      --nav: #173042;
+      --accent: #087e8b;
+      --good: #246b3d;
+      --good-bg: #edf8f0;
+      --warn: #855700;
+      --warn-bg: #fff8e5;
+      --code: #eef2f4;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.58;
+    }
+    header { color: white; background: var(--nav); border-bottom: 5px solid var(--accent); }
+    header .inner, main, footer .inner { width: min(1080px, calc(100% - 40px)); margin: 0 auto; }
+    header .inner { padding: 42px 0 36px; }
+    main { padding: 28px 0 56px; }
+    h1, h2, h3 { line-height: 1.2; letter-spacing: 0; }
+    h1 { margin: 0 0 10px; font-size: 38px; }
+    h2 { margin: 0 0 16px; font-size: 27px; }
+    h3 { margin: 0 0 8px; font-size: 19px; }
+    p { margin: 0 0 14px; }
+    a { color: #066978; }
+    header a { color: #bdebf0; }
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: var(--code);
+      font-family: Consolas, "Courier New", monospace;
+      font-size: .92em;
+    }
+    pre {
+      margin: 14px 0;
+      padding: 16px 18px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f7f9fa;
+      line-height: 1.48;
+    }
+    pre code { padding: 0; background: transparent; }
+    section { padding: 28px 0; border-bottom: 1px solid var(--line); }
+    section:last-child { border-bottom: 0; }
+    .lede { max-width: 850px; color: #dce8ee; font-size: 18px; }
+    .meta { color: #b9cbd4; }
+    .summary {
+      padding: 21px 23px;
+      border: 1px solid #9dc9aa;
+      border-left: 6px solid var(--good);
+      border-radius: 6px;
+      background: var(--good-bg);
+    }
+    .warning {
+      margin: 18px 0;
+      padding: 18px 20px;
+      border: 1px solid #e6c77d;
+      border-left: 5px solid var(--warn);
+      border-radius: 6px;
+      background: var(--warn-bg);
+    }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .panel { padding: 18px 20px; border: 1px solid var(--line); border-radius: 6px; background: var(--wash); }
+    .step { margin: 0 0 14px; padding: 17px 20px; border-left: 4px solid var(--accent); background: var(--wash); }
+    .step strong { display: block; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--wash); }
+    ul, ol { margin: 8px 0 0; padding-left: 24px; }
+    li { margin: 6px 0; }
+    footer { color: #dce8ee; background: var(--nav); }
+    footer .inner { padding: 23px 0; }
+    @media (max-width: 720px) {
+      h1 { font-size: 31px; }
+      .grid { grid-template-columns: 1fr; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="inner">
+      <h1>0.x Forward Compatibility</h1>
+      <p class="lede">A plan for allowing already-installed 0.x launchers to resolve and run a 1.x app-builder ref, while keeping the explicit bundled 0.x bridge isolated and leaving unrelated Python environments untouched.</p>
+      <p class="meta">Investigated 6 August 2026 &middot; implementation target: app-builder 1.x</p>
+    </div>
+  </header>
+
+  <main>
+    <section id="decision">
+      <div class="summary">
+        <h2>Decision</h2>
+        <p>The committed compatibility package will be named <code>__app_builder_0x_version_bridge__</code>. The root <code>requirements.txt</code> becomes a small shipper into that directory. Installing those requirements plants a relocation-safe bridge in the legacy version venv; the bridge activates only when that venv is launched from a proven 0.x version-cache layout.</p>
+        <p>The bridge first makes the requested 1.x ref runnable. Promotion of the outer 0.x installation is a separate, deferred operation performed by the real 1.x installer after the old process exits.</p>
+      </div>
+    </section>
+
+    <section id="rename">
+      <h2>Rename Applied Now</h2>
+      <p>The generated bundled bridge has been renamed from <code>__app_builder_0.x__</code> to <code>__app_builder_0x__</code>. The new name is used by the dogfood config, generator default, runtime dispatcher, tests, documentation, and ignore rule.</p>
+      <div class="grid">
+        <div class="panel">
+          <h3>Why it remains ignored</h3>
+          <p><code>__app_builder_0x__</code> is generated release input, like <code>bin/python</code>. The build script assembles the pinned v0.20.0 CLI and dependencies; <code>app_builder.yaml</code> includes that output in the installer.</p>
+        </div>
+        <div class="panel">
+          <h3>What it still does</h3>
+          <p><code>app-builder 0.x &lt;args&gt;</code> dispatches to <code>__app_builder_0x__\app-builder.exe</code>. This explicit compatibility command is unchanged apart from the directory spelling.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="evidence">
+      <h2>What The Legacy Versioner Actually Does</h2>
+      <ol>
+        <li>Clones the requested app-builder ref.</li>
+        <li>Creates a temporary tree containing <code>repo</code>, <code>venv</code>, <code>app-builder.cmd</code>, and <code>run.log</code>.</li>
+        <li>Runs the new checkout's <code>requirements.txt</code> with the temporary venv's Python.</li>
+        <li>Copies the completed tree to <code>versions\&lt;requested-ref&gt;</code>.</li>
+        <li>Runs either <code>repo\app_builder\main.py</code> or <code>python -m app_builder</code>, depending on the installed 0.x launcher generation.</li>
+      </ol>
+
+      <div class="warning">
+        <h3>The 3sl <code>./libpostal</code> line cannot be copied literally</h3>
+        <p>The 3sl installation runs pip from its repository root. The legacy app-builder versioner does not change into the cloned app-builder checkout before invoking pip. A literal <code>./__app_builder_0x_version_bridge__</code> would therefore resolve against the user's application directory and fail.</p>
+      </div>
+
+      <p>The location-safe form is a nested requirements file. Pip resolves a nested <code>-r</code> path and its <code>--find-links</code> path relative to the requirements file that contains them. This behavior was verified locally with pip 26.1 and a built wheel.</p>
+    </section>
+
+    <section id="layout">
+      <h2>Repository Layout</h2>
+      <pre><code>requirements.txt
+__app_builder_0x_version_bridge__/
+    requirements.txt
+    pyproject.toml
+    README.md
+    src/
+        __app_builder_0x_version_bridge__/
+            __init__.py
+            activate.py
+            context.py
+            promote.py
+    wheelhouse/
+        app_builder_0x_version_bridge-&lt;bridge-version&gt;-py3-none-any.whl
+    tests/
+        ...
+
+__app_builder_0x__/          # generated and ignored
+    app-builder.exe          # explicit `app-builder 0.x` runtime
+    ...</code></pre>
+
+      <p>The root shipper contains only:</p>
+      <pre><code>-r __app_builder_0x_version_bridge__/requirements.txt</code></pre>
+
+      <p>The nested file owns the normal 1.x dependencies and selects the vendored bridge wheel:</p>
+      <pre><code>--find-links wheelhouse
+app-builder-0x-version-bridge==&lt;bridge-version&gt;
+click==8.*
+poetry==2.*
+pyyaml==6.*</code></pre>
+
+      <p>The wheel is rebuilt and verified by the release pipeline whenever bridge source changes. Both source and wheel are committed because an already-shipped 0.x versioner only sees files present in the requested Git ref.</p>
+    </section>
+
+    <section id="activation">
+      <h2>Activation Contract</h2>
+      <p>The wheel installs a one-line <code>.pth</code> activator. Python evaluates it when the newly created version venv starts. The activator must return immediately unless every structural proof below succeeds:</p>
+      <ul>
+        <li>Windows is the current platform.</li>
+        <li><code>sys.executable</code> is exactly under <code>&lt;candidate&gt;\venv\Scripts\python.exe</code>.</li>
+        <li>The candidate contains <code>repo</code>, <code>run.log</code>, and the legacy-generated <code>app-builder.cmd</code>.</li>
+        <li>The candidate's parent is named <code>versions</code>; this deliberately excludes pip's temporary assembly tree.</li>
+        <li>The sibling repository contains the expected 1.x <code>pyproject.toml</code>, <code>app_builder</code>, <code>app_builder_meta</code>, and bridge metadata.</li>
+        <li>Every resolved path remains below the candidate version directory before it is used.</li>
+      </ul>
+
+      <p>Outside that exact layout the package is inert: no files are copied, no downloads start, no registry keys change, and no process is launched. Installing it in an ordinary venv is therefore harmless.</p>
+
+      <h3>What activation does</h3>
+      <ol>
+        <li>Adds the sibling <code>repo</code> directory to <code>sys.path</code> for this process only.</li>
+        <li>Reads the requested ref from the version-cache directory name and reads the application version from the checked-out <code>pyproject.toml</code>.</li>
+        <li>Writes an idempotent bridge receipt containing the ref, app-builder version, bridge version, and source-tree fingerprint.</li>
+        <li>Optionally schedules outer-install promotion when, and only when, the ref maps to a verifiable published 1.x release.</li>
+      </ol>
+    </section>
+
+    <section id="dispatch">
+      <h2>Both Historical Dispatch Modes Must Work</h2>
+      <table>
+        <thead>
+          <tr><th>Installed launcher</th><th>How it invokes the requested ref</th><th>Compatibility treatment</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>v0.17 through v0.19.1</td>
+            <td>Runs <code>repo\app_builder\main.py</code> directly.</td>
+            <td>Make the 1.x <code>main.py</code> a supported direct-entry trampoline as well as an importable module. The activator has already exposed dependencies and records the context.</td>
+          </tr>
+          <tr>
+            <td>v0.20.0</td>
+            <td>Uses <code>python -m app_builder</code> for refs newer than v0.19.0.</td>
+            <td>The activator inserts the checked-out <code>repo</code> at the front of <code>sys.path</code>, so the module is resolved from the requested ref.</td>
+          </tr>
+          <tr>
+            <td>Current 1.x explicit bridge</td>
+            <td><code>app-builder 0.x &lt;args&gt;</code> runs the bundled v0.20.0 launcher.</td>
+            <td>No behavioral change. It merely uses the renamed <code>__app_builder_0x__</code> directory.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>The implementation must use capability tests where it controls dispatch. The historical v0.20.0 comparison against <code>0.19.0</code> is not copied: v0.19.1 still lacks <code>app_builder\__main__.py</code>, so file capability is more accurate than a version inequality.</p>
+    </section>
+
+    <section id="promotion">
+      <h2>Deferred Promotion To The 1.x Installation</h2>
+      <p>Running a 1.x ref from the old cache and replacing the outer app-builder installation are separate transactions. The first must work even when promotion is unavailable.</p>
+
+      <div class="step">
+        <strong>1. Resolve a release, without guessing</strong>
+        <span>Promotion is allowed only for an exact semantic version with a matching official GitHub release. Branch names and arbitrary commit refs remain cache-only executions.</span>
+      </div>
+      <div class="step">
+        <strong>2. Download and verify</strong>
+        <span>The bridge downloads the installer and published checksum metadata over HTTPS into a random directory under <code>%TEMP%\app-builder-downloads</code>. SHA-256 verification is mandatory before execution.</span>
+      </div>
+      <div class="step">
+        <strong>3. Leave the current command alone</strong>
+        <span>A detached helper receives the current and ancestor process IDs, verified installer path, log path, and intended version. It waits until the old launcher and bundled Python have exited.</span>
+      </div>
+      <div class="step">
+        <strong>4. Let the real installer own installation semantics</strong>
+        <span>The helper runs the verified installer with <code>--yes --no-wait</code>. It does not reproduce PATH, shortcuts, Installed Apps registration, legacy replacement, or uninstall behavior; the tested 1.x installer performs all of those actions.</span>
+      </div>
+      <div class="step">
+        <strong>5. Retain failure evidence, clean success</strong>
+        <span>Success removes downloaded temporary files. Failure retains a bounded log and installer path and prints their location on the next bridge run.</span>
+      </div>
+
+      <p>No elevation is requested. The target remains the normal per-user <code>%LOCALAPPDATA%\app-builder</code> installation.</p>
+    </section>
+
+    <section id="safety">
+      <h2>Safety And Idempotency</h2>
+      <ul>
+        <li>The activator performs no persistent action while pip is building the wheel or while the legacy versioner is still assembling its temporary tree.</li>
+        <li>A receipt and process-safe lock prevent duplicate downloads or concurrent promotion attempts for the same release.</li>
+        <li>A successful outer installation at the same or newer version makes promotion a no-op.</li>
+        <li>A failed download or checksum mismatch leaves the existing 0.x installation untouched and does not block version-cache execution.</li>
+        <li>The helper never deletes an unrecognized directory and never writes outside its version cache, bounded log location, or random download directory.</li>
+        <li>The bridge wheel has no generic startup behavior outside a fully recognized legacy cache.</li>
+      </ul>
+    </section>
+
+    <section id="implementation">
+      <h2>Implementation Sequence</h2>
+      <ol>
+        <li><strong>Finish and merge the directory rename.</strong> Rebuild the dogfood bridge and prove <code>app-builder 0.x --help</code> uses <code>__app_builder_0x__</code>.</li>
+        <li><strong>Create the committed bridge package.</strong> Add context recognition, the <code>.pth</code> activator, receipts, and strict no-op behavior.</li>
+        <li><strong>Make both entry styles valid.</strong> Support direct execution of 1.x <code>app_builder\main.py</code> and module execution without duplicating CLI behavior.</li>
+        <li><strong>Turn root requirements into the shipper.</strong> Generate the bridge wheel, place it in the local wheelhouse, and make the nested requirements file own 1.x dependencies.</li>
+        <li><strong>Prove cache-only forward dispatch.</strong> Test real historical launcher code before adding any outer-install mutation.</li>
+        <li><strong>Add verified deferred promotion.</strong> Reuse the released 1.x installer and keep this feature independently disableable until its Windows matrix is green.</li>
+        <li><strong>Document the user-visible contract.</strong> Explain that a 0.x installation can run a configured 1.x ref and may promote itself after the command completes; keep package-layout details out of normal user help.</li>
+      </ol>
+    </section>
+
+    <section id="tests">
+      <h2>Acceptance Matrix</h2>
+      <table>
+        <thead>
+          <tr><th>Case</th><th>Required proof</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Ordinary venv</td><td>Installing and importing the bridge produces no files, processes, downloads, registry writes, or PATH changes.</td></tr>
+          <tr><td>Legacy temporary assembly</td><td>The pip installation succeeds, but the activator does not promote or mutate the outer installation before relocation.</td></tr>
+          <tr><td>v0.17, v0.18, v0.19.0, v0.19.1</td><td>Each real launcher can resolve a 1.x tag and run <code>--help</code>, <code>validate</code>, and a small build through direct <code>main.py</code> dispatch.</td></tr>
+          <tr><td>v0.20.0</td><td>The real launcher runs the same commands through <code>python -m app_builder</code>.</td></tr>
+          <tr><td>Relocation</td><td>A cache assembled under a random temporary path still works after copying to a path containing spaces, apostrophes, and non-ASCII characters.</td></tr>
+          <tr><td>Repeated and concurrent launch</td><td>Receipts and locking make activation and promotion idempotent.</td></tr>
+          <tr><td>Arbitrary branch or commit</td><td>The ref executes from the cache and does not attempt outer promotion.</td></tr>
+          <tr><td>Released 1.x tag</td><td>The verified installer waits for the old process tree, upgrades the outer installation, preserves command exit behavior, and registers the new uninstall entry.</td></tr>
+          <tr><td>Bad digest, unavailable network, locked file</td><td>The current command remains usable, the 0.x installation is unchanged, and actionable bounded logs survive.</td></tr>
+          <tr><td>Post-promotion</td><td><code>app-builder --version</code>, <code>app-builder --help</code>, <code>app-builder 0.x --help</code>, install repair, and uninstall all pass.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="boundaries">
+      <h2>Boundaries</h2>
+      <p>This feature does not make 1.x read <code>application.yaml</code>, does not silently reinterpret a legacy project as 1.x, and does not route normal 1.x commands through legacy code. It only lets an already-installed 0.x version manager materialize and execute an explicitly requested 1.x app-builder ref, then optionally replace its own outer installation through the real 1.x installer.</p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="inner">app-builder 1.x engineering plan &middot; legacy behavior remains isolated, explicit, and testable</div>
+  </footer>
+</body>
+</html>

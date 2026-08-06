@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 def bridge_executable(install_root: Path) -> Path:
-    return install_root / "__app_builder_0.x__" / "app-builder.exe"
+    return install_root / "__app_builder_0x__" / "app-builder.exe"
 
 
 def run_legacy_bridge(

@@ -28,7 +28,7 @@ def main() -> int:
     )
     parser.add_argument("--ref", default=DEFAULT_REF)
     parser.add_argument("--repo-url", default=APP_BUILDER_REPOSITORY_URL)
-    parser.add_argument("--output", type=Path, default=Path("__app_builder_0.x__"))
+    parser.add_argument("--output", type=Path, default=Path("__app_builder_0x__"))
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     args = parser.parse_args()
 

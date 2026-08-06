@@ -13,7 +13,7 @@ installer:
     include:
       - app_builder
       - app_builder_meta
-      - __app_builder_0.x__
+      - __app_builder_0x__
       - bin/python
       - pyproject.toml
       - requirements.txt
