@@ -367,6 +367,7 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
                 )
                 self.assertIn("New-AppBuilderStartMenuShortcuts", install_ps1)
                 self.assertIn("Invoke-AppBuilderHookList", install_ps1)
+                self.assertIn("Set-AppBuilderBundledPythonHome", install_ps1)
                 self.assertLess(
                     install_ps1.index(
                         "Set-AppBuilderUninstallRegistryEntry $Manifest $InstallDir $UninstallRegistryPath"

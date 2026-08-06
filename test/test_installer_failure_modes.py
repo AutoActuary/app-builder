@@ -34,26 +34,25 @@ def _write_manifest(
     install_dir: Path,
     payload_name: str,
     install_hooks: dict[str, list[list[str]]] | None = None,
+    python_bundled_path: str | None = None,
 ) -> None:
-    path.write_text(
-        json.dumps(
-            {
-                "name": name,
-                "version": version,
-                "install_directory": str(install_dir),
-                "payload_archive": payload_name,
-                "start_menu": [],
-                "install_hooks": install_hooks
-                or {
-                    "pre_install": [],
-                    "post_install": [],
-                    "pre_uninstall": [],
-                    "post_uninstall": [],
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
+    manifest = {
+        "name": name,
+        "version": version,
+        "install_directory": str(install_dir),
+        "payload_archive": payload_name,
+        "start_menu": [],
+        "install_hooks": install_hooks
+        or {
+            "pre_install": [],
+            "post_install": [],
+            "pre_uninstall": [],
+            "post_uninstall": [],
+        },
+    }
+    if python_bundled_path is not None:
+        manifest["python_bundled_path"] = python_bundled_path
+    path.write_text(json.dumps(manifest), encoding="utf-8")
 
 
 def _write_payload(path: Path, files: dict[str, str]) -> None:
@@ -159,6 +158,48 @@ def _remove_registry_entries_for_install(install_dir: Path) -> None:
 
 @unittest.skipIf(os.name != "nt", "generated installer scripts target Windows")
 class TestInstallerFailureModes(unittest.TestCase):
+    def test_install_relocates_bundled_python_configuration(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            appdata_dir = temp_dir / "appdata"
+            install_dir = temp_dir / "installed app"
+            payload = temp_dir / "payload.zip"
+            _write_payload(
+                payload,
+                {
+                    "runtime/pyvenv.cfg": (
+                        "home = C:/developer/machine/bin/python\n"
+                        "include-system-site-packages = false\n"
+                    ),
+                    "runtime/python/python.exe": "fixture",
+                },
+            )
+            manifest = temp_dir / "manifest.json"
+            _write_manifest(
+                manifest,
+                name="Relocatable Python",
+                version="1.0",
+                install_dir=install_dir,
+                payload_name=payload.name,
+                python_bundled_path="runtime",
+            )
+            extraction_dir = _build_and_extract_installer(
+                temp_dir, payload=payload, manifest=manifest
+            )
+
+            result = _run_install(extraction_dir, appdata_dir=appdata_dir)
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            expected_home = (install_dir / "runtime" / "python").as_posix()
+            self.assertEqual(
+                f"home = {expected_home}\ninclude-system-site-packages = false\n",
+                (install_dir / "runtime" / "pyvenv.cfg").read_text(encoding="utf-8"),
+            )
+            self.assertNotIn(
+                "developer/machine",
+                (install_dir / "runtime" / "pyvenv.cfg").read_text(encoding="utf-8"),
+            )
+
     def test_legacy_upgrade_removes_validated_registry_and_vendor_shortcut(
         self,
     ) -> None:

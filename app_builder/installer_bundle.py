@@ -353,6 +353,7 @@ try {
     Move-AppBuilderDirectory $StagingDir $InstallDir 'new staging directory'
     $MovedStaging = $true
 
+    Set-AppBuilderBundledPythonHome $Manifest $InstallDir
     Set-Content -LiteralPath (Join-Path $InstallDir $InstalledManifestName) -Value $EmbeddedManifestJson -Encoding UTF8
 """
         + uninstall_copy_block
@@ -646,6 +647,31 @@ function Set-AppBuilderEnvironment {
     $env:app_builder_install_directory = $InstallDir
     $env:app_builder_project_root = $InstallDir
     $env:app_builder_start_menu = $StartMenuDir
+}
+
+function Set-AppBuilderBundledPythonHome {
+    param($Manifest, [string]$InstallDir)
+    $RelativeRoot = Get-AppBuilderObjectProperty $Manifest 'python_bundled_path'
+    if ([string]::IsNullOrWhiteSpace([string]$RelativeRoot)) {
+        return
+    }
+    $PythonRoot = Resolve-AppBuilderPath ([string]$RelativeRoot) $InstallDir
+    if (-not (Test-AppBuilderPathInside $PythonRoot $InstallDir)) {
+        throw "Bundled Python path escapes the install directory: $RelativeRoot"
+    }
+    $PythonHome = Join-Path $PythonRoot 'python'
+    $BasePython = Join-Path $PythonHome 'python.exe'
+    $ConfigPath = Join-Path $PythonRoot 'pyvenv.cfg'
+    if (-not (Test-Path -LiteralPath $BasePython -PathType Leaf)) {
+        throw "Bundled Python executable was not found: $BasePython"
+    }
+    if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
+        throw "Bundled Python pyvenv.cfg was not found: $ConfigPath"
+    }
+    $PortableHome = $PythonHome.Replace('\', '/')
+    $Contents = "home = $PortableHome`ninclude-system-site-packages = false`n"
+    $Utf8 = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($ConfigPath, $Contents, $Utf8)
 }
 
 function Expand-AppBuilderPayloadArchive {
