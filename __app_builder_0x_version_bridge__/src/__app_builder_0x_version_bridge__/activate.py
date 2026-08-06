@@ -17,10 +17,17 @@ def activate() -> None:
 
 
 def _entry_key(entry: object) -> str | None:
-    if not isinstance(entry, (str, bytes, os.PathLike)):
+    if isinstance(entry, str):
+        path = Path(entry)
+    elif isinstance(entry, os.PathLike):
+        raw_path = os.fspath(entry)
+        if not isinstance(raw_path, str):
+            return None
+        path = Path(raw_path)
+    else:
         return None
     try:
-        return _path_key(Path(entry))
+        return _path_key(path)
     except (OSError, TypeError, ValueError):
         return None
 

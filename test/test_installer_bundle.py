@@ -943,5 +943,16 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
             while install_dir.exists() and time.monotonic() < deadline:
                 time.sleep(0.1)
             self.assertFalse(install_dir.exists())
+
+            registry_removed = False
+            registry_deadline = time.monotonic() + 10
+            while time.monotonic() < registry_deadline:
+                try:
+                    _read_uninstall_registry_entry(registry_subkey)
+                except FileNotFoundError:
+                    registry_removed = True
+                    break
+                time.sleep(0.1)
+            self.assertTrue(registry_removed)
             with self.assertRaises(FileNotFoundError):
                 _read_uninstall_registry_entry(registry_subkey)
