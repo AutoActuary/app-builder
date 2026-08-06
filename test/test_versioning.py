@@ -39,6 +39,21 @@ class TestAppBuilderVersioning(unittest.TestCase):
                             "1.2.0", resolve_app_builder_version(package_dir)
                         )
 
+    def test_source_pyproject_version_precedes_installed_metadata(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            package_dir = project_root / "app_builder"
+            package_dir.mkdir()
+            (project_root / "pyproject.toml").write_text(
+                '[project]\nname = "app-builder"\nversion = "1.8.0"\n',
+                encoding="utf-8",
+            )
+
+            with patch("app_builder.versioning.version", return_value="1.2.0"):
+                resolved = resolve_app_builder_version(package_dir)
+
+        self.assertEqual("1.8.0", resolved)
+
 
 if __name__ == "__main__":
     unittest.main()
