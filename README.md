@@ -77,10 +77,12 @@ README is intentionally short. The release pipeline document exists separately b
 
 Normal builds verify an existing `poetry.lock` and install locked registry
 artifacts by SHA-256. They never rewrite the lock. Run `app-builder lock`
-deliberately when dependencies change. Python runtime versions must be exact
-`major.minor.patch` pins. Mutable Poetry `file` and `directory` dependencies are
-rejected for releases; use a hashed index artifact or a Git source pinned to a
-full resolved commit.
+deliberately when dependencies change. Complete Windows Python runtimes come
+from Python.org and are verified against its published SHA-256. Stable versions
+use exact `major.minor.patch` pins; prereleases also accept selectors such as
+`3.15.0-beta`. Mutable Poetry `file` and `directory` dependencies are rejected
+for releases; use a hashed index artifact or a Git source pinned to a full
+resolved commit.
 
 Use `%LOCALAPPDATA%`, `%APPDATA%`, or `%USERPROFILE%` as the root for install
 paths that must resolve on the end user's machine. Other variable-root install

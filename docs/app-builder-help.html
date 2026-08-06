@@ -356,8 +356,9 @@ python_bundled:
   # materialized. Default if omitted: bin/python.
   path: bin/python
 
-  # Optional string. Exact major.minor.patch NuGet Python package version to materialize
-  # reproducibly. Default if omitted: 3.11.1.
+  # Optional string. Python.org Windows runtime version to materialize. Use
+  # major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or
+  # 3.15.0-beta. Default if omitted: 3.11.1.
   python_version: 3.12.10
 
 # Optional, nullable mapping | null. Optional Poetry dev virtual environment derived from
@@ -368,9 +369,9 @@ python_venv:
   # is created. Default if omitted: venv.
   path: venv
 
-  # Optional string. Exact major.minor.patch NuGet Python package version used when the
-  # virtual environment is self-contained because python_bundled is disabled. Default if
-  # omitted: 3.11.1.
+  # Optional string. Python.org Windows runtime version used when the virtual environment
+  # is self-contained because python_bundled is disabled. Prerelease selectors are
+  # supported. Default if omitted: 3.11.1.
   python_version: 3.12.10
 
 # Required mapping. Required installer metadata and release payload settings.
@@ -655,7 +656,7 @@ publications:
               <td>no</td>
               <td><code>3.11.1</code></td>
               <td><code>3.12.10</code></td>
-              <td>Exact major.minor.patch NuGet Python package version to materialize reproducibly.</td>
+              <td>Python.org Windows runtime version to materialize. Use major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or 3.15.0-beta.</td>
             </tr>
           </tbody>
         </table>
@@ -686,7 +687,7 @@ publications:
               <td>no</td>
               <td><code>3.11.1</code></td>
               <td><code>3.12.10</code></td>
-              <td>Exact major.minor.patch NuGet Python package version used when the virtual environment is self-contained because python_bundled is disabled.</td>
+              <td>Python.org Windows runtime version used when the virtual environment is self-contained because python_bundled is disabled. Prerelease selectors are supported.</td>
             </tr>
           </tbody>
         </table>
@@ -1314,7 +1315,7 @@ publications:
           <tbody>
             <tr>
               <td><code>python_bundled</code> enabled</td>
-              <td>NuGet Python is materialized under <code>bin/python</code>. Main dependencies are installed into that runtime. When selected for the installed payload, its <code>pyvenv.cfg</code> is relocated to the final install directory before post-install hooks run.</td>
+              <td>The complete Python.org Windows runtime is materialized under <code>bin/python</code>, including Tkinter, pip, venv, headers, and import libraries. Main dependencies are installed into that runtime. When selected for the installed payload, its <code>pyvenv.cfg</code> is relocated to the final install directory before post-install hooks run.</td>
             </tr>
             <tr>
               <td><code>python_venv</code> enabled with bundled Python</td>
@@ -1322,7 +1323,7 @@ publications:
             </tr>
             <tr>
               <td><code>python_venv</code> enabled without bundled Python</td>
-              <td>A self-contained NuGet-backed venv is created. Main and dev dependencies are installed into it.</td>
+              <td>A self-contained venv is created from the complete Python.org Windows runtime. Main and dev dependencies are installed into it.</td>
             </tr>
             <tr>
               <td>Both disabled</td>
@@ -1331,12 +1332,13 @@ publications:
           </tbody>
         </table>
         <p>
-          Python versions must use an exact <code>major.minor.patch</code> pin. Normal builds verify an existing
+          Stable Python versions use an exact <code>major.minor.patch</code> pin. Python prereleases may use an exact
+          form such as <code>3.15.0b4</code>, or a release-level selector such as <code>3.15.0-beta</code>. Normal builds verify an existing
           <code>poetry.lock</code> and install locked registry artifacts by SHA-256; use <code>app-builder lock</code>
           when dependency declarations change. Git sources require a full resolved commit. Mutable Poetry
           <code>file</code> and <code>directory</code> sources are rejected; publish a hashed artifact or use a
-          pinned Git source instead. Downloaded NuGet packages are cached under
-          <code>%TEMP%\app-builder-downloads</code> and verified against the SHA-512 digest published in NuGet catalog metadata.
+          pinned Git source instead. Complete Python runtimes are selected from Python.org's Windows runtime index,
+          cached under <code>%TEMP%\app-builder-downloads</code>, and verified against the SHA-256 published in that index.
         </p>
       </section>
 
@@ -1725,10 +1727,10 @@ build_hooks:
           variable that exists, <code>${GIT.*}</code> needs a readable git repository, and
           <code>${CONFIG.*}</code> must point at another string value without forming a cycle.
         </p>
-        <h3>NuGet Python version missing</h3>
+        <h3>Python runtime version missing</h3>
         <p>
-          Pin an exact available version such as <code>3.12.10</code>. Prefixes and wildcards are rejected so the
-          same config cannot silently select a newer runtime later.
+          Pin an available stable version such as <code>3.12.10</code>, or a Python prerelease such as
+          <code>3.15.0b4</code>. A selector such as <code>3.15.0-beta</code> chooses the latest matching beta.
         </p>
         <h3>GitHub release failed</h3>
         <p>

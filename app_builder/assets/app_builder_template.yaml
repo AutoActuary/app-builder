@@ -21,8 +21,9 @@ python_bundled:
   # materialized. Default if omitted: bin/python.
   path: bin/python
 
-  # Optional string. Exact major.minor.patch NuGet Python package version to materialize
-  # reproducibly. Default if omitted: 3.11.1.
+  # Optional string. Python.org Windows runtime version to materialize. Use
+  # major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or
+  # 3.15.0-beta. Default if omitted: 3.11.1.
   python_version: 3.12.10
 
 # Optional, nullable mapping | null. Optional Poetry dev virtual environment derived from
@@ -33,9 +34,9 @@ python_venv:
   # is created. Default if omitted: venv.
   path: venv
 
-  # Optional string. Exact major.minor.patch NuGet Python package version used when the
-  # virtual environment is self-contained because python_bundled is disabled. Default if
-  # omitted: 3.11.1.
+  # Optional string. Python.org Windows runtime version used when the virtual environment
+  # is self-contained because python_bundled is disabled. Prerelease selectors are
+  # supported. Default if omitted: 3.11.1.
   python_version: 3.12.10
 
 # Required mapping. Required installer metadata and release payload settings.

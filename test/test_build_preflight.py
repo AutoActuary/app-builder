@@ -100,7 +100,7 @@ class TestBuildPreflight(unittest.TestCase):
                 validate_build_configuration(project_root, config, version="1.2.3")
 
     def test_config_loader_rejects_non_exact_python_version(self) -> None:
-        with self.assertRaisesRegex(ConfigError, "exact major.minor.patch"):
+        with self.assertRaisesRegex(ConfigError, "expected major.minor.patch"):
             load_app_builder_config(
                 {
                     "python_bundled": {"python_version": "3.12"},

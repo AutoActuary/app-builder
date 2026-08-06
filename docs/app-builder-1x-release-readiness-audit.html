@@ -912,8 +912,8 @@ installer.exe
           <p>
             Every dependency run executes <code>poetry lock</code>, which may mutate the project and re-resolve rather
             than verify a committed lock. Installation then reconstructs <code>name==version</code> requirements and
-            uses pip <code>--no-deps</code> without Poetry artifact hashes. NuGet Python downloads are cached without a
-            repository-supplied digest, and self-contained venv launchers resolve the latest ExeWrap release at build
+            uses pip <code>--no-deps</code> without Poetry artifact hashes. Python runtime inputs lack an enforced
+            upstream digest, and self-contained venv launchers resolve the latest ExeWrap release at build
             time.
           </p>
           <p><strong>Required:</strong> verify an existing lock by default, add an explicit lock-refresh command,
@@ -923,8 +923,8 @@ installer.exe
             and release commands now require an existing <code>poetry.lock</code> and verify it with
             <code>poetry check --lock</code> without mutation; <code>app-builder lock</code> is the sole explicit refresh
             command. Registry and URL packages install from a temporary requirements file with Poetry's SHA-256 hashes
-            under pip <code>--require-hashes</code>, while Git packages require a full resolved commit. NuGet Python
-            packages are verified against NuGet's catalog SHA-512 hash, ExeWrap is pinned to v2.1.0 with per-architecture
+            under pip <code>--require-hashes</code>, while Git packages require a full resolved commit. Python.org runtime
+            packages are verified against the runtime index's SHA-256, ExeWrap is pinned to v2.1.0 with per-architecture
             SHA-256 digests, and the installer manifest records the selected lock, runtime, and launcher provenance.</p>
           <p class="source">Source: <a href="../app_builder/poetry_dependencies.py">poetry_dependencies.py:65</a>, <a href="../app_builder/python_runtime.py">python_runtime.py:346, 373, 822</a>.</p>
         </article>

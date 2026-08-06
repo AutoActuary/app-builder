@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import base64
 import hashlib
 import json
 import os
@@ -29,15 +28,10 @@ from .poetry_dependencies import (
 )
 from .schema import PythonBundledOptions, PythonVenvOptions
 
-NUGET_PYTHON_PACKAGE_ID = "python"
-NUGET_FLAT_CONTAINER_BASE_URL = "https://api.nuget.org/v3-flatcontainer"
-NUGET_PYTHON_INDEX_URL = (
-    f"{NUGET_FLAT_CONTAINER_BASE_URL}/{NUGET_PYTHON_PACKAGE_ID}/index.json"
-)
-NUGET_REGISTRATION_BASE_URL = "https://api.nuget.org/v3/registration5-semver1"
-_VERSION_PATTERN_RE = re.compile(r"^\d+(?:\.\d+)*(?:[-+][0-9A-Za-z_.-]+)?$")
-_NUGET_SOURCE_MARKER = ".app-builder-python-source.json"
-_NUGET_PACKAGE_PAYLOAD_ROOT = "tools"
+PYTHON_RUNTIME_INDEX_URL = "https://www.python.org/ftp/python/index-windows.json"
+_PYTHON_RUNTIME_INDEX_ROOT = "https://www.python.org/ftp/python/"
+_VERSION_PATTERN_RE = re.compile(r"^\d+(?:\.\d+)*(?:(?:a|b|rc)\d+)?$")
+_PYTHON_SOURCE_MARKER = ".app-builder-python-source.json"
 EXE_WRAP_VERSION = "v2.1.0"
 _EXE_WRAP_RELEASE_BASE_URL = (
     f"https://github.com/AutoActuary/ExeWrap/releases/download/{EXE_WRAP_VERSION}"
@@ -54,7 +48,7 @@ _EXE_WRAP_SOURCE_MARKER = ".app-builder-exewrap-source.json"
 
 
 class PythonVersionNotFoundError(RuntimeError):
-    """Raised when NuGet does not offer a requested Python version."""
+    """Raised when Python.org does not offer a requested Python runtime."""
 
 
 def python_executable(venv_root: Path) -> Path:
@@ -101,7 +95,11 @@ def _matches_version_pattern(pattern: str | None, version: str) -> bool:
     cleaned = _normalized_version_pattern(pattern)
     if cleaned is None:
         return True
-    return version == cleaned or version.startswith(f"{cleaned}.")
+    if version == cleaned or version.startswith(f"{cleaned}."):
+        return True
+    if re.search(r"(?:a|b|rc)$", cleaned):
+        return re.fullmatch(re.escape(cleaned) + r"\d+", version) is not None
+    return False
 
 
 def _normalized_version_pattern(pattern: str | None) -> str | None:
@@ -112,15 +110,29 @@ def _normalized_version_pattern(pattern: str | None) -> str | None:
         return None
     if cleaned.endswith(".*"):
         cleaned = cleaned[:-2]
+    prerelease_match = re.search(
+        r"-(alpha|beta|candidate|rc)(?:[.-]?(\d+))?$",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    if prerelease_match:
+        prefix = {
+            "alpha": "a",
+            "beta": "b",
+            "candidate": "rc",
+            "rc": "rc",
+        }[prerelease_match.group(1).casefold()]
+        serial = prerelease_match.group(2) or ""
+        cleaned = cleaned[: prerelease_match.start()] + prefix + serial
     return cleaned
 
 
 def _is_prerelease_version(version: str) -> bool:
-    return "-" in version
+    return re.search(r"(?:a|b|rc)\d+$", version) is not None
 
 
 def _version_release_parts(version: str) -> tuple[int, ...] | None:
-    release = version.split("+", 1)[0].split("-", 1)[0]
+    release = re.split(r"(?:a|b|rc)\d+$", version, maxsplit=1)[0]
     parts = release.split(".")
     if not parts or not all(part.isdecimal() for part in parts):
         return None
@@ -133,9 +145,14 @@ def _padded_version_parts(version: str) -> tuple[int, int, int, int]:
     return (padded[0], padded[1], padded[2], padded[3])
 
 
-def _version_sort_key(version: str) -> tuple[tuple[int, int, int, int], int, str]:
+def _version_sort_key(
+    version: str,
+) -> tuple[tuple[int, int, int, int], int, int, int]:
     stable = 0 if _is_prerelease_version(version) else 1
-    return (_padded_version_parts(version), stable, version)
+    match = re.search(r"(a|b|rc)(\d+)$", version)
+    stage = {"a": 0, "b": 1, "rc": 2}.get(match.group(1), 3) if match else 3
+    serial = int(match.group(2)) if match else 0
+    return (_padded_version_parts(version), stable, stage, serial)
 
 
 def _latest_versions(versions: Sequence[str]) -> list[str]:
@@ -146,7 +163,7 @@ def _requested_version_parts(pattern: str | None) -> tuple[int, ...]:
     cleaned = _normalized_version_pattern(pattern)
     if cleaned is None:
         return ()
-    release = cleaned.split("+", 1)[0].split("-", 1)[0]
+    release = re.split(r"(?:a|b|rc)\d*$", cleaned, maxsplit=1)[0]
     parts: list[int] = []
     for part in release.split("."):
         if not part.isdecimal():
@@ -174,7 +191,7 @@ def _closest_versions(
     return sorted(versions, key=score)[:limit]
 
 
-def _suggest_nuget_python_versions(
+def _suggest_python_runtime_versions(
     versions: Sequence[str],
     python_version: str | None,
     *,
@@ -221,37 +238,8 @@ def _suggest_nuget_python_versions(
     return _latest_versions(suggestion_pool)[:limit]
 
 
-def _load_nuget_python_versions() -> list[str]:
-    request = urllib.request.Request(
-        NUGET_PYTHON_INDEX_URL,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "app-builder",
-        },
-    )
-    try:
-        with urllib.request.urlopen(request) as response:
-            payload: Any = json.loads(response.read().decode("utf-8"))
-    except urllib.error.URLError as error:
-        raise RuntimeError(
-            f"Could not query NuGet Python versions from {NUGET_PYTHON_INDEX_URL}: {error}."
-        ) from error
-
-    if not isinstance(payload, dict):
-        raise RuntimeError("Unexpected NuGet Python version response: expected object.")
-    versions = payload.get("versions")
-    if not isinstance(versions, list) or not all(
-        isinstance(version, str) for version in versions
-    ):
-        raise RuntimeError(
-            "Unexpected NuGet Python version response: expected a string version list."
-        )
-    return versions
-
-
-def _select_nuget_python_version(
-    versions: Sequence[str],
-    python_version: str | None,
+def _select_python_runtime_version(
+    versions: Sequence[str], python_version: str | None
 ) -> str:
     valid_versions = [
         version for version in versions if _VERSION_PATTERN_RE.match(version)
@@ -269,7 +257,7 @@ def _select_nuget_python_version(
     if matches:
         return _latest_versions(matches)[0]
 
-    suggestions = _suggest_nuget_python_versions(valid_versions, python_version)
+    suggestions = _suggest_python_runtime_versions(valid_versions, python_version)
     suggestion_text = ""
     if suggestions:
         suggestion_text = f" Closest available versions: {', '.join(suggestions)}."
@@ -279,23 +267,17 @@ def _select_nuget_python_version(
         else f"a version matching {python_version!r}"
     )
     raise PythonVersionNotFoundError(
-        f"NuGet package '{NUGET_PYTHON_PACKAGE_ID}' does not provide {requested}."
+        f"The Python.org Windows runtime index does not provide {requested}."
         f"{suggestion_text}"
     )
 
 
-def _nuget_python_download_url(version: str) -> str:
-    return (
-        f"{NUGET_FLAT_CONTAINER_BASE_URL}/{NUGET_PYTHON_PACKAGE_ID}/{version}/"
-        f"{NUGET_PYTHON_PACKAGE_ID}.{version}.nupkg"
-    )
-
-
 @dataclass(frozen=True, slots=True)
-class NuGetPythonPackage:
+class PythonRuntimePackage:
     version: str
+    runtime_id: str
     download_url: str
-    digest: str | None = None
+    digest: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,47 +287,20 @@ class ExeWrapPackage:
     digest: str | None
 
 
-def _resolve_nuget_python_package(python_version: str | None) -> NuGetPythonPackage:
-    versions = _load_nuget_python_versions()
-    selected_version = _select_nuget_python_version(versions, python_version)
-    return NuGetPythonPackage(
-        version=selected_version,
-        download_url=_nuget_python_download_url(selected_version),
-        digest=_load_nuget_python_digest(selected_version),
+def _python_runtime_architecture_tag() -> str:
+    machine = platform.machine().casefold()
+    if machine in {"amd64", "x86_64"}:
+        return "64"
+    if machine in {"arm64", "aarch64"}:
+        return "arm64"
+    if machine in {"x86", "i386", "i686"}:
+        return "32"
+    raise RuntimeError(
+        f"Python.org does not publish a Windows runtime for {machine!r}."
     )
 
 
-def _load_nuget_python_digest(version: str) -> str:
-    registration_url = (
-        f"{NUGET_REGISTRATION_BASE_URL}/{NUGET_PYTHON_PACKAGE_ID}/{version}.json"
-    )
-    registration = _load_nuget_json(registration_url)
-    catalog_url = registration.get("catalogEntry")
-    if not isinstance(catalog_url, str) or not catalog_url.startswith("https://"):
-        raise RuntimeError(
-            f"NuGet registration metadata did not provide a catalog entry for Python {version}."
-        )
-    catalog = _load_nuget_json(catalog_url)
-    algorithm = catalog.get("packageHashAlgorithm")
-    encoded = catalog.get("packageHash")
-    if algorithm != "SHA512" or not isinstance(encoded, str):
-        raise RuntimeError(
-            f"NuGet catalog metadata did not provide a SHA-512 package hash for Python {version}."
-        )
-    try:
-        digest = base64.b64decode(encoded, validate=True)
-    except ValueError as error:
-        raise RuntimeError(
-            f"NuGet returned an invalid SHA-512 package hash for Python {version}."
-        ) from error
-    if len(digest) != hashlib.sha512().digest_size:
-        raise RuntimeError(
-            f"NuGet returned an invalid SHA-512 package hash for Python {version}."
-        )
-    return "sha512:" + digest.hex()
-
-
-def _load_nuget_json(url: str) -> dict[str, Any]:
+def _load_python_index_json(url: str) -> dict[str, Any]:
     request = urllib.request.Request(
         url,
         headers={"Accept": "application/json", "User-Agent": "app-builder"},
@@ -355,11 +310,78 @@ def _load_nuget_json(url: str) -> dict[str, Any]:
             payload: Any = json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise RuntimeError(
-            f"Could not read NuGet metadata from {url}: {error}."
+            f"Could not read the Python.org Windows runtime index from {url}: {error}."
         ) from error
     if not isinstance(payload, dict):
-        raise RuntimeError(f"Unexpected NuGet metadata response from {url}.")
+        raise RuntimeError(f"Unexpected Python.org runtime index response from {url}.")
     return payload
+
+
+def _load_python_runtime_packages() -> list[PythonRuntimePackage]:
+    architecture = _python_runtime_architecture_tag()
+    packages: list[PythonRuntimePackage] = []
+    seen_urls: set[str] = set()
+    url: str | None = PYTHON_RUNTIME_INDEX_URL
+    while url is not None:
+        if url in seen_urls:
+            raise RuntimeError(f"Python.org runtime index contains a cycle at {url}.")
+        seen_urls.add(url)
+        payload = _load_python_index_json(url)
+        versions = payload.get("versions")
+        if not isinstance(versions, list):
+            raise RuntimeError(f"Python.org runtime index {url} has no version list.")
+        for entry in versions:
+            if not isinstance(entry, dict) or entry.get("company") != "PythonCore":
+                continue
+            version = entry.get("sort-version")
+            runtime_id = entry.get("id")
+            tag = entry.get("tag")
+            download_url = entry.get("url")
+            hash_info = entry.get("hash")
+            digest = hash_info.get("sha256") if isinstance(hash_info, dict) else None
+            if not (
+                isinstance(version, str)
+                and isinstance(runtime_id, str)
+                and isinstance(tag, str)
+                and tag.endswith(f"-{architecture}")
+                and isinstance(download_url, str)
+                and download_url.startswith(_PYTHON_RUNTIME_INDEX_ROOT)
+                and isinstance(digest, str)
+            ):
+                continue
+            packages.append(
+                PythonRuntimePackage(
+                    version=version,
+                    runtime_id=runtime_id,
+                    download_url=download_url,
+                    digest=f"sha256:{digest}",
+                )
+            )
+
+        next_index = payload.get("next")
+        if next_index is None:
+            url = None
+        elif isinstance(next_index, str):
+            url = urllib.parse.urljoin(url, next_index)
+            if not url.startswith(_PYTHON_RUNTIME_INDEX_ROOT):
+                raise RuntimeError(
+                    f"Python.org runtime index points outside python.org: {url}."
+                )
+        else:
+            raise RuntimeError(
+                f"Python.org runtime index {url} has an invalid next link."
+            )
+    return packages
+
+
+def _resolve_python_runtime_package(
+    python_version: str | None,
+) -> PythonRuntimePackage:
+    packages = _load_python_runtime_packages()
+    selected_version = _select_python_runtime_version(
+        [package.version for package in packages], python_version
+    )
+    return next(package for package in packages if package.version == selected_version)
 
 
 def _download_file(url: str, destination: Path) -> None:
@@ -371,7 +393,7 @@ def _download_file(url: str, destination: Path) -> None:
                 shutil.copyfileobj(response, output)
     except urllib.error.HTTPError as error:
         raise RuntimeError(
-            f"Could not download {url}: NuGet returned HTTP {error.code}."
+            f"Could not download {url}: server returned HTTP {error.code}."
         ) from error
     except urllib.error.URLError as error:
         raise RuntimeError(f"Could not download {url}: {error}.") from error
@@ -380,7 +402,7 @@ def _download_file(url: str, destination: Path) -> None:
 def _download_cache_path(url: str) -> Path:
     filename = Path(urllib.parse.urlsplit(url).path).name
     if not filename:
-        filename = f"{NUGET_PYTHON_PACKAGE_ID}.nupkg"
+        filename = "download"
     return Path(tempfile.gettempdir(), "app-builder-downloads", filename)
 
 
@@ -556,17 +578,18 @@ def _install_exe_wrap_python_launchers(
 
 
 def _source_marker_path(python_root: Path) -> Path:
-    return python_root / _NUGET_SOURCE_MARKER
+    return python_root / _PYTHON_SOURCE_MARKER
 
 
-def _write_nuget_source_marker(
+def _write_python_source_marker(
     python_root: Path,
-    package: NuGetPythonPackage,
+    package: PythonRuntimePackage,
 ) -> None:
     _source_marker_path(python_root).write_text(
         json.dumps(
             {
-                "package_id": NUGET_PYTHON_PACKAGE_ID,
+                "source": "python.org",
+                "runtime_id": package.runtime_id,
                 "version": package.version,
                 "download_url": package.download_url,
                 "digest": package.digest,
@@ -577,7 +600,7 @@ def _write_nuget_source_marker(
     )
 
 
-def _nuget_source_marker_matches(
+def _python_source_marker_matches(
     python_root: Path,
     python_version: str | None,
 ) -> bool:
@@ -590,11 +613,13 @@ def _nuget_source_marker_matches(
         return False
     if not isinstance(payload, dict):
         return False
-    package_id = payload.get("package_id")
+    source = payload.get("source")
+    runtime_id = payload.get("runtime_id")
     version = payload.get("version")
     digest = payload.get("digest")
     return (
-        package_id == NUGET_PYTHON_PACKAGE_ID
+        source == "python.org"
+        and isinstance(runtime_id, str)
         and isinstance(version, str)
         and _matches_version_pattern(python_version, version)
         and isinstance(digest, str)
@@ -610,19 +635,18 @@ def _safe_archive_target(root: Path, relative_parts: tuple[str, ...]) -> Path:
         destination_resolved.relative_to(root_resolved)
     except ValueError as error:
         raise RuntimeError(
-            f"NuGet Python package contains an unsafe archive path: {'/'.join(relative_parts)}."
+            "Python.org runtime package contains an unsafe archive path: "
+            f"{'/'.join(relative_parts)}."
         ) from error
     return destination
 
 
-def _extract_nuget_python_payload(package_path: Path, payload_root: Path) -> None:
+def _extract_python_runtime_payload(package_path: Path, payload_root: Path) -> None:
     extracted_any = False
     with ZipFile(package_path) as zip_file:
         for member in zip_file.infolist():
             parts = Path(member.filename).parts
-            if not parts or parts[0].lower() != _NUGET_PACKAGE_PAYLOAD_ROOT:
-                continue
-            relative_parts = tuple(parts[1:])
+            relative_parts = tuple(parts)
             if not relative_parts:
                 continue
             extracted_any = True
@@ -635,17 +659,36 @@ def _extract_nuget_python_payload(package_path: Path, payload_root: Path) -> Non
                 shutil.copyfileobj(source, destination)
 
     if not extracted_any:
-        raise RuntimeError("NuGet Python package did not contain a Python payload.")
+        raise RuntimeError(
+            "Python.org runtime package did not contain a Python payload."
+        )
 
 
-def _extract_nuget_python_package(package_path: Path, python_root: Path) -> None:
+def _extract_python_runtime_package(package_path: Path, python_root: Path) -> None:
     if python_root.exists():
         shutil.rmtree(python_root)
     with tempfile.TemporaryDirectory() as temp_dir_str:
         extracted_python = Path(temp_dir_str, "python-payload")
-        _extract_nuget_python_payload(package_path, extracted_python)
-        if not (extracted_python / "python.exe").exists():
-            raise RuntimeError("NuGet Python package did not contain python.exe.")
+        _extract_python_runtime_payload(package_path, extracted_python)
+        required_paths = (
+            "python.exe",
+            "pythonw.exe",
+            "Lib/os.py",
+            "Lib/ensurepip/__init__.py",
+            "Lib/venv/__init__.py",
+            "Lib/tkinter/__init__.py",
+            "DLLs/_tkinter.pyd",
+        )
+        missing = [
+            relative_path
+            for relative_path in required_paths
+            if not (extracted_python / relative_path).is_file()
+        ]
+        if missing:
+            raise RuntimeError(
+                "Python.org runtime package is incomplete; missing: "
+                + ", ".join(missing)
+            )
         site_packages = extracted_python / "Lib" / "site-packages"
         scripts = extracted_python / "Scripts"
 
@@ -692,12 +735,12 @@ def establish_bundled_python(
     python_executable = _bundled_python_executable(python_root)
     if not (
         _python_matches(python_executable, options.python_version)
-        and _nuget_source_marker_matches(python_root, options.python_version)
+        and _python_source_marker_matches(python_root, options.python_version)
     ):
-        package = _resolve_nuget_python_package(options.python_version)
+        package = _resolve_python_runtime_package(options.python_version)
         package_path = _ensure_downloaded_file(package.download_url, package.digest)
-        _extract_nuget_python_package(package_path, python_root)
-        _write_nuget_source_marker(python_root, package)
+        _extract_python_runtime_package(package_path, python_root)
+        _write_python_source_marker(python_root, package)
 
     python_executable = _bundled_python_executable(python_root)
     if not _python_matches(python_executable, options.python_version):
@@ -798,8 +841,8 @@ def _copy_bundled_runtime_support(bundled_root: Path, venv_root: Path) -> None:
         "python.exe",
         "pyvenv.cfg",
         "lib",
-        _NUGET_SOURCE_MARKER,
-        _NUGET_PACKAGE_PAYLOAD_ROOT,
+        "tools",
+        _PYTHON_SOURCE_MARKER,
     }
 
     def copy_included_files(source: Path = bundled_root) -> None:
@@ -850,7 +893,7 @@ def _self_contained_venv_matches(
             _self_contained_venv_python_executable(venv_root),
             python_version,
         )
-        and _nuget_source_marker_matches(venv_root, python_version)
+        and _python_source_marker_matches(venv_root, python_version)
         and _exe_wrap_source_marker_matches(venv_root)
         and _exe_wrap_launcher_matches(
             _self_contained_venv_launcher_executable(venv_root),
@@ -889,10 +932,10 @@ def _create_self_contained_venv(
     if venv_root.exists():
         shutil.rmtree(venv_root)
 
-    package = _resolve_nuget_python_package(options.python_version)
+    package = _resolve_python_runtime_package(options.python_version)
     package_path = _ensure_downloaded_file(package.download_url, package.digest)
-    _extract_nuget_python_package(package_path, venv_root)
-    _write_nuget_source_marker(venv_root, package)
+    _extract_python_runtime_package(package_path, venv_root)
+    _write_python_source_marker(venv_root, package)
     _ensure_pip(_self_contained_venv_python_executable(venv_root))
     _install_exe_wrap_python_launchers(venv_root)
     return _self_contained_venv_launcher_executable(venv_root)
@@ -1031,7 +1074,7 @@ def _python_environment_build_inputs(
             )
         for marker_root in marker_roots:
             for marker_name, kind in (
-                (_NUGET_SOURCE_MARKER, "nuget_python"),
+                (_PYTHON_SOURCE_MARKER, "python_runtime"),
                 (_EXE_WRAP_SOURCE_MARKER, "exewrap"),
             ):
                 marker_path = marker_root / marker_name

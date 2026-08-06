@@ -189,6 +189,33 @@ installer:
   install_directory: "%localappdata%\\\\Demo"
 """)
 
+    def test_python_prerelease_selectors_are_supported(self) -> None:
+        for version in ("3.15.0b4", "3.15.0rc1", "3.15.0-beta", "3.15.0-rc.2"):
+            with self.subTest(version=version):
+                config = self._load_yaml(f"""
+python_bundled:
+  python_version: {version}
+installer:
+  name: Demo
+  install_directory: C:\\Demo
+""")
+                self.assertIsNotNone(config.python_bundled)
+                assert config.python_bundled is not None
+                self.assertEqual(version, config.python_bundled.python_version)
+
+    def test_invalid_python_release_selector_is_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ConfigError,
+            r"expected major\.minor\.patch",
+        ):
+            self._load_yaml("""
+python_bundled:
+  python_version: "3.15"
+installer:
+  name: Demo
+  install_directory: C:\\Demo
+""")
+
     def test_unknown_top_level_keys_are_rejected(self) -> None:
         with self.assertRaisesRegex(
             ConfigError,

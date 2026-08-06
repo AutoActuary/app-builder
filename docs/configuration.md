@@ -32,8 +32,9 @@ python_bundled:
   # materialized. Default if omitted: bin/python.
   path: bin/python
 
-  # Optional string. Exact major.minor.patch NuGet Python package version to materialize
-  # reproducibly. Default if omitted: 3.11.1.
+  # Optional string. Python.org Windows runtime version to materialize. Use
+  # major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or
+  # 3.15.0-beta. Default if omitted: 3.11.1.
   python_version: 3.12.10
 
 # Optional, nullable mapping | null. Optional Poetry dev virtual environment derived from
@@ -44,9 +45,9 @@ python_venv:
   # is created. Default if omitted: venv.
   path: venv
 
-  # Optional string. Exact major.minor.patch NuGet Python package version used when the
-  # virtual environment is self-contained because python_bundled is disabled. Default if
-  # omitted: 3.11.1.
+  # Optional string. Python.org Windows runtime version used when the virtual environment
+  # is self-contained because python_bundled is disabled. Prerelease selectors are
+  # supported. Default if omitted: 3.11.1.
   python_version: 3.12.10
 
 # Required mapping. Required installer metadata and release payload settings.
@@ -270,14 +271,14 @@ installer:
 | Field | Type | Required | Default | Example | Description |
 | --- | --- | --- | --- | --- | --- |
 | `path` | `string` | no | `bin/python` | `bin/python` | Project-relative directory where the bundled Python runtime is materialized. |
-| `python_version` | `string` | no | `3.11.1` | `3.12.10` | Exact major.minor.patch NuGet Python package version to materialize reproducibly. |
+| `python_version` | `string` | no | `3.11.1` | `3.12.10` | Python.org Windows runtime version to materialize. Use major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or 3.15.0-beta. |
 
 ## `config.python_venv`
 
 | Field | Type | Required | Default | Example | Description |
 | --- | --- | --- | --- | --- | --- |
 | `path` | `string` | no | `venv` | `venv` | Project-relative directory where the Poetry dev virtual environment is created. |
-| `python_version` | `string` | no | `3.11.1` | `3.12.10` | Exact major.minor.patch NuGet Python package version used when the virtual environment is self-contained because python_bundled is disabled. |
+| `python_version` | `string` | no | `3.11.1` | `3.12.10` | Python.org Windows runtime version used when the virtual environment is self-contained because python_bundled is disabled. Prerelease selectors are supported. |
 
 ## `config.installer`
 
