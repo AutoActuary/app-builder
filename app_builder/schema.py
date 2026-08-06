@@ -9,7 +9,11 @@ from typing import Any, TypeAlias, cast
 from .schema_core import ConfigError as ConfigError, config_field, materialize_config
 
 HookCommand: TypeAlias = list[str]
-_EXACT_PYTHON_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+_PYTHON_VERSION_SELECTOR = re.compile(
+    r"^[0-9]+\.[0-9]+\.[0-9]+"
+    r"(?:(?:a|b|rc)[0-9]+|-(?:alpha|beta|candidate|rc)(?:[.-]?[0-9]+)?)?$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(slots=True)
@@ -21,7 +25,7 @@ class PythonBundledOptions:
     )
     python_version: str = config_field(
         default="3.11.1",
-        description="Exact major.minor.patch NuGet Python package version to materialize reproducibly.",
+        description="Python.org Windows runtime version to materialize. Use major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or 3.15.0-beta.",
         example="3.12.10",
     )
 
@@ -35,7 +39,7 @@ class PythonVenvOptions:
     )
     python_version: str = config_field(
         default="3.11.1",
-        description="Exact major.minor.patch NuGet Python package version used when the virtual environment is self-contained because python_bundled is disabled.",
+        description="Python.org Windows runtime version used when the virtual environment is self-contained because python_bundled is disabled. Prerelease selectors are supported.",
         example="3.12.10",
     )
 
@@ -313,11 +317,11 @@ def load_app_builder_config(
     ):
         if (
             options is not None
-            and _EXACT_PYTHON_VERSION.fullmatch(options.python_version) is None
+            and _PYTHON_VERSION_SELECTOR.fullmatch(options.python_version) is None
         ):
             raise ConfigError(
                 f"{path}.{section_name}.python_version",
-                "expected an exact major.minor.patch version.",
+                "expected major.minor.patch, optionally followed by a Python prerelease such as b4, rc1, or -beta.",
             )
     return config
 

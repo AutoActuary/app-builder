@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 import os
 import tempfile
@@ -16,39 +15,50 @@ from app_builder.main import main
 from app_builder.poetry_dependencies import DEV_GROUP, MAIN_GROUP, PoetryLock
 from app_builder.python_runtime import (
     EXE_WRAP_VERSION,
-    NuGetPythonPackage,
     PythonEnvironmentMaterializer,
+    PythonRuntimePackage,
     PythonVersionNotFoundError,
     _copy_bundled_runtime_support,
     _create_self_contained_venv,
     _download_cache_path,
     _exe_wrap_launcher_matches,
     _exe_wrap_python_config,
-    _extract_nuget_python_package,
+    _extract_python_runtime_package,
     _EXE_WRAP_DIGESTS,
     _EXE_WRAP_SOURCE_MARKER,
     _install_exe_wrap_python_launchers,
     _matches_version_pattern,
-    _load_nuget_python_digest,
-    _nuget_source_marker_matches,
-    _nuget_python_download_url,
+    _load_python_runtime_packages,
+    _python_source_marker_matches,
     _read_base_site_packages,
-    _select_nuget_python_version,
+    _select_python_runtime_version,
     _resolve_exe_wrap_package,
     _self_contained_venv_matches,
     _self_contained_venv_python_executable,
     _venv_matches_bundled_python,
-    _write_nuget_source_marker,
+    _write_python_source_marker,
     _write_base_site_packages,
     ensure_python_environments,
 )
 from app_builder.schema import PythonVenvOptions
 
-_TEST_NUGET_DIGEST = "sha512:" + "0" * 128
+_TEST_PYTHON_DIGEST = "sha256:" + "0" * 64
 
 
-def _nuget_payload_member(relative_path: str) -> str:
-    return "/".join(("tools", relative_path))
+def _write_fake_python_runtime(package: ZipFile) -> None:
+    for relative_path in (
+        "python.exe",
+        "pythonw.exe",
+        "python312.dll",
+        "Lib/os.py",
+        "Lib/ensurepip/__init__.py",
+        "Lib/venv/__init__.py",
+        "Lib/tkinter/__init__.py",
+        "DLLs/_tkinter.pyd",
+    ):
+        package.writestr(relative_path, relative_path)
+    package.writestr("Lib/site-packages/pip/__init__.py", "pip")
+    package.writestr("Scripts/pip.exe", "pip")
 
 
 def _write_fake_exe_wrap_package(package_path: Path) -> None:
@@ -57,113 +67,139 @@ def _write_fake_exe_wrap_package(package_path: Path) -> None:
         package.writestr("ExeWrap-windowed.exe", b"windowed-launcher")
 
 
-class TestNuGetPythonSelection(unittest.TestCase):
-    @patch("app_builder.python_runtime._load_nuget_json")
-    def test_reads_sha512_digest_from_registration_catalog_metadata(
-        self, load_json: object
+class TestPythonOrgRuntimeSelection(unittest.TestCase):
+    @patch(
+        "app_builder.python_runtime._python_runtime_architecture_tag", return_value="64"
+    )
+    @patch("app_builder.python_runtime._load_python_index_json")
+    def test_reads_python_core_runtime_and_digest_from_chained_index(
+        self, load_json: object, _architecture: object
     ) -> None:
-        digest_bytes = bytes(range(64))
         assert hasattr(load_json, "side_effect")
         load_json.side_effect = [
-            {"catalogEntry": "https://api.nuget.org/catalog/python.json"},
             {
-                "packageHashAlgorithm": "SHA512",
-                "packageHash": base64.b64encode(digest_bytes).decode("ascii"),
+                "versions": [
+                    {
+                        "company": "PythonCore",
+                        "id": "pythoncore-3.12-64",
+                        "tag": "3.12-64",
+                        "sort-version": "3.12.10",
+                        "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.zip",
+                        "hash": {"sha256": "a" * 64},
+                    },
+                    {
+                        "company": "PythonEmbed",
+                        "id": "pythonembed-3.12-64",
+                        "tag": "3.12-64",
+                        "sort-version": "3.12.10",
+                        "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-embeddable-amd64.zip",
+                        "hash": {"sha256": "b" * 64},
+                    },
+                ],
+                "next": "index-windows-recent.json",
             },
+            {"versions": []},
         ]
 
-        self.assertEqual(
-            "sha512:" + digest_bytes.hex(),
-            _load_nuget_python_digest("3.12.10"),
-        )
+        packages = _load_python_runtime_packages()
+
+        self.assertEqual(1, len(packages))
+        self.assertEqual("3.12.10", packages[0].version)
+        self.assertEqual("pythoncore-3.12-64", packages[0].runtime_id)
+        self.assertEqual("sha256:" + "a" * 64, packages[0].digest)
 
     def test_matches_prefix_and_wildcard_versions(self) -> None:
         self.assertTrue(_matches_version_pattern("3.12", "3.12.10"))
         self.assertTrue(_matches_version_pattern("3.12.*", "3.12.10"))
         self.assertTrue(_matches_version_pattern("3.12.10", "3.12.10.0"))
+        self.assertTrue(_matches_version_pattern("3.15.0-beta", "3.15.0b4"))
+        self.assertTrue(_matches_version_pattern("3.15.0-rc.2", "3.15.0rc2"))
         self.assertFalse(_matches_version_pattern("3.11", "3.12.10"))
 
-    def test_selects_latest_stable_matching_nuget_version(self) -> None:
+    def test_selects_latest_stable_matching_python_version(self) -> None:
         versions = [
             "3.12.9",
             "3.12.10",
-            "3.12.11-a1",
+            "3.12.11a1",
             "3.13.1",
         ]
 
         self.assertEqual(
             "3.12.10",
-            _select_nuget_python_version(versions, "3.12"),
+            _select_python_runtime_version(versions, "3.12"),
         )
 
-    def test_missing_nuget_version_error_suggests_same_minor_versions(self) -> None:
+    def test_selects_latest_matching_prerelease(self) -> None:
+        self.assertEqual(
+            "3.15.0b10",
+            _select_python_runtime_version(
+                ["3.15.0b4", "3.15.0b10", "3.15.0rc1"],
+                "3.15.0-beta",
+            ),
+        )
+
+    def test_missing_python_version_error_suggests_same_minor_versions(self) -> None:
         with self.assertRaises(PythonVersionNotFoundError) as error:
-            _select_nuget_python_version(
+            _select_python_runtime_version(
                 ["3.11.9", "3.12.9", "3.12.10", "3.13.1"],
                 "3.12.99",
             )
 
-        self.assertIn("NuGet package 'python'", str(error.exception))
+        self.assertIn("Python.org Windows runtime index", str(error.exception))
         self.assertIn("3.12.10", str(error.exception))
         self.assertIn("3.12.9", str(error.exception))
 
-    def test_nuget_download_url_uses_flat_container_package_layout(self) -> None:
-        self.assertEqual(
-            "https://api.nuget.org/v3-flatcontainer/python/3.12.10/python.3.12.10.nupkg",
-            _nuget_python_download_url("3.12.10"),
-        )
 
-
-class TestNuGetPythonExtraction(unittest.TestCase):
+class TestPythonOrgRuntimeExtraction(unittest.TestCase):
     def test_download_cache_path_uses_os_temp_download_cache(self) -> None:
         self.assertEqual(
             Path(
                 tempfile.gettempdir(),
                 "app-builder-downloads",
-                "python.3.12.10.nupkg",
+                "python-3.12.10-amd64.zip",
             ),
-            _download_cache_path(_nuget_python_download_url("3.12.10")),
+            _download_cache_path(
+                "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.zip"
+            ),
         )
 
-    def test_source_marker_records_nuget_package_origin(self) -> None:
+    def test_source_marker_records_python_org_package_origin(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             python_root = Path(temp_dir_str) / "bin" / "python"
             python_root.mkdir(parents=True)
 
-            _write_nuget_source_marker(
+            _write_python_source_marker(
                 python_root,
-                NuGetPythonPackage(
+                PythonRuntimePackage(
                     version="3.12.10",
-                    download_url=_nuget_python_download_url("3.12.10"),
-                    digest=_TEST_NUGET_DIGEST,
+                    runtime_id="pythoncore-3.12-64",
+                    download_url="https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.zip",
+                    digest=_TEST_PYTHON_DIGEST,
                 ),
             )
 
-            self.assertTrue(_nuget_source_marker_matches(python_root, "3.12"))
-            self.assertTrue(_nuget_source_marker_matches(python_root, "3.12.10"))
-            self.assertFalse(_nuget_source_marker_matches(python_root, "3.11"))
+            self.assertTrue(_python_source_marker_matches(python_root, "3.12"))
+            self.assertTrue(_python_source_marker_matches(python_root, "3.12.10"))
+            self.assertFalse(_python_source_marker_matches(python_root, "3.11"))
 
-    def test_extracts_nuget_payload_into_bundled_python_layout(self) -> None:
+    def test_extracts_python_org_payload_into_bundled_python_layout(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
-            package_path = temp_dir / "python.3.12.10.nupkg"
+            package_path = temp_dir / "python-3.12.10-amd64.zip"
             python_root = temp_dir / "bin" / "python"
 
             with ZipFile(package_path, "w") as package:
-                package.writestr(_nuget_payload_member("python.exe"), "exe")
-                package.writestr(_nuget_payload_member("python312.dll"), "dll")
-                package.writestr(_nuget_payload_member("Lib/os.py"), "stdlib")
-                package.writestr(
-                    _nuget_payload_member("Lib/site-packages/pip/__init__.py"),
-                    "pip",
-                )
-                package.writestr("ignored.txt", "ignored")
+                _write_fake_python_runtime(package)
 
-            _extract_nuget_python_package(package_path, python_root)
+            _extract_python_runtime_package(package_path, python_root)
 
             self.assertTrue((python_root / "python" / "python.exe").exists())
             self.assertTrue((python_root / "python" / "python312.dll").exists())
             self.assertTrue((python_root / "python" / "Lib" / "os.py").exists())
+            self.assertTrue(
+                (python_root / "python" / "Lib" / "tkinter" / "__init__.py").exists()
+            )
+            self.assertTrue((python_root / "python" / "DLLs" / "_tkinter.pyd").exists())
             self.assertTrue(
                 (python_root / "Lib" / "site-packages" / "pip" / "__init__.py").exists()
             )
@@ -181,6 +217,21 @@ class TestNuGetPythonExtraction(unittest.TestCase):
                 "include-system-site-packages = false",
                 (python_root / "pyvenv.cfg").read_text(encoding="utf-8"),
             )
+
+    def test_rejects_python_runtime_archive_paths_outside_staging(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            package_path = temp_dir / "python-malicious.zip"
+            python_root = temp_dir / "bin" / "python"
+            escaped_path = temp_dir / "escaped.txt"
+
+            with ZipFile(package_path, "w") as package:
+                package.writestr("../escaped.txt", "must not be written")
+
+            with self.assertRaisesRegex(RuntimeError, "unsafe archive path"):
+                _extract_python_runtime_package(package_path, python_root)
+
+            self.assertFalse(escaped_path.exists())
 
 
 class TestExeWrapPythonLaunchers(unittest.TestCase):
@@ -412,29 +463,22 @@ installer:
 
 
 class TestSelfContainedVenvSupport(unittest.TestCase):
-    def test_creates_self_contained_venv_from_nuget_python_layout(self) -> None:
+    def test_creates_self_contained_venv_from_python_org_layout(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
-            package_path = temp_dir / "python.3.12.10.nupkg"
+            package_path = temp_dir / "python-3.12.10-amd64.zip"
             venv_root = temp_dir / "venv"
             with ZipFile(package_path, "w") as package:
-                package.writestr(_nuget_payload_member("python.exe"), "exe")
-                package.writestr(_nuget_payload_member("pythonw.exe"), "exe")
-                package.writestr(_nuget_payload_member("python312.dll"), "dll")
-                package.writestr(_nuget_payload_member("Lib/os.py"), "stdlib")
-                package.writestr(
-                    _nuget_payload_member("Lib/site-packages/pip/__init__.py"),
-                    "pip",
-                )
-                package.writestr(_nuget_payload_member("Scripts/pip.exe"), "pip")
+                _write_fake_python_runtime(package)
 
             with (
                 patch(
-                    "app_builder.python_runtime._resolve_nuget_python_package",
-                    return_value=NuGetPythonPackage(
+                    "app_builder.python_runtime._resolve_python_runtime_package",
+                    return_value=PythonRuntimePackage(
                         version="3.12.10",
-                        download_url="https://example.invalid/python.3.12.10.nupkg",
-                        digest=_TEST_NUGET_DIGEST,
+                        runtime_id="pythoncore-3.12-64",
+                        download_url="https://example.invalid/python-3.12.10-amd64.zip",
+                        digest=_TEST_PYTHON_DIGEST,
                     ),
                 ),
                 patch(
@@ -472,7 +516,7 @@ class TestSelfContainedVenvSupport(unittest.TestCase):
                 "home =",
                 (venv_root / "pyvenv.cfg").read_text(encoding="utf-8"),
             )
-            self.assertTrue(_nuget_source_marker_matches(venv_root, "3.12"))
+            self.assertTrue(_python_source_marker_matches(venv_root, "3.12"))
             ensure_pip.assert_called_once_with(
                 _self_contained_venv_python_executable(venv_root)
             )
@@ -489,12 +533,13 @@ class TestSelfContainedVenvSupport(unittest.TestCase):
                 f"home = {(venv_root / 'python').resolve().as_posix()}\n",
                 encoding="utf-8",
             )
-            _write_nuget_source_marker(
+            _write_python_source_marker(
                 venv_root,
-                NuGetPythonPackage(
+                PythonRuntimePackage(
                     version="3.12.10",
-                    download_url="https://example.invalid/python.3.12.10.nupkg",
-                    digest=_TEST_NUGET_DIGEST,
+                    runtime_id="pythoncore-3.12-64",
+                    download_url="https://example.invalid/python-3.12.10-amd64.zip",
+                    digest=_TEST_PYTHON_DIGEST,
                 ),
             )
             (venv_root / "Scripts" / "python.exe").write_bytes(

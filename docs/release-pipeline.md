@@ -60,8 +60,9 @@ Python dependencies come from `pyproject.toml` and an existing `poetry.lock`.
 Normal builds run Poetry's read-only lock check and never regenerate the lock;
 `app-builder lock` is the explicit lock-changing command. Registry artifacts are
 installed with pip hash checking, Git sources require a full resolved commit,
-mutable Poetry `file` and `directory` sources are rejected,
-NuGet Python downloads are verified against the SHA-512 hash in NuGet catalog metadata, and
+mutable Poetry `file` and `directory` sources are rejected, Python's complete
+Windows runtime is selected from the Python.org runtime index and verified against
+its published SHA-256, and
 ExeWrap is pinned to a versioned asset and SHA-256 digest. The installer manifest
 records this build-input provenance.
 
