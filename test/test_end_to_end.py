@@ -275,7 +275,11 @@ build_hooks: {{}}
                     encoding="utf-8",
                 )
 
-                release = build_release(project_root, version="1.0.0")
+                with patch(
+                    "app_builder.installer_bundle.stamp_exe_icon",
+                    side_effect=lambda launcher, _icon: launcher,
+                ):
+                    release = build_release(project_root, version="1.0.0")
                 manifest = json.loads(release.manifest_path.read_text(encoding="utf-8"))
                 with ZipFile(release.payload_archive) as payload_zip:
                     payload_names = payload_zip.namelist()
@@ -322,7 +326,11 @@ build_hooks: {{}}
                     encoding="utf-8",
                 )
 
-                release = build_release(project_root, version="1.0.0")
+                with patch(
+                    "app_builder.installer_bundle.stamp_exe_icon",
+                    side_effect=lambda launcher, _icon: launcher,
+                ):
+                    release = build_release(project_root, version="1.0.0")
                 manifest = json.loads(release.manifest_path.read_text(encoding="utf-8"))
                 with ZipFile(release.payload_archive) as payload_zip:
                     payload_names = payload_zip.namelist()
