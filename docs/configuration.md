@@ -62,10 +62,10 @@ installer:
   # it is not a drive root or protected Windows directory.
   install_directory: '%LOCALAPPDATA%\MyCompany\MyApp'
 
-  # Optional string. Project-relative .ico file embedded into generated executables. It is
-  # also the default install-relative Start Menu icon path, so include it at the same
-  # payload path or override the shortcut icon. Default if omitted: application-
-  # templates/icon.ico.
+  # Optional, nullable string | null. Optional project-relative .ico file embedded into
+  # generated executables. Start Menu shortcuts with no icon inherit it, and app-builder
+  # includes it in the payload automatically at its normal or remapped destination.
+  # Default if omitted: null.
   icon: application-templates/icon.ico
 
   # Optional string. Inner payload archive format. Use zip for the Windows tar.exe path or
@@ -87,7 +87,7 @@ installer:
   start_menu:
     - target: application-templates/program.cmd
       display_name: MyApp
-      icon: application-templates/icon.ico
+      icon: null
 
   # Optional mapping. Early installer hook command declarations. Default if omitted:
   # BootstrapHooks defaults.
@@ -286,11 +286,11 @@ installer:
 | --- | --- | --- | --- | --- | --- |
 | `name` | `string` | yes | required | `MyApp` | Human-facing application name and Windows install identity. It must be a trimmed, filename-safe, non-reserved Windows name. |
 | `install_directory` | `string` | yes | required | `'%LOCALAPPDATA%\MyCompany\MyApp'` | Windows install directory. A variable-root path must start with %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the installer expands it on the user's machine. A fixed absolute path is also allowed when it is not a drive root or protected Windows directory. |
-| `icon` | `string` | no | `application-templates/icon.ico` | `application-templates/icon.ico` | Project-relative .ico file embedded into generated executables. It is also the default install-relative Start Menu icon path, so include it at the same payload path or override the shortcut icon. |
+| `icon` | `string \| null` | no | `null` | `application-templates/icon.ico` | Optional project-relative .ico file embedded into generated executables. Start Menu shortcuts with no icon inherit it, and app-builder includes it in the payload automatically at its normal or remapped destination. |
 | `payload_format` | `string` | no | `zip` | `zip` | Inner payload archive format. Use zip for the Windows tar.exe path or 7z for stronger compression with bundled 7-Zip extraction. |
 | `wait_on_exit` | `boolean` | no | `true` | `true` | Whether generated installer scripts should wait briefly before exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait, while --no-wait skips only the wait. |
 | `add_uninstaller` | `boolean` | no | `true` | `true` | Whether installation adds the installed uninstall scripts, Start Menu uninstall shortcut, and per-user Windows Installed Apps registration. |
-| `start_menu` | `list[mapping]` | no | `[]` | `[{target: application-templates/program.cmd, display_name: MyApp, icon: application-templates/icon.ico}]` | Windows Start Menu shortcut declarations. |
+| `start_menu` | `list[mapping]` | no | `[]` | `[{target: application-templates/program.cmd, display_name: MyApp, icon: null}]` | Windows Start Menu shortcut declarations. |
 | `bootstrap_hooks` | `mapping` | no | `see nested defaults` |  | Early installer hook command declarations. |
 | `install_hooks` | `mapping` | no | `see nested defaults` |  | Installer and uninstaller hook command declarations. |
 | `dist` | `string` | no | `dist` | `dist` | Project-relative subdirectory inside the project where release artifacts and build logs are written. |
@@ -302,7 +302,7 @@ installer:
 | --- | --- | --- | --- | --- | --- |
 | `target` | `string` | yes | required | `application-templates/program.cmd` | Install-relative command or file launched by the shortcut. The target must be present at that payload path after remapping. |
 | `display_name` | `string \| null` | no | `null` | `MyApp` | Shortcut display name. Defaults to the installer name when omitted by downstream tooling. |
-| `icon` | `string \| null` | no | `null` | `application-templates/icon.ico` | Optional install-relative shortcut icon path. The icon must be present at that payload path after remapping; when omitted, installer.icon is used. |
+| `icon` | `string \| null` | no | `null` | `application-templates/icon.ico` | Optional install-relative shortcut icon path. When omitted or null, the shortcut inherits installer.icon; use an empty string to leave IconLocation unset. Explicit icon paths must be present in the payload after remapping. |
 
 ## `config.installer.bootstrap_hooks`
 

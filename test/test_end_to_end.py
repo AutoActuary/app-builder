@@ -31,6 +31,26 @@ def _sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _shortcut_icon_location(shortcut_path: Path) -> str:
+    env = os.environ.copy()
+    env["APP_BUILDER_TEST_SHORTCUT"] = str(shortcut_path)
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-Command",
+            "$Shell = New-Object -ComObject WScript.Shell; "
+            "$Shortcut = $Shell.CreateShortcut($env:APP_BUILDER_TEST_SHORTCUT); "
+            "[Console]::Out.Write([string]$Shortcut.IconLocation)",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    return completed.stdout
+
+
 class TestEndToEndBuild(unittest.TestCase):
     def test_build_collects_and_selects_multiple_release_assets(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
@@ -203,12 +223,150 @@ build_hooks: {}
                 build_release(project_root, version="1.0.0")
 
             config_path.write_text(
-                config_path.read_text(encoding="utf-8")
-                .replace('icon: ""', "icon: unused.ico")
-                .replace("target: missing.cmd", "target: app.cmd"),
+                config_path.read_text(encoding="utf-8").replace(
+                    "    - target: missing.cmd",
+                    "    - target: app.cmd\n      icon: unused.ico",
+                ),
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(FileNotFoundError, r"start_menu\[0\].icon"):
+                build_release(project_root, version="1.0.0")
+
+    def test_inherited_installer_icon_is_implicitly_included_and_remapped(
+        self,
+    ) -> None:
+        cases = (
+            ("", "app.ico"),
+            (
+                "    remap:\n      - [app.ico, resources/application.ico]",
+                "resources/application.ico",
+            ),
+        )
+        for remap, expected_icon in cases:
+            with (
+                self.subTest(expected_icon=expected_icon),
+                TemporaryDirectory() as temp_dir_str,
+            ):
+                project_root = Path(temp_dir_str)
+                subprocess.run(
+                    ["git", "init"],
+                    cwd=project_root,
+                    check=True,
+                    capture_output=True,
+                )
+                (project_root / "app.cmd").write_text("@echo off\n", encoding="utf-8")
+                _write_sample_icon(project_root / "app.ico")
+                (project_root / "app_builder.yaml").write_text(
+                    f"""
+app_builder_version: current
+python_bundled: null
+python_venv: null
+installer:
+  name: Implicit Icon
+  install_directory: '%localappdata%\\ImplicitIcon'
+  icon: app.ico
+  paths:
+    include: [app.cmd]
+{remap}
+  start_menu:
+    - target: app.cmd
+build_hooks: {{}}
+""".strip(),
+                    encoding="utf-8",
+                )
+
+                with patch(
+                    "app_builder.installer_bundle.stamp_exe_icon",
+                    side_effect=lambda launcher, _icon: launcher,
+                ):
+                    release = build_release(project_root, version="1.0.0")
+                manifest = json.loads(release.manifest_path.read_text(encoding="utf-8"))
+                with ZipFile(release.payload_archive) as payload_zip:
+                    payload_names = payload_zip.namelist()
+
+                self.assertEqual(expected_icon, manifest["start_menu"][0]["icon"])
+                self.assertEqual(1, payload_names.count(expected_icon))
+                self.assertIn(expected_icon, manifest["included_files"])
+
+    def test_shortcut_can_use_windows_fallback_or_opt_out_of_inheritance(self) -> None:
+        cases = (
+            ("null", ""),
+            ("app.ico", '      icon: ""'),
+        )
+        for installer_icon, shortcut_icon in cases:
+            with (
+                self.subTest(installer_icon=installer_icon),
+                TemporaryDirectory() as temp_dir_str,
+            ):
+                project_root = Path(temp_dir_str)
+                subprocess.run(
+                    ["git", "init"],
+                    cwd=project_root,
+                    check=True,
+                    capture_output=True,
+                )
+                (project_root / "app.cmd").write_text("@echo off\n", encoding="utf-8")
+                _write_sample_icon(project_root / "app.ico")
+                (project_root / "app_builder.yaml").write_text(
+                    f"""
+app_builder_version: current
+python_bundled: null
+python_venv: null
+installer:
+  name: Icon Fallback
+  install_directory: '%localappdata%\\IconFallback'
+  icon: {installer_icon}
+  paths:
+    include: [app.cmd]
+  start_menu:
+    - target: app.cmd
+{shortcut_icon}
+build_hooks: {{}}
+""".strip(),
+                    encoding="utf-8",
+                )
+
+                with patch(
+                    "app_builder.installer_bundle.stamp_exe_icon",
+                    side_effect=lambda launcher, _icon: launcher,
+                ):
+                    release = build_release(project_root, version="1.0.0")
+                manifest = json.loads(release.manifest_path.read_text(encoding="utf-8"))
+                with ZipFile(release.payload_archive) as payload_zip:
+                    payload_names = payload_zip.namelist()
+
+                self.assertIsNone(manifest["start_menu"][0]["icon"])
+                self.assertNotIn("app.ico", payload_names)
+
+    def test_implicit_installer_icon_still_obeys_payload_collision_checks(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            subprocess.run(
+                ["git", "init"], cwd=project_root, check=True, capture_output=True
+            )
+            (project_root / "app.cmd").write_text("@echo off\n", encoding="utf-8")
+            _write_sample_icon(project_root / "app.ico")
+            (project_root / "app_builder.yaml").write_text(
+                """
+app_builder_version: current
+python_bundled: null
+python_venv: null
+installer:
+  name: Icon Collision
+  install_directory: '%localappdata%\\IconCollision'
+  icon: app.ico
+  paths:
+    include: [app.cmd]
+    remap:
+      - [app.ico, app.cmd]
+  start_menu:
+    - target: app.cmd
+build_hooks: {}
+""".strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "Archive destination collision"):
                 build_release(project_root, version="1.0.0")
 
     def test_build_excludes_dist_unless_explicitly_included(self) -> None:
@@ -484,7 +642,6 @@ installer:
   paths:
     include:
       - app.cmd
-      - app.ico
   start_menu:
     - target: app.cmd
       display_name: Icon Demo
@@ -497,9 +654,12 @@ build_hooks: {}
             manifest = json.loads(release.manifest_path.read_text(encoding="utf-8"))
             expected_group = _render_icon_group_resource(_read_icon_images(icon_path))
             installer_bytes = release.installer_archive.read_bytes()
+            with ZipFile(release.payload_archive) as payload_zip:
+                payload_names = payload_zip.namelist()
 
         self.assertEqual("app.ico", manifest["start_menu"][0]["icon"])
         self.assertIn(expected_group, installer_bytes)
+        self.assertIn("app.ico", payload_names)
 
     @unittest.skipIf(os.name != "nt", "7z installer execution targets Windows")
     def test_build_release_with_7z_payload_installs_and_uninstalls(self) -> None:
@@ -515,6 +675,7 @@ build_hooks: {}
             (project_root / "app.cmd").write_text(
                 "@echo off\necho hello\n", encoding="utf-8"
             )
+            _write_sample_icon(project_root / "app.ico")
             (project_root / "hooks").mkdir()
             (project_root / "hooks" / "post-install.cmd").write_text(
                 "@echo off\n"
@@ -530,6 +691,7 @@ python_venv: null
 installer:
   name: Sevenzip Demo
   install_directory: "{escaped_install_dir}"
+  icon: app.ico
   payload_format: 7z
   wait_on_exit: false
   dist: dist
@@ -542,6 +704,9 @@ installer:
   install_hooks:
     post_install:
       - [hooks/post-install.cmd]
+  start_menu:
+    - target: bin/app.cmd
+      display_name: Sevenzip Demo
 build_hooks: {{}}
 """.strip(),
                 encoding="utf-8",
@@ -582,6 +747,23 @@ build_hooks: {{}}
             self.assertEqual(
                 "post-install",
                 (install_dir / "post-install.txt").read_text(encoding="utf-8").strip(),
+            )
+            shortcut_path = (
+                appdata_dir
+                / "Microsoft"
+                / "Windows"
+                / "Start Menu"
+                / "Programs"
+                / "Sevenzip Demo"
+                / "Sevenzip Demo.lnk"
+            )
+            self.assertTrue(shortcut_path.is_file())
+            shortcut_icon_path = Path(
+                _shortcut_icon_location(shortcut_path).split(",", 1)[0]
+            )
+            self.assertTrue(shortcut_icon_path.is_file())
+            self.assertTrue(
+                os.path.samefile(install_dir / "app.ico", shortcut_icon_path)
             )
 
             subprocess.run(

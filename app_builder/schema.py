@@ -113,7 +113,7 @@ class StartMenuShortcut:
     )
     icon: str | None = config_field(
         default=None,
-        description="Optional install-relative shortcut icon path. The icon must be present at that payload path after remapping; when omitted, installer.icon is used.",
+        description="Optional install-relative shortcut icon path. When omitted or null, the shortcut inherits installer.icon; use an empty string to leave IconLocation unset. Explicit icon paths must be present in the payload after remapping.",
         example="application-templates/icon.ico",
     )
 
@@ -128,9 +128,9 @@ class InstallerOptions:
         description="Windows install directory. A variable-root path must start with %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the installer expands it on the user's machine. A fixed absolute path is also allowed when it is not a drive root or protected Windows directory.",
         example=r"%LOCALAPPDATA%\MyCompany\MyApp",
     )
-    icon: str = config_field(
-        default="application-templates/icon.ico",
-        description="Project-relative .ico file embedded into generated executables. It is also the default install-relative Start Menu icon path, so include it at the same payload path or override the shortcut icon.",
+    icon: str | None = config_field(
+        default=None,
+        description="Optional project-relative .ico file embedded into generated executables. Start Menu shortcuts with no icon inherit it, and app-builder includes it in the payload automatically at its normal or remapped destination.",
         example="application-templates/icon.ico",
     )
     payload_format: str = config_field(
@@ -155,7 +155,7 @@ class InstallerOptions:
             {
                 "target": "application-templates/program.cmd",
                 "display_name": "MyApp",
-                "icon": "application-templates/icon.ico",
+                "icon": None,
             }
         ],
     )
