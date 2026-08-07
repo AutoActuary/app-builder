@@ -51,10 +51,10 @@ installer:
   # it is not a drive root or protected Windows directory.
   install_directory: '%LOCALAPPDATA%\MyCompany\MyApp'
 
-  # Optional string. Project-relative .ico file embedded into generated executables. It is
-  # also the default install-relative Start Menu icon path, so include it at the same
-  # payload path or override the shortcut icon. Default if omitted: application-
-  # templates/icon.ico.
+  # Optional, nullable string | null. Optional project-relative .ico file embedded into
+  # generated executables. Start Menu shortcuts with no icon inherit it, and app-builder
+  # includes it in the payload automatically at its normal or remapped destination.
+  # Default if omitted: null.
   icon: application-templates/icon.ico
 
   # Optional string. Inner payload archive format. Use zip for the Windows tar.exe path or
@@ -76,7 +76,7 @@ installer:
   start_menu:
     - target: application-templates/program.cmd
       display_name: MyApp
-      icon: application-templates/icon.ico
+      icon: null
 
   # Optional mapping. Early installer hook command declarations. Default if omitted:
   # BootstrapHooks defaults.

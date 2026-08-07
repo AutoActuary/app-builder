@@ -128,6 +128,14 @@ def build_release(
         )
         if not config.installer.paths.include_dist:
             included_files = _exclude_payload_directory(included_files, dist_dir)
+        if _shortcut_inherits_installer_icon(config, installer_icon_path):
+            assert installer_icon_path is not None
+            included_files = _include_payload_file(included_files, installer_icon_path)
+            reporter.detail(
+                "Implicit payload input: "
+                f"{installer_icon_path.resolve().relative_to(project_root.resolve())} "
+                "(inherited Start Menu icon)"
+            )
         remap_table = build_remap_table(
             project_root, included_files, config.installer.paths.remap
         )
@@ -141,9 +149,11 @@ def build_release(
         installer_bundled_python_path = _installer_bundled_python_path(
             project_root, config, remap_table
         )
+        start_menu = _start_menu_manifest(config, remap_table, installer_icon_path)
         _validate_installer_payload_contract(
             config,
             remap_table,
+            start_menu=start_menu,
             hook_python_candidates=installer_hook_python_candidates,
         )
         reporter.detail(f"Resolved {len(remap_table)} payload files:")
@@ -176,14 +186,7 @@ def build_release(
             "payload_archive": payload_archive.name,
             "hook_python_candidates": installer_hook_python_candidates,
             "python_bundled_path": installer_bundled_python_path,
-            "start_menu": [
-                {
-                    "target": item.target,
-                    "display_name": item.display_name,
-                    "icon": item.icon or config.installer.icon,
-                }
-                for item in config.installer.start_menu
-            ],
+            "start_menu": start_menu,
             "install_hooks": {
                 "pre_install": config.installer.install_hooks.pre_install,
                 "post_install": config.installer.install_hooks.post_install,
@@ -473,15 +476,61 @@ def _resolve_installer_icon(
     project_root: Path,
     config: AppBuilderConfig,
 ) -> Path | None:
-    icon = config.installer.icon.strip()
-    if not icon:
+    configured_icon = config.installer.icon
+    if configured_icon is None or not configured_icon.strip():
         return None
-    icon_path = project_root / icon
+    icon = Path(configured_icon)
+    if icon.is_absolute() or ".." in icon.parts:
+        raise ValueError("installer.icon must be a project-relative file path.")
+    icon_path = (project_root / icon).resolve()
+    try:
+        icon_path.relative_to(project_root.resolve())
+    except ValueError as error:
+        raise ValueError("installer.icon must resolve inside the project.") from error
     if icon_path.is_file():
         return icon_path
-    if icon == "application-templates/icon.ico":
-        return None
     raise FileNotFoundError(f"Configured installer.icon does not exist: {icon_path}")
+
+
+def _shortcut_inherits_installer_icon(
+    config: AppBuilderConfig,
+    installer_icon_path: Path | None,
+) -> bool:
+    return installer_icon_path is not None and any(
+        shortcut.icon is None for shortcut in config.installer.start_menu
+    )
+
+
+def _include_payload_file(files: list[Path], required_file: Path) -> list[Path]:
+    resolved_required = required_file.resolve()
+    if any(file_path.resolve() == resolved_required for file_path in files):
+        return files
+    return [*files, resolved_required]
+
+
+def _start_menu_manifest(
+    config: AppBuilderConfig,
+    remap_table: Mapping[Path, PurePosixPath],
+    installer_icon_path: Path | None,
+) -> list[dict[str, str | None]]:
+    inherited_icon: str | None = None
+    if _shortcut_inherits_installer_icon(config, installer_icon_path):
+        assert installer_icon_path is not None
+        destination = remap_table.get(installer_icon_path.resolve())
+        if destination is None:
+            raise RuntimeError(
+                "The inherited installer icon was not included in the payload."
+            )
+        inherited_icon = destination.as_posix()
+
+    return [
+        {
+            "target": shortcut.target,
+            "display_name": shortcut.display_name,
+            "icon": inherited_icon if shortcut.icon is None else shortcut.icon or None,
+        }
+        for shortcut in config.installer.start_menu
+    ]
 
 
 def _exclude_payload_directory(files: list[Path], directory: Path) -> list[Path]:
@@ -569,6 +618,7 @@ def _validate_installer_payload_contract(
     config: AppBuilderConfig,
     remap_table: Mapping[Path, PurePosixPath],
     *,
+    start_menu: list[dict[str, str | None]],
     hook_python_candidates: list[str],
 ) -> None:
     destinations = {
@@ -588,12 +638,14 @@ def _validate_installer_payload_contract(
                 f"{value!r}."
             )
 
-    for index, shortcut in enumerate(config.installer.start_menu):
+    for index, (shortcut, manifest_shortcut) in enumerate(
+        zip(config.installer.start_menu, start_menu)
+    ):
         require_payload_path(
             shortcut.target,
             label=f"installer.start_menu[{index}].target",
         )
-        effective_icon = shortcut.icon or config.installer.icon
+        effective_icon = manifest_shortcut["icon"]
         if effective_icon:
             require_payload_path(
                 effective_icon,

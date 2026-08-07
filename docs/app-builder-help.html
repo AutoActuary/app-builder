@@ -386,10 +386,10 @@ installer:
   # it is not a drive root or protected Windows directory.
   install_directory: &#x27;%LOCALAPPDATA%\MyCompany\MyApp&#x27;
 
-  # Optional string. Project-relative .ico file embedded into generated executables. It is
-  # also the default install-relative Start Menu icon path, so include it at the same
-  # payload path or override the shortcut icon. Default if omitted: application-
-  # templates/icon.ico.
+  # Optional, nullable string | null. Optional project-relative .ico file embedded into
+  # generated executables. Start Menu shortcuts with no icon inherit it, and app-builder
+  # includes it in the payload automatically at its normal or remapped destination.
+  # Default if omitted: null.
   icon: application-templates/icon.ico
 
   # Optional string. Inner payload archive format. Use zip for the Windows tar.exe path or
@@ -411,7 +411,7 @@ installer:
   start_menu:
     - target: application-templates/program.cmd
       display_name: MyApp
-      icon: application-templates/icon.ico
+      icon: null
 
   # Optional mapping. Early installer hook command declarations. Default if omitted:
   # BootstrapHooks defaults.
@@ -722,11 +722,11 @@ publications:
             </tr>
             <tr>
               <td><code>icon</code></td>
-              <td><code>string</code></td>
+              <td><code>string | null</code></td>
               <td>no</td>
+              <td><code>null</code></td>
               <td><code>application-templates/icon.ico</code></td>
-              <td><code>application-templates/icon.ico</code></td>
-              <td>Project-relative .ico file embedded into generated executables. It is also the default install-relative Start Menu icon path, so include it at the same payload path or override the shortcut icon.</td>
+              <td>Optional project-relative .ico file embedded into generated executables. Start Menu shortcuts with no icon inherit it, and app-builder includes it in the payload automatically at its normal or remapped destination.</td>
             </tr>
             <tr>
               <td><code>payload_format</code></td>
@@ -757,7 +757,7 @@ publications:
               <td><code>list[mapping]</code></td>
               <td>no</td>
               <td><code>[]</code></td>
-              <td><code>[{target: application-templates/program.cmd, display_name: MyApp, icon: application-templates/icon.ico}]</code></td>
+              <td><code>[{target: application-templates/program.cmd, display_name: MyApp, icon: null}]</code></td>
               <td>Windows Start Menu shortcut declarations.</td>
             </tr>
             <tr>
@@ -829,7 +829,7 @@ publications:
               <td>no</td>
               <td><code>null</code></td>
               <td><code>application-templates/icon.ico</code></td>
-              <td>Optional install-relative shortcut icon path. The icon must be present at that payload path after remapping; when omitted, installer.icon is used.</td>
+              <td>Optional install-relative shortcut icon path. When omitted or null, the shortcut inherits installer.icon; use an empty string to leave IconLocation unset. Explicit icon paths must be present in the payload after remapping.</td>
             </tr>
           </tbody>
         </table>
@@ -1464,6 +1464,13 @@ publications:
           resolve to real final payload paths after remapping.
         </p>
         <p>
+          <code>installer.icon</code> is optional. When configured, it is embedded into generated executables.
+          A Start Menu shortcut with an omitted or null <code>icon</code> inherits it, and app-builder includes
+          the icon automatically at its normal project-relative path or configured remap. With no installer
+          icon, or with an empty shortcut <code>icon</code>, <code>IconLocation</code> is left unset so Windows
+          uses the target executable or file-type icon.
+        </p>
+        <p>
           The installer extracts its outer ZIP layer to a random temp directory, runs the PowerShell installer,
           forwards all command-line arguments, and removes its temp extraction directory when finished. If an
           environment blocks running the exe, the manual fallback is: rename the installer to <code>.zip</code>,
@@ -1670,7 +1677,6 @@ installer:
       - README.md
       - src
       - "build/generated/${APP.VERSION}"
-      - app.ico
       - bin/python
     exclude:
       - build/generated/*.tmp

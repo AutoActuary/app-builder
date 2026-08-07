@@ -238,7 +238,9 @@ If a `post_uninstall` entrypoint points inside the install directory, it must be
 
 ## 11. Icons
 
-`installer.icon` is the single icon setting. app-builder uses it for generated executables and as the default Start Menu shortcut icon when a shortcut does not specify its own icon.
+`installer.icon` is optional. When configured, app-builder embeds it into generated executables. A Start Menu shortcut whose `icon` is omitted or `null` inherits that icon. app-builder automatically adds the inherited icon to the payload at its normal project-relative destination or its configured remap, and records that installed destination in the manifest.
+
+When `installer.icon` is omitted, app-builder leaves the shortcut's `IconLocation` unset and Windows uses the target executable or file-type icon. Set a shortcut's `icon` to an empty string to request the same Windows fallback even when the installer has an icon. A nonempty shortcut `icon` is an explicit install-relative payload path and must already exist after remapping.
 
 For app-builder's dogfood build, the same icon is embedded into the generated payload `app-builder.exe`.
 
