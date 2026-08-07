@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
-import tempfile
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -21,6 +21,7 @@ from app_builder.python_runtime import (
     _copy_bundled_runtime_support,
     _create_self_contained_venv,
     _download_cache_path,
+    _ensure_downloaded_file,
     _exe_wrap_launcher_matches,
     _exe_wrap_python_config,
     _extract_python_runtime_package,
@@ -41,6 +42,7 @@ from app_builder.python_runtime import (
     ensure_python_environments,
 )
 from app_builder.schema import PythonVenvOptions
+from app_builder_meta.environment import AppBuilderEnvironment
 
 _TEST_PYTHON_DIGEST = "sha256:" + "0" * 64
 
@@ -151,17 +153,129 @@ class TestPythonOrgRuntimeSelection(unittest.TestCase):
 
 
 class TestPythonOrgRuntimeExtraction(unittest.TestCase):
-    def test_download_cache_path_uses_os_temp_download_cache(self) -> None:
-        self.assertEqual(
-            Path(
-                tempfile.gettempdir(),
-                "app-builder-downloads",
-                "python-3.12.10-amd64.zip",
-            ),
-            _download_cache_path(
-                "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.zip"
-            ),
+    def test_download_cache_path_uses_configured_content_keyed_cache(self) -> None:
+        url = "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.zip"
+        cache_root = Path("cache").resolve()
+        environment = AppBuilderEnvironment(
+            cache_root=cache_root,
+            install_root=Path("app-builder").resolve(),
+            pip_cache_dir=None,
+            poetry_cache_dir=None,
         )
+        with patch(
+            "app_builder.python_runtime.get_environment", return_value=environment
+        ):
+            path = _download_cache_path(url)
+
+        self.assertEqual(
+            cache_root
+            / "downloads"
+            / hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+            / "python-3.12.10-amd64.zip",
+            path,
+        )
+
+    def test_download_cache_hit_avoids_network_and_promotion_is_atomic(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            payload = b"complete archive"
+            digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+            environment = AppBuilderEnvironment(
+                cache_root=Path(temp_dir_str),
+                install_root=Path(temp_dir_str),
+                pip_cache_dir=None,
+                poetry_cache_dir=None,
+            )
+
+            def download(_url: str, destination: Path) -> None:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(payload)
+
+            with (
+                patch(
+                    "app_builder.python_runtime.get_environment",
+                    return_value=environment,
+                ),
+                patch(
+                    "app_builder.python_runtime._download_file",
+                    side_effect=download,
+                ) as download_file,
+            ):
+                first = _ensure_downloaded_file(
+                    "https://example.invalid/runtime.zip", digest
+                )
+                second = _ensure_downloaded_file(
+                    "https://example.invalid/runtime.zip", digest
+                )
+
+            self.assertEqual(first, second)
+            self.assertEqual(payload, first.read_bytes())
+            download_file.assert_called_once()
+            self.assertFalse(
+                any(path.suffix == ".tmp" for path in first.parent.iterdir())
+            )
+
+    def test_failed_download_does_not_poison_cache(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            environment = AppBuilderEnvironment(
+                cache_root=Path(temp_dir_str),
+                install_root=Path(temp_dir_str),
+                pip_cache_dir=None,
+                poetry_cache_dir=None,
+            )
+
+            def fail_download(_url: str, destination: Path) -> None:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(b"partial")
+                raise RuntimeError("connection lost")
+
+            with (
+                patch(
+                    "app_builder.python_runtime.get_environment",
+                    return_value=environment,
+                ),
+                patch(
+                    "app_builder.python_runtime._download_file",
+                    side_effect=fail_download,
+                ),
+                self.assertRaisesRegex(RuntimeError, "connection lost"),
+            ):
+                _ensure_downloaded_file("https://example.invalid/runtime.zip")
+
+            expected = environment.download_path("https://example.invalid/runtime.zip")
+            self.assertFalse(expected.exists())
+            self.assertFalse(
+                expected.parent.exists()
+                and any(path.suffix == ".tmp" for path in expected.parent.iterdir())
+            )
+
+    def test_digest_mismatch_does_not_poison_cache(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            environment = AppBuilderEnvironment(
+                cache_root=Path(temp_dir_str),
+                install_root=Path(temp_dir_str),
+                pip_cache_dir=None,
+                poetry_cache_dir=None,
+            )
+
+            def download(_url: str, destination: Path) -> None:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(b"unexpected content")
+
+            url = "https://example.invalid/runtime.zip"
+            with (
+                patch(
+                    "app_builder.python_runtime.get_environment",
+                    return_value=environment,
+                ),
+                patch(
+                    "app_builder.python_runtime._download_file",
+                    side_effect=download,
+                ),
+                self.assertRaisesRegex(RuntimeError, "did not match expected"),
+            ):
+                _ensure_downloaded_file(url, "sha256:" + "0" * 64)
+
+            self.assertFalse(environment.download_path(url).exists())
 
     def test_source_marker_records_python_org_package_origin(self) -> None:
         with TemporaryDirectory() as temp_dir_str:

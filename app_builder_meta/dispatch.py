@@ -12,6 +12,7 @@ from .config_probe import (
     probe_project_config,
 )
 from .legacy_0x import run_legacy_bridge
+from .environment import get_environment
 from .version_cache import default_install_root, run_managed_version
 
 
@@ -57,6 +58,7 @@ class MetaDispatchError(RuntimeError):
 def dispatch(argv: list[str], *, cwd: Path | None = None) -> int:
     active_cwd = (cwd or Path.cwd()).resolve()
     try:
+        get_environment()
         target = choose_target(argv, active_cwd)
         return run_target(target, cwd=active_cwd)
     except (ConfigProbeError, MetaDispatchError, RuntimeError) as error:

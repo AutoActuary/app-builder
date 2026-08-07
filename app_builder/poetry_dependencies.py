@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import re
 import subprocess
 import sys
@@ -11,6 +10,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from app_builder_meta.environment import get_environment
 
 MAIN_GROUP = "main"
 DEV_GROUP = "dev"
@@ -104,7 +105,7 @@ def refresh_poetry_lock(project_root: Path) -> PoetryLock:
 def _run_poetry_lock_command(
     project_root: Path, args: list[str], *, action: str
 ) -> None:
-    env = os.environ.copy()
+    env = get_environment().subprocess_environment()
     env["POETRY_VIRTUALENVS_CREATE"] = "false"
     env["POETRY_NO_INTERACTION"] = "1"
     completed = subprocess.run(
@@ -177,6 +178,7 @@ def install_locked_poetry_dependencies(
             direct_requirements.append(requirement)
 
     if hashed_lines:
+        subprocess_env = get_environment().subprocess_environment()
         with tempfile.TemporaryDirectory() as temp_dir_str:
             requirements_path = Path(temp_dir_str) / "locked-requirements.txt"
             requirements_path.write_text(
@@ -186,12 +188,13 @@ def install_locked_poetry_dependencies(
             command.extend(
                 ["--require-hashes", "--requirement", str(requirements_path)]
             )
-            subprocess.run(command, check=True)
+            subprocess.run(command, env=subprocess_env, check=True)
 
+    subprocess_env = get_environment().subprocess_environment()
     for requirement_chunk in _chunks(direct_requirements, _PIP_INSTALL_CHUNK_SIZE):
         command = _pip_install_command(python_executable, index_urls)
         command.extend(requirement_chunk)
-        subprocess.run(command, check=True)
+        subprocess.run(command, env=subprocess_env, check=True)
 
 
 def _pip_install_command(

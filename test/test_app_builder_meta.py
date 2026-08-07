@@ -9,6 +9,9 @@ from tempfile import TemporaryDirectory
 from typing import Any
 from unittest.mock import patch
 
+from app_builder_meta.cache_lock import exclusive_cache_lock
+from app_builder_meta.environment import get_environment
+
 from app_builder_meta.config_probe import ConfigProbeError, read_plain_yaml_version
 from app_builder_meta.dispatch import (
     CurrentInstall,
@@ -24,7 +27,6 @@ from app_builder_meta.legacy_0x import bridge_executable, run_legacy_bridge
 from app_builder_meta.version_cache import (
     ManagedVersion,
     _cache_key,
-    _exclusive_cache_lock,
     _resolve_source_ref,
     default_cache_root,
     managed_version_manifests,
@@ -134,6 +136,9 @@ class TestAppBuilderMetaDispatch(unittest.TestCase):
 
 
 class TestAppBuilderMetaExecutionAdapters(unittest.TestCase):
+    def tearDown(self) -> None:
+        get_environment.cache_clear()
+
     def test_legacy_bridge_uses_import_safe_directory_name(self) -> None:
         install_root = Path("C:/app-builder")
 
@@ -197,6 +202,7 @@ class TestAppBuilderMetaExecutionAdapters(unittest.TestCase):
             with patch.dict(
                 "os.environ", {"APP_BUILDER_CACHE_ROOT": temp_dir_str}, clear=False
             ):
+                get_environment.cache_clear()
                 self.assertEqual(Path(temp_dir_str).resolve(), default_cache_root())
 
     def test_resolves_tags_as_immutable_and_branches_at_current_remote_head(
@@ -266,9 +272,9 @@ class TestAppBuilderMetaExecutionAdapters(unittest.TestCase):
     def test_managed_cache_lock_rejects_concurrent_writer(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             lock_path = Path(temp_dir_str) / "versions" / ".locks" / "demo.lock"
-            with _exclusive_cache_lock(lock_path):
+            with exclusive_cache_lock(lock_path):
                 with self.assertRaisesRegex(TimeoutError, "cache lock"):
-                    with _exclusive_cache_lock(lock_path, timeout_seconds=0.05):
+                    with exclusive_cache_lock(lock_path, timeout_seconds=0.05):
                         self.fail("concurrent cache writer unexpectedly acquired lock")
 
 

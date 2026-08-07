@@ -8,32 +8,13 @@ import shutil
 import stat
 import subprocess
 import sys
-import time
 import uuid
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import BinaryIO, Iterator
 
-if sys.platform == "win32":
-    import msvcrt
-
-    def _acquire_platform_lock(lock_file: BinaryIO) -> None:
-        msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
-
-    def _release_platform_lock(lock_file: BinaryIO) -> None:
-        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
-
-else:
-    import fcntl
-
-    def _acquire_platform_lock(lock_file: BinaryIO) -> None:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-    def _release_platform_lock(lock_file: BinaryIO) -> None:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-
+from .cache_lock import exclusive_cache_lock as _exclusive_cache_lock
+from .environment import get_environment
 
 APP_BUILDER_REPOSITORY_URL = "https://github.com/AutoActuary/app-builder.git"
 
@@ -48,28 +29,16 @@ class ManagedVersion:
 
 
 def default_install_root() -> Path:
-    override = os.environ.get("APP_BUILDER_INSTALL_ROOT")
-    if override:
-        return Path(override).resolve()
-    return Path(__file__).resolve().parents[1]
+    return get_environment().install_root
 
 
 def default_cache_root() -> Path:
-    override = os.environ.get("APP_BUILDER_CACHE_ROOT")
-    if override:
-        return Path(override).expanduser().resolve()
-    if os.name == "nt":
-        local_app_data = os.environ.get("LOCALAPPDATA")
-        if local_app_data:
-            return (Path(local_app_data) / "app-builder" / "cache").resolve()
-    xdg_cache = os.environ.get("XDG_CACHE_HOME")
-    base = Path(xdg_cache).expanduser() if xdg_cache else Path.home() / ".cache"
-    return (base / "app-builder").resolve()
+    return get_environment().cache_root
 
 
 def run_managed_version(ref: str, argv: list[str], *, cwd: Path) -> int:
     managed = ensure_managed_version(ref)
-    env = os.environ.copy()
+    env = get_environment().subprocess_environment()
     env["PYTHONNOUSERSITE"] = "1"
     env["PYTHONPATH"] = _prepend_path(str(managed.repo_path), env.get("PYTHONPATH", ""))
     completed = subprocess.run(
@@ -139,8 +108,15 @@ def ensure_managed_version(
             base_python = python_executable or Path(sys.executable)
             _run([str(base_python), "-m", "venv", str(staging_venv)])
             staging_python = _venv_python(staging_venv)
-            _run([str(staging_python), "-m", "pip", "install", "--upgrade", "pip"])
-            _run([str(staging_python), "-m", "pip", "install", str(staging_repo)])
+            subprocess_env = get_environment().subprocess_environment()
+            _run(
+                [str(staging_python), "-m", "pip", "install", "--upgrade", "pip"],
+                env=subprocess_env,
+            )
+            _run(
+                [str(staging_python), "-m", "pip", "install", str(staging_repo)],
+                env=subprocess_env,
+            )
 
             final_repo = managed_root / "repo"
             final_venv = managed_root / "venv"
@@ -321,35 +297,6 @@ def _venv_python(venv_root: Path) -> Path:
     return venv_root / "bin" / "python"
 
 
-@contextmanager
-def _exclusive_cache_lock(
-    lock_path: Path, *, timeout_seconds: float = 600.0
-) -> Iterator[None]:
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a+b") as lock_file:
-        lock_file.seek(0, os.SEEK_END)
-        if lock_file.tell() == 0:
-            lock_file.write(b"\0")
-            lock_file.flush()
-        deadline = time.monotonic() + timeout_seconds
-        while True:
-            lock_file.seek(0)
-            try:
-                _acquire_platform_lock(lock_file)
-                break
-            except OSError:
-                if time.monotonic() >= deadline:
-                    raise TimeoutError(
-                        f"Timed out waiting for app-builder cache lock: {lock_path}"
-                    )
-                time.sleep(0.1)
-        try:
-            yield
-        finally:
-            lock_file.seek(0)
-            _release_platform_lock(lock_file)
-
-
 def _prepend_path(value: str, existing: str) -> str:
     if not existing:
         return value
@@ -362,10 +309,12 @@ def _run(
     cwd: Path | None = None,
     capture: bool = False,
     check: bool = True,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         args,
         cwd=cwd,
+        env=env,
         check=check,
         capture_output=capture,
         text=True,

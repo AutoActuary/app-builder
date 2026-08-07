@@ -12,11 +12,15 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from zipfile import ZipFile
+
+from app_builder_meta.cache_lock import exclusive_cache_lock
+from app_builder_meta.environment import get_environment
 
 from .config import load_project_config
 from .poetry_dependencies import (
@@ -400,10 +404,7 @@ def _download_file(url: str, destination: Path) -> None:
 
 
 def _download_cache_path(url: str) -> Path:
-    filename = Path(urllib.parse.urlsplit(url).path).name
-    if not filename:
-        filename = "download"
-    return Path(tempfile.gettempdir(), "app-builder-downloads", filename)
+    return get_environment().download_path(url)
 
 
 def _sha256_file(path: Path) -> str:
@@ -437,20 +438,36 @@ def _file_digest(path: Path, algorithm: str) -> str:
 
 
 def _ensure_downloaded_file(url: str, digest: str | None = None) -> Path:
-    path = _download_cache_path(url)
+    environment = get_environment()
+    path = environment.download_path(url)
     expected = _expected_digest(digest)
-    if (
-        path.exists()
-        and expected is not None
-        and _file_digest(path, expected[0]) != expected[1]
-    ):
-        path.unlink()
-    if not path.exists():
-        _download_file(url, path)
-    if expected is not None and _file_digest(path, expected[0]) != expected[1]:
-        raise RuntimeError(
-            f"Downloaded file {path} did not match expected {expected[0]} digest."
+    with exclusive_cache_lock(environment.download_lock_path(url)):
+        if (
+            path.exists()
+            and expected is not None
+            and _file_digest(path, expected[0]) != expected[1]
+        ):
+            path.unlink()
+        if path.exists():
+            return path
+
+        temporary_path = path.with_name(
+            f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
         )
+        try:
+            _download_file(url, temporary_path)
+            if (
+                expected is not None
+                and _file_digest(temporary_path, expected[0]) != expected[1]
+            ):
+                raise RuntimeError(
+                    f"Downloaded file {url} did not match expected "
+                    f"{expected[0]} digest."
+                )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(temporary_path, path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
     return path
 
 
