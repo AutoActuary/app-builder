@@ -758,9 +758,12 @@ build_hooks: {{}}
                 / "Sevenzip Demo.lnk"
             )
             self.assertTrue(shortcut_path.is_file())
-            self.assertEqual(
-                str(install_dir / "app.ico").casefold(),
-                _shortcut_icon_location(shortcut_path).split(",", 1)[0].casefold(),
+            shortcut_icon_path = Path(
+                _shortcut_icon_location(shortcut_path).split(",", 1)[0]
+            )
+            self.assertTrue(shortcut_icon_path.is_file())
+            self.assertTrue(
+                os.path.samefile(install_dir / "app.ico", shortcut_icon_path)
             )
 
             subprocess.run(
