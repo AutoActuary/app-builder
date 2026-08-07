@@ -75,12 +75,26 @@ app-builder init [--force]
 app-builder python
 app-builder deps
 app-builder lock
+app-builder cache path
+app-builder cache info
 app-builder versions list
 app-builder versions remove <ref>
 app-builder release [--version <version>] [--verbose]
 app-builder release-gh [--version <version>] [--draft | --no-draft] [--verbose]
 app-builder 0.x <legacy-command>
 ```
+
+## Reusable Caches
+
+app-builder keeps managed versions and reusable Python and ExeWrap downloads in
+the user cache. Set `APP_BUILDER_CACHE_ROOT` for a stable CI cache directory.
+When that variable is set, app-builder also places pip and Poetry caches below
+the same root unless their standard `PIP_CACHE_DIR` or `POETRY_CACHE_DIR`
+variables are already set. Use `app-builder cache path` for the machine-readable
+root and `app-builder cache info` to inspect the complete effective layout.
+
+Cache placement is machine policy and is intentionally not part of
+`app_builder.yaml`.
 
 ## Documentation
 

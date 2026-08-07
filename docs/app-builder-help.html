@@ -169,6 +169,7 @@
       <a href="#installer">Installer</a>
       <a href="#uninstall">Uninstall</a>
       <a href="#releases">Releases</a>
+      <a href="#caching">Reusable Caches</a>
       <a href="#versions">app-builder Versions</a>
       <a href="#legacy">Legacy Projects</a>
       <a href="#examples">Example Configs</a>
@@ -320,6 +321,10 @@ Release files in dist
             <tr>
               <td><code>app-builder lock</code></td>
               <td>Explicitly creates or refreshes <code>poetry.lock</code>; normal builds only verify it.</td>
+            </tr>
+            <tr>
+              <td><code>app-builder cache path | info</code></td>
+              <td>Prints the machine-readable cache root or explains all effective app-builder, pip, and Poetry cache locations.</td>
             </tr>
             <tr>
               <td><code>app-builder versions list | remove &lt;ref&gt;</code></td>
@@ -1635,6 +1640,45 @@ gh auth login</code></pre>
         </p>
       </section>
 
+      <section id="caching">
+        <h2>Reusable Caches</h2>
+        <p>
+          app-builder caches reusable Python and ExeWrap archives and managed app-builder versions. On Windows the
+          root defaults to <code>%LOCALAPPDATA%\app-builder\cache</code>; on other platforms it follows
+          <code>XDG_CACHE_HOME</code> and then <code>~/.cache/app-builder</code>. Cache placement is machine policy,
+          not part of the application release contract, so it is intentionally not an <code>app_builder.yaml</code>
+          setting.
+        </p>
+        <p>
+          Set <code>APP_BUILDER_CACHE_ROOT</code> when CI needs one stable directory to restore. Explicit
+          <code>PIP_CACHE_DIR</code> and <code>POETRY_CACHE_DIR</code> values retain control of those tools. Otherwise,
+          when the app-builder root is explicitly set, its pip and Poetry subprocesses use
+          <code>&lt;root&gt;/pip</code> and <code>&lt;root&gt;/poetry</code>. Without an explicit app-builder root, pip and
+          Poetry keep their native defaults.
+        </p>
+        <pre><code>env:
+  APP_BUILDER_CACHE_ROOT: ${{ runner.temp }}/app-builder-cache
+
+steps:
+  - uses: actions/cache@v4
+    with:
+      path: ${{ env.APP_BUILDER_CACHE_ROOT }}
+      key: app-builder-v1-${{ runner.os }}-${{ hashFiles('poetry.lock', 'app_builder.yaml') }}
+      restore-keys: |
+        app-builder-v1-${{ runner.os }}-</code></pre>
+        <p>
+          Downloads are separated by URL-derived keys, written to private temporary siblings, digest-checked when a
+          digest is published, and atomically promoted under a cross-process lock. Failed downloads cannot poison a
+          later build. Use <code>app-builder cache path</code> for scripts and <code>app-builder cache info</code> to
+          inspect the resolved layout.
+        </p>
+        <p>
+          App-builder-owned settings use the <code>APP_BUILDER_</code> namespace. Unknown names produce one warning,
+          with a spelling suggestion where possible, and their values are never printed. Set environment variables
+          before the first app-builder command in a process.
+        </p>
+      </section>
+
       <section id="versions">
         <h2>app-builder Versions</h2>
         <p>
@@ -1654,8 +1698,7 @@ gh auth login</code></pre>
           </tbody>
         </table>
         <p>
-          Managed versions are cached under <code>%LOCALAPPDATA%\app-builder\cache</code>, or the path supplied by
-          <code>APP_BUILDER_CACHE_ROOT</code>. Cache keys include the source URL and requested ref. A branch is
+          Managed versions are cached under the common app-builder cache root. Cache keys include the source URL and requested ref. A branch is
           refreshed when its remote commit changes; a moved cached tag is refused. Cache creation is locked per
           ref, built privately, and atomically promoted, so concurrent commands cannot consume a partial cache. Use
           <code>app-builder versions list</code> to inspect manifests and

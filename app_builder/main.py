@@ -13,6 +13,7 @@ if __name__ == "__main__" and not __package__:
     runpy.run_module("app_builder", run_name="__main__")
     raise SystemExit(0)
 
+from app_builder_meta.environment import get_environment
 from app_builder_meta.version_cache import (
     default_cache_root,
     managed_version_manifests,
@@ -60,6 +61,8 @@ def main() -> None:
     Build and package Windows-first Python applications.
     """
 
+    get_environment()
+
 
 @main.command()
 @click.option(
@@ -97,6 +100,44 @@ def lock_cmd() -> None:
     poetry_lock = refresh_poetry_lock(project_root)
     click.echo(f"Refreshed lock: {poetry_lock.path}")
     click.echo(f"SHA-256: {poetry_lock.sha256}")
+
+
+@main.group("cache")
+def cache_cmd() -> None:
+    """Inspect the effective reusable cache locations."""
+
+
+@cache_cmd.command("path")
+def cache_path_cmd() -> None:
+    """Print the app-builder cache root for scripts and CI configuration."""
+
+    click.echo(get_environment().cache_root)
+
+
+@cache_cmd.command("info")
+def cache_info_cmd() -> None:
+    """Show app-builder and delegated tool cache locations."""
+
+    environment = get_environment()
+    click.echo(f"Root: {environment.cache_root}")
+    click.echo(f"Downloads: {environment.downloads}")
+    click.echo(f"Managed versions: {environment.versions}")
+    click.echo(
+        "pip: "
+        + (
+            str(environment.pip_cache_dir)
+            if environment.pip_cache_dir
+            else "pip default"
+        )
+    )
+    click.echo(
+        "Poetry: "
+        + (
+            str(environment.poetry_cache_dir)
+            if environment.poetry_cache_dir
+            else "Poetry default"
+        )
+    )
 
 
 @main.group("versions")

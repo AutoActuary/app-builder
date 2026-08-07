@@ -302,7 +302,49 @@ normal build remains readable. Every run writes a timestamped diagnostic log to
 output sizes and hashes, and the final publication selection. `--verbose` also
 prints those details to the terminal.
 
-## 14. Managed App-Builder Versions
+## 14. Reusable Build Caches
+
+Reusable downloads and managed app-builder versions use a user-local cache. On
+Windows the root defaults to `%LOCALAPPDATA%\app-builder\cache`; on other
+platforms it follows `XDG_CACHE_HOME` and then `~/.cache/app-builder`. Set
+`APP_BUILDER_CACHE_ROOT` to make the complete app-builder cache tree explicit,
+especially in CI. This is machine policy rather than project release behavior,
+so it is not an `app_builder.yaml` setting.
+
+The configured root contains content-keyed Python and ExeWrap archives under
+`downloads`, managed app-builder checkouts under `versions`, and cache locks
+under `locks`. Downloads use URL-derived keys so unrelated assets with the same
+filename cannot collide. A download is written privately, digest-checked when a
+digest is published, and atomically promoted while holding a cross-process lock.
+A failed or partial download never becomes a cache hit.
+
+When `APP_BUILDER_CACHE_ROOT` is explicitly set, app-builder supplies
+`<root>/pip` and `<root>/poetry` to its pip and Poetry subprocesses. Explicit
+standard `PIP_CACHE_DIR` and `POETRY_CACHE_DIR` values take precedence. When the
+app-builder root is not explicitly set, pip and Poetry retain their own native
+cache defaults.
+
+Use `app-builder cache path` for the resolved root and `app-builder cache info`
+for all effective locations. A GitHub Actions job can persist the complete tree:
+
+```yaml
+env:
+  APP_BUILDER_CACHE_ROOT: ${{ runner.temp }}/app-builder-cache
+
+steps:
+  - uses: actions/cache@v4
+    with:
+      path: ${{ env.APP_BUILDER_CACHE_ROOT }}
+      key: app-builder-v1-${{ runner.os }}-${{ hashFiles('poetry.lock', 'app_builder.yaml') }}
+      restore-keys: |
+        app-builder-v1-${{ runner.os }}-
+```
+
+All app-builder-owned settings use the `APP_BUILDER_` namespace. An unknown
+name produces a warning with a likely spelling correction; values are never
+printed. Set cache variables before the first app-builder command in a process.
+
+## 15. Managed App-Builder Versions
 
 An explicit 1.x `app_builder_version` ref is resolved from the app-builder Git
 repository into the user cache at `%LOCALAPPDATA%\app-builder\cache` (or
@@ -317,7 +359,7 @@ and manifest are complete.
 Use `app-builder versions list` to inspect the cache and
 `app-builder versions remove <ref>` for deliberate eviction.
 
-## 15. Release Owner Checklist
+## 16. Release Owner Checklist
 
 1. When dependencies changed, run `app-builder lock` deliberately and commit both
    `pyproject.toml` and `poetry.lock`.

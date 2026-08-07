@@ -17,6 +17,7 @@ from app_builder.poetry_dependencies import (
     load_poetry_lock,
     refresh_poetry_lock,
 )
+from app_builder_meta.environment import AppBuilderEnvironment
 
 
 class TestPoetryDependencies(unittest.TestCase):
@@ -153,15 +154,32 @@ groups = ["main"]
 
         requirement_text = ""
 
-        def capture_run(command: list[str], *, check: bool) -> None:
+        captured_environment: dict[str, str] = {}
+
+        def capture_run(
+            command: list[str], *, env: dict[str, str], check: bool
+        ) -> None:
             nonlocal requirement_text
             requirement_path = Path(command[command.index("--requirement") + 1])
             requirement_text = requirement_path.read_text(encoding="utf-8")
+            captured_environment.update(env)
 
-        with patch(
-            "app_builder.poetry_dependencies.subprocess.run",
-            side_effect=capture_run,
-        ) as run:
+        environment = AppBuilderEnvironment(
+            cache_root=Path("C:/cache"),
+            install_root=Path("C:/app-builder"),
+            pip_cache_dir=Path("C:/custom-pip"),
+            poetry_cache_dir=Path("C:/custom-poetry"),
+        )
+        with (
+            patch(
+                "app_builder.poetry_dependencies.subprocess.run",
+                side_effect=capture_run,
+            ) as run,
+            patch(
+                "app_builder.poetry_dependencies.get_environment",
+                return_value=environment,
+            ),
+        ):
             install_locked_poetry_dependencies(
                 project_root=project_root,
                 python_executable=python_executable,
@@ -178,6 +196,9 @@ groups = ["main"]
         self.assertIn("--hash=sha256:" + "b" * 64, requirement_text)
         self.assertIn(" \\\n    --hash=sha256:", requirement_text)
         self.assertNotIn("\n+", requirement_text)
+        self.assertEqual(
+            str(environment.pip_cache_dir), captured_environment["PIP_CACHE_DIR"]
+        )
 
     def test_missing_lock_tells_user_to_refresh_explicitly(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
