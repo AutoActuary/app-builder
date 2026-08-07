@@ -4,13 +4,33 @@
 
 Full user help is available in [docs/app-builder-help.html](docs/app-builder-help.html). `app-builder --help` prints a link to that same file.
 
-## Quick Start
+## Install app-builder
 
-Install app-builder while developing:
+1. Download the latest `app-builder-<version>-installer.exe` from
+   [GitHub Releases](https://github.com/AutoActuary/app-builder/releases/latest).
+2. Run the installer. It installs app-builder for the current Windows user and
+   adds the installation directory to the front of the user `PATH`.
+3. Open a new terminal and verify the installation:
+
+```text
+app-builder --version
+app-builder --help
+```
+
+Run a newer installer to upgrade an existing app-builder installation. To
+remove it, use **Windows Settings > Apps > Installed apps > app-builder**. The
+uninstaller also removes app-builder from the user `PATH`.
+
+### Source development
+
+An editable Python installation is for contributors working on app-builder
+itself; it is not the normal user installation:
 
 ```text
 python -m pip install -e .
 ```
+
+## Quick Start
 
 Create starter config inside a git repository:
 

@@ -157,6 +157,7 @@
     <nav aria-label="Chapters">
       <h1>app-builder Help</h1>
       <a href="#overview">Overview</a>
+      <a href="#install-app-builder">Install app-builder</a>
       <a href="#quick-start">Quick Start</a>
       <a href="#mental-model">Project To Installation</a>
       <a href="#commands">Commands</a>
@@ -186,6 +187,35 @@
           The 1.x line is intentionally Python-focused. Features from old <code>bin/...</code> toolchains are
           retired except for Python. Non-Python tools still fit naturally through explicit build hooks.
         </p>
+      </section>
+
+      <section id="install-app-builder">
+        <h2>Install app-builder</h2>
+        <ol>
+          <li>
+            Download the latest <code>app-builder-&lt;version&gt;-installer.exe</code> from
+            <a href="https://github.com/AutoActuary/app-builder/releases/latest">GitHub Releases</a>.
+          </li>
+          <li>
+            Run the installer. It installs app-builder for the current Windows user and adds the installation
+            directory to the front of the user <code>PATH</code>.
+          </li>
+          <li>Open a new terminal and verify the installation:</li>
+        </ol>
+        <pre><code>app-builder --version
+app-builder --help</code></pre>
+        <p>
+          Run a newer installer to upgrade an existing app-builder installation. To remove it, open
+          <strong>Windows Settings &gt; Apps &gt; Installed apps</strong>, select <strong>app-builder</strong>, and
+          choose <strong>Uninstall</strong>. The uninstaller also removes app-builder from the user
+          <code>PATH</code>.
+        </p>
+        <h3>Source development</h3>
+        <p>
+          Contributors working on app-builder itself can install the checkout as an editable Python package.
+          This is a development setup, not the normal user installation.
+        </p>
+        <pre><code>python -m pip install -e .</code></pre>
       </section>
 
       <section id="quick-start">
