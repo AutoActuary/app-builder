@@ -118,6 +118,10 @@ use exact `major.minor.patch` pins; prereleases also accept selectors such as
 for releases; use a hashed index artifact or a Git source pinned to a full
 resolved commit.
 
+Project runtimes carry a dependency-state marker. If the lock digest or selected
+dependency groups change, app-builder rebuilds that runtime before installing the
+new lock, so packages removed from `poetry.lock` cannot leak into later releases.
+
 Use `%LOCALAPPDATA%`, `%APPDATA%`, or `%USERPROFILE%` as the root for install
 paths that must resolve on the end user's machine. Other variable-root install
 paths are rejected by release preflight:

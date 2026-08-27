@@ -12,17 +12,41 @@ BRIDGE_VERSION = "1.0.0"
 
 
 def _project_dependencies() -> list[str]:
-    with (PROJECT_ROOT / "pyproject.toml").open("rb") as pyproject_file:
-        payload = tomllib.load(pyproject_file)
-    project = payload.get("project")
-    dependencies = project.get("dependencies") if isinstance(project, dict) else None
-    if not isinstance(dependencies, list) or not all(
-        isinstance(dependency, str) for dependency in dependencies
-    ):
-        raise RuntimeError(
-            "Root pyproject.toml must declare project.dependencies as strings."
-        )
-    return dependencies
+    with (PROJECT_ROOT / "poetry.lock").open("rb") as lock_file:
+        payload = tomllib.load(lock_file)
+    packages = payload.get("package")
+    if not isinstance(packages, list):
+        raise RuntimeError("Root poetry.lock has no package inventory.")
+    dependencies: list[str] = []
+    for package in packages:
+        if not isinstance(package, dict):
+            raise RuntimeError("Root poetry.lock has an invalid package entry.")
+        groups = package.get("groups", ["main"])
+        if not isinstance(groups, list) or not all(
+            isinstance(group, str) for group in groups
+        ):
+            raise RuntimeError("Root poetry.lock package has invalid groups.")
+        if "main" not in groups or package.get("optional", False):
+            continue
+        name = package.get("name")
+        version = package.get("version")
+        source = package.get("source")
+        if not isinstance(name, str) or not isinstance(version, str):
+            raise RuntimeError("Root poetry.lock package has no name or version.")
+        if source is not None and (
+            not isinstance(source, dict) or source.get("type") != "legacy"
+        ):
+            raise RuntimeError(
+                f"Bridge dependency {name!r} must come from a package index."
+            )
+        requirement = f"{name}=={version}"
+        marker = package.get("markers")
+        if isinstance(marker, dict):
+            marker = marker.get("main")
+        if isinstance(marker, str) and marker:
+            requirement += f"; {marker}"
+        dependencies.append(requirement)
+    return sorted(dependencies, key=str.lower)
 
 
 class BuildPyWithActivator(build_py):

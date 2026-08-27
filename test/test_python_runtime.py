@@ -21,6 +21,7 @@ from app_builder.python_runtime import (
     _copy_bundled_runtime_support,
     _create_self_contained_venv,
     _download_cache_path,
+    _dependency_state_matches,
     _ensure_downloaded_file,
     _exe_wrap_launcher_matches,
     _exe_wrap_python_config,
@@ -31,6 +32,7 @@ from app_builder.python_runtime import (
     _matches_version_pattern,
     _load_python_runtime_packages,
     _python_source_marker_matches,
+    _prepare_dependency_runtime,
     _read_base_site_packages,
     _select_python_runtime_version,
     _resolve_exe_wrap_package,
@@ -38,6 +40,7 @@ from app_builder.python_runtime import (
     _self_contained_venv_python_executable,
     _venv_matches_bundled_python,
     _write_python_source_marker,
+    _write_dependency_state,
     _write_base_site_packages,
     ensure_python_environments,
 )
@@ -70,6 +73,30 @@ def _write_fake_exe_wrap_package(package_path: Path) -> None:
 
 
 class TestPythonOrgRuntimeSelection(unittest.TestCase):
+    def test_dependency_lock_change_discards_stale_runtime_contents(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            runtime_root = Path(temp_dir_str) / "runtime"
+            runtime_root.mkdir()
+            stale_package = runtime_root / "Lib" / "site-packages" / "obsolete.py"
+            stale_package.parent.mkdir(parents=True)
+            stale_package.write_text("obsolete", encoding="utf-8")
+            old_lock = PoetryLock(packages=(), sha256="old-lock")
+            new_lock = PoetryLock(packages=(), sha256="new-lock")
+            _write_dependency_state(runtime_root, old_lock, {MAIN_GROUP})
+
+            _prepare_dependency_runtime(runtime_root, new_lock, {MAIN_GROUP})
+
+            self.assertFalse(runtime_root.exists())
+            runtime_root.mkdir()
+            _write_dependency_state(runtime_root, new_lock, {MAIN_GROUP})
+            sentinel = runtime_root / "keep.txt"
+            sentinel.write_text("keep", encoding="utf-8")
+            _prepare_dependency_runtime(runtime_root, new_lock, {MAIN_GROUP})
+            self.assertTrue(sentinel.is_file())
+            self.assertTrue(
+                _dependency_state_matches(runtime_root, new_lock, {MAIN_GROUP})
+            )
+
     @patch(
         "app_builder.python_runtime._python_runtime_architecture_tag", return_value="64"
     )

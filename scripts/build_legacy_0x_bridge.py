@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +23,9 @@ from app_builder.exewrap import stamp_exe_wrap_config
 from app_builder_meta.version_cache import APP_BUILDER_REPOSITORY_URL
 
 DEFAULT_REF = "v0.20.0"
+DEFAULT_COMMIT = "189712c7d27258d6404b38f57ab9b6cb967d0ff9"
+LOCK_PATH = PROJECT_ROOT / "scripts" / "legacy-0x-requirements.lock"
+BUILD_LOCK_PATH = PROJECT_ROOT / "scripts" / "legacy-0x-build-requirements.lock"
 
 
 def main() -> int:
@@ -27,6 +33,7 @@ def main() -> int:
         description="Build the app-builder 0.x compatibility bridge."
     )
     parser.add_argument("--ref", default=DEFAULT_REF)
+    parser.add_argument("--expected-commit")
     parser.add_argument("--repo-url", default=APP_BUILDER_REPOSITORY_URL)
     parser.add_argument("--output", type=Path, default=Path("__app_builder_0x__"))
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
@@ -40,16 +47,32 @@ def main() -> int:
     _remove_tree_within(cache_root, checkout)
     _run(["git", "clone", str(source_repo), str(checkout)])
     _run(["git", "fetch", "--tags", "--prune"], cwd=checkout)
-    _run(["git", "checkout", args.ref], cwd=checkout)
     commit = _run(
-        ["git", "rev-parse", "HEAD"], cwd=checkout, capture=True
+        ["git", "rev-parse", f"{args.ref}^{{commit}}"],
+        cwd=checkout,
+        capture=True,
     ).stdout.strip()
+    expected_commit = args.expected_commit
+    if expected_commit is None and args.ref == DEFAULT_REF:
+        expected_commit = DEFAULT_COMMIT
+    if expected_commit is None and re.fullmatch(r"[0-9a-fA-F]{40}", args.ref):
+        expected_commit = args.ref.lower()
+    if expected_commit is None:
+        raise RuntimeError(
+            "A custom legacy 0.x ref requires --expected-commit so the bridge "
+            "cannot silently follow a moved tag or branch."
+        )
+    if commit.lower() != expected_commit.lower():
+        raise RuntimeError(
+            f"Legacy 0.x ref {args.ref!r} resolved to {commit}, expected "
+            f"{expected_commit}."
+        )
+    _run(["git", "checkout", "--detach", commit], cwd=checkout)
 
     _remove_tree_within(project_root, output)
     output.mkdir(parents=True, exist_ok=True)
     shutil.copytree(checkout / "app_builder", output / "app_builder")
     shutil.copy2(checkout / "cli" / "py" / "app-builder.py", output / "legacy-cli.py")
-    shutil.copy2(checkout / "requirements.txt", output / "requirements.txt")
     _write_bootstrap(output / "app-builder-legacy.py")
     (output / "app-builder.exe").write_bytes(
         stamp_exe_wrap_config(_render_legacy_bridge_launcher_config())
@@ -57,28 +80,27 @@ def main() -> int:
 
     site_packages = output / "site-packages"
     site_packages.mkdir()
-    _run(
-        [
-            str(args.python),
-            "-m",
-            "pip",
-            "install",
-            "--upgrade",
-            "--quiet",
-            "--progress-bar",
-            "off",
-            "--disable-pip-version-check",
-            "--target",
-            str(site_packages),
-            "-r",
-            str(output / "requirements.txt"),
-        ]
-    )
+    with tempfile.TemporaryDirectory(prefix="app-builder-0x-build-") as temp_dir:
+        build_site = Path(temp_dir) / "site-packages"
+        _install_locked_requirements(args.python, BUILD_LOCK_PATH, build_site)
+        build_env = os.environ.copy()
+        build_env["PYTHONNOUSERSITE"] = "1"
+        build_env["PYTHONPATH"] = str(build_site)
+        _install_locked_requirements(
+            args.python,
+            LOCK_PATH,
+            site_packages,
+            env=build_env,
+            no_build_isolation=True,
+        )
     _smoke_import(args.python, output)
 
     manifest = {
         "ref": args.ref,
         "resolved_commit": commit,
+        "dependency_lock": LOCK_PATH.relative_to(PROJECT_ROOT).as_posix(),
+        "dependency_lock_sha256": _sha256_file(LOCK_PATH),
+        "build_dependency_lock_sha256": _sha256_file(BUILD_LOCK_PATH),
         "source_url": args.repo_url,
         "built_at": datetime.now(timezone.utc).isoformat(),
         "python": str(args.python.resolve()),
@@ -157,6 +179,43 @@ def _smoke_import(python: Path, output: Path) -> None:
         cwd=output,
         env=env,
     )
+
+
+def _install_locked_requirements(
+    python: Path,
+    lock_path: Path,
+    target: Path,
+    *,
+    env: dict[str, str] | None = None,
+    no_build_isolation: bool = False,
+) -> None:
+    command = [
+        str(python),
+        "-m",
+        "pip",
+        "install",
+        "--quiet",
+        "--progress-bar",
+        "off",
+        "--disable-pip-version-check",
+        "--require-hashes",
+        "--no-deps",
+        "--target",
+        str(target),
+        "-r",
+        str(lock_path),
+    ]
+    if no_build_isolation:
+        command.append("--no-build-isolation")
+    _run(command, env=env)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as input_file:
+        for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _remove_tree_within(root: Path, target: Path) -> None:

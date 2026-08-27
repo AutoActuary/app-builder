@@ -87,10 +87,20 @@ class TestLegacyVersionBridge(unittest.TestCase):
 
         self.assertIn("Compatibility-only", requirements)
         self.assertIn("app-builder 0.x launchers", requirements)
-        self.assertIn(
-            "--find-links __app_builder_0x_version_bridge__/bridge-links.html",
-            requirements,
-        )
+        self.assertIn("./__app_builder_0x_version_bridge__", requirements)
+        self.assertNotIn("app-builder-0x-version-bridge==", requirements)
+
+    def test_bridge_dependencies_are_derived_from_the_committed_lock(self) -> None:
+        setup_source = (
+            PROJECT_ROOT / "__app_builder_0x_version_bridge__" / "setup.py"
+        ).read_text(encoding="utf-8")
+        build_config = (
+            PROJECT_ROOT / "__app_builder_0x_version_bridge__" / "pyproject.toml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('PROJECT_ROOT / "poetry.lock"', setup_source)
+        self.assertIn('requirement = f"{name}=={version}"', setup_source)
+        self.assertNotIn("setuptools>=", build_config)
 
     def test_main_py_remains_a_direct_entrypoint(self) -> None:
         completed = subprocess.run(

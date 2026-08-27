@@ -13,7 +13,11 @@ from app_builder.exewrap import (
     _read_icon_images,
     _render_icon_group_resource,
 )
-from scripts.build_legacy_0x_bridge import _render_legacy_bridge_launcher_config
+from scripts.build_legacy_0x_bridge import (
+    DEFAULT_COMMIT,
+    DEFAULT_REF,
+    _render_legacy_bridge_launcher_config,
+)
 
 
 def _write_sample_icon(icon_path: Path) -> None:
@@ -23,6 +27,10 @@ def _write_sample_icon(icon_path: Path) -> None:
 
 
 class TestAppBuilderMetaLauncher(unittest.TestCase):
+    def test_legacy_bridge_default_ref_is_pinned_to_a_commit(self) -> None:
+        self.assertEqual("v0.20.0", DEFAULT_REF)
+        self.assertRegex(DEFAULT_COMMIT, r"^[0-9a-f]{40}$")
+
     def test_meta_launcher_config_preserves_cwd_and_passes_args(self) -> None:
         config = _render_meta_launcher_config().decode("utf-8")
 

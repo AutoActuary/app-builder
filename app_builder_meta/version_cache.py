@@ -57,6 +57,12 @@ def ensure_managed_version(
     repository_url: str = APP_BUILDER_REPOSITORY_URL,
     python_executable: Path | None = None,
 ) -> ManagedVersion:
+    from app_builder.poetry_dependencies import (
+        MAIN_GROUP,
+        install_locked_poetry_dependencies,
+        load_poetry_lock,
+    )
+
     root = (cache_root or default_cache_root()).resolve()
     versions_root = root / "versions"
     versions_root.mkdir(parents=True, exist_ok=True)
@@ -68,6 +74,9 @@ def ensure_managed_version(
     with _exclusive_cache_lock(source_lock):
         source_repo = _ensure_source_repo(versions_root, repository_url)
         resolved_commit, ref_kind = _resolve_source_ref(source_repo, ref)
+        dependency_lock_sha256 = _source_file_sha256(
+            source_repo, resolved_commit, "poetry.lock"
+        )
     managed_root = versions_root / _cache_key(ref, repository_url)
     cache_lock = versions_root / ".locks" / (_cache_key(ref, repository_url) + ".lock")
     with _exclusive_cache_lock(cache_lock):
@@ -77,6 +86,7 @@ def ensure_managed_version(
             ref,
             repository_url,
             resolved_commit,
+            dependency_lock_sha256,
             existing_payload,
             manifest_path,
         )
@@ -108,14 +118,12 @@ def ensure_managed_version(
             base_python = python_executable or Path(sys.executable)
             _run([str(base_python), "-m", "venv", str(staging_venv)])
             staging_python = _venv_python(staging_venv)
-            subprocess_env = get_environment().subprocess_environment()
-            _run(
-                [str(staging_python), "-m", "pip", "install", "--upgrade", "pip"],
-                env=subprocess_env,
-            )
-            _run(
-                [str(staging_python), "-m", "pip", "install", str(staging_repo)],
-                env=subprocess_env,
+            poetry_lock = load_poetry_lock(staging_repo / "poetry.lock")
+            install_locked_poetry_dependencies(
+                project_root=staging_repo,
+                python_executable=staging_python,
+                poetry_lock=poetry_lock,
+                groups={MAIN_GROUP},
             )
 
             final_repo = managed_root / "repo"
@@ -127,17 +135,13 @@ def ensure_managed_version(
                 "resolved_commit": resolved_commit,
                 "source_url": repository_url,
                 "source_repo": str(source_repo),
+                "dependency_lock_sha256": dependency_lock_sha256,
+                "dependency_content_hash": poetry_lock.content_hash or "",
                 "repo_path": str(final_repo),
                 "venv_python": str(final_python),
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "last_checked_at": datetime.now(timezone.utc).isoformat(),
-                "dependency_install_command": [
-                    str(final_python),
-                    "-m",
-                    "pip",
-                    "install",
-                    str(final_repo),
-                ],
+                "dependency_contract": "poetry.lock main group with artifact hashes",
             }
             (staging_root / "version-manifest.json").write_text(
                 json.dumps(manifest, indent=2), encoding="utf-8"
@@ -183,6 +187,7 @@ def _managed_version_from_manifest(
     ref: str,
     repository_url: str,
     resolved_commit: str,
+    dependency_lock_sha256: str,
     raw: dict[str, object] | None,
     manifest_path: Path,
 ) -> ManagedVersion | None:
@@ -192,6 +197,7 @@ def _managed_version_from_manifest(
         raw.get("requested_ref") != ref
         or raw.get("source_url") != repository_url
         or raw.get("resolved_commit") != resolved_commit
+        or raw.get("dependency_lock_sha256") != dependency_lock_sha256
     ):
         return None
     repo_path = Path(str(raw.get("repo_path", "")))
@@ -205,6 +211,21 @@ def _managed_version_from_manifest(
         repo_path=repo_path,
         venv_python=venv_python,
     )
+
+
+def _source_file_sha256(source_repo: Path, commit: str, path: str) -> str:
+    result = subprocess.run(
+        ["git", "show", f"{commit}:{path}"],
+        cwd=source_repo,
+        check=False,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(
+            f"Managed app-builder ref {commit!r} has no committed {path}. {detail}"
+        )
+    return hashlib.sha256(result.stdout).hexdigest()
 
 
 def _cache_key(ref: str, repository_url: str = APP_BUILDER_REPOSITORY_URL) -> str:

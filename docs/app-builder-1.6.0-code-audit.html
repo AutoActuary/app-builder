@@ -236,6 +236,7 @@
         <div class="evidence"><strong>Reproduction:</strong> an isolated pip solve containing a local bridge candidate and an index-style wheel with the same name/version selected the wheel rather than the local source.</div>
         <p class="source">Source: <a href="../requirements.txt">requirements.txt:3</a> and <a href="../__app_builder_0x_version_bridge__/bridge-links.html">bridge-links.html:5</a>.</p>
         <div class="fix"><strong>Fix direction:</strong> use a direct relative requirement that identifies the local bridge itself. Do not resolve this compatibility shim by a public package name.</div>
+        <div class="implementation"><strong>Implementation:</strong> the compatibility-only root requirements file now installs <code>./__app_builder_0x_version_bridge__</code> directly and the package-index link file is gone. The bridge derives exact main requirements from the checked-out <code>poetry.lock</code>, so neither its identity nor dependency versions come from an unconstrained index solve.</div>
       </article>
 
       <article class="finding p1" id="p1-build-commit">
@@ -275,6 +276,7 @@
         <div class="evidence"><strong>Reproduction:</strong> a disposable runtime containing <code>obsolete_dependency</code> was materialized against an empty lock. The package remained importable before and after. The manifest would record only the new lock while the payload retained old code.</div>
         <p class="source">Source: <a href="../app_builder/poetry_dependencies.py">poetry_dependencies.py:146-197</a>; runtime reuse in <a href="../app_builder/python_runtime.py">python_runtime.py:747-784</a>.</p>
         <div class="fix"><strong>Fix direction:</strong> key environments to the selected lock digest and rebuild them atomically when it changes, or reconcile installed distributions against an exact lock inventory. Add consecutive-build tests.</div>
+        <div class="implementation"><strong>Implementation:</strong> bundled and venv runtimes now record a dependency-state marker containing the committed lock digest and selected groups. A changed or missing marker removes and rematerializes the runtime before installing dependencies, including an empty new selection. Consecutive-state tests prove an obsolete package cannot survive while an unchanged runtime remains reusable.</div>
       </article>
 
       <article class="finding p1" id="p1-immutable-refs">
@@ -284,6 +286,7 @@
         <div class="evidence"><strong>Reproductions:</strong> a clean managed install of tag 1.6.0 selected Click 8.5.0 while its <code>poetry.lock</code> records 8.4.1. The generated bridge contained 18 independently resolved distributions not represented in the release manifest.</div>
         <p class="source">Source: <a href="../app_builder_meta/version_cache.py">version_cache.py:104-121</a> and <a href="../scripts/build_legacy_0x_bridge.py">build_legacy_0x_bridge.py:43-63</a>.</p>
         <div class="fix"><strong>Fix direction:</strong> define committed, hash-checked bootstrap constraints for managed versions and the bridge; install the repository itself with <code>--no-deps</code>; pin the 0.x commit; record dependency-input digests in the build manifest.</div>
+        <div class="implementation"><strong>Implementation:</strong> managed versions install exact main dependencies from the selected commit's <code>poetry.lock</code> with hash checking, execute the checkout directly, and record the commit and lock digest in the cache manifest. The bundled legacy bridge pins v0.20.0 to commit <code>189712c7d27258d6404b38f57ab9b6cb967d0ff9</code>, installs from committed runtime and build-tool hash locks, and records both digests in its bridge manifest. Real cold-cache and bridge builds completed successfully.</div>
       </article>
     </section>
 

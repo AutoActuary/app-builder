@@ -66,6 +66,11 @@ its published SHA-256, and
 ExeWrap is pinned to a versioned asset and SHA-256 digest. The installer manifest
 records this build-input provenance.
 
+Each project runtime records the lock digest and groups installed into it. A
+different lock, changed group selection, or missing marker causes the runtime to
+be rebuilt before dependencies are installed. This also applies when the new
+selection is empty, so removed packages cannot survive from an earlier build.
+
 Automatic `.py` entrypoint dispatch follows runtime availability: the two hooks before bundled-Python materialization use app-builder's current interpreter; hooks after that prefer bundled Python; hooks after venv materialization prefer the venv, then bundled Python, then app-builder's interpreter. The authoritative per-hook table is in [Hook Python dispatch](app-builder-help.html#hook-python). An explicit command such as `[python, scripts/build.py]` intentionally uses whatever `python` the machine provides.
 
 `app-builder deps` runs this sequence through `post_python_venv` without building
@@ -359,6 +364,10 @@ repository into the user cache at `%LOCALAPPDATA%\app-builder\cache` (or
 The manifest records the requested ref, whether it resolved as a tag, branch, or
 commit, and the exact commit used. Tags are immutable and a moved cached tag is
 refused; branch refs are refreshed and rebuilt when their remote commit changes.
+The selected commit's `poetry.lock` supplies the exact main dependency
+set with artifact hash checking. The checked-out source runs directly instead of
+being installed with a fresh dependency solve, and the cache manifest records the
+lock digest.
 Source refresh and per-ref creation use cross-process locks. A new cache is built
 in a private sibling directory and atomically promoted only after its environment
 and manifest are complete.

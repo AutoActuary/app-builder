@@ -16,8 +16,9 @@ The old launcher already follows most of the required recipe:
 Modern 1.x is not directly runnable by every historical dispatch form. This local
 bridge adapts the old recipe with two contained compatibility tricks:
 
-1. The root requirements file points pip back to this package through a local HTML
-   package link, so the bridge is installed by the old launcher's existing step 3.
+1. The root requirements file installs this local source directory directly, so
+   the bridge is installed by the old launcher's existing step 3 and can never be
+   substituted by a package index.
 2. A guarded `.pth` activator exposes the sibling checked-out 1.x repository when
    that version venv starts, while 1.x also accepts the older direct `main.py` entry.
 

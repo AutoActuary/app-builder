@@ -1377,6 +1377,11 @@ publications:
           pinned Git source instead. Complete Python runtimes are selected from Python.org's Windows runtime index,
           cached under <code>%TEMP%\app-builder-downloads</code>, and verified against the SHA-256 published in that index.
         </p>
+        <p>
+          Each runtime records the exact lock digest and dependency groups installed into it. When either changes,
+          app-builder rebuilds that runtime before installation, including when the new dependency set is empty.
+          Packages removed from the lock therefore cannot survive into a later release.
+        </p>
       </section>
 
       <section id="hooks">
@@ -1708,6 +1713,11 @@ steps:
           <code>app-builder versions list</code> to inspect manifests and
           <code>app-builder versions remove &lt;ref&gt;</code> for deliberate eviction.
         </p>
+        <p>
+          A managed version installs the exact non-optional main dependencies from that commit's
+          <code>poetry.lock</code> with artifact hash checking. The checked-out app-builder source runs directly;
+          ranged project dependencies are never re-solved for the cache. Its manifest records the commit and lock digest.
+        </p>
       </section>
 
       <section id="legacy">
@@ -1731,6 +1741,11 @@ steps:
           The old launcher creates its normal version cache, installs the selected 1.x ref's compatibility-only
           root requirements file, and then runs the 1.x CLI against <code>app_builder.yaml</code>. The helper is inert
           outside that exact legacy cache layout and does not replace the outer app-builder installation.
+        </p>
+        <p>
+          The forwarding helper is installed from its local source directory, never by package name. Its requirements
+          are exact versions derived from the selected ref's committed <code>poetry.lock</code>. The separately bundled
+          0.x runtime is pinned to the v0.20.0 commit and built from committed hash-checked dependency locks.
         </p>
       </section>
 
