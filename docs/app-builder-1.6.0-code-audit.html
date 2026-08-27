@@ -136,10 +136,10 @@
 <body>
   <header>
     <div class="inner">
-      <div class="meta">Independent repository audit | 27 August 2026</div>
+      <div class="meta">Independent repository audit and remediation | 27 August 2026</div>
       <h1>app-builder 1.6.0 code audit</h1>
-      <p>Audit of the exact source published as 1.6.0, with repository-wide tracing, independent specialist reviews, focused Windows reproductions, and false-positive challenge.</p>
-      <p class="meta">commit c7dfafbfa79529605bc942dd9bb7dcaf17a81945 | origin/1.x | tag 1.6.0</p>
+      <p>Audit of the exact source published as 1.6.0, followed by repository-wide remediation on 1.x. Each original finding remains visible beside its implemented fix and verification record.</p>
+      <p class="meta">original audit: commit c7dfafbfa79529605bc942dd9bb7dcaf17a81945 | remediated on origin/1.x</p>
     </div>
   </header>
 
@@ -161,15 +161,15 @@
       <h2>Verdict</h2>
       <div class="verdict">
         <div class="panel verdict-main">
-          <strong>Do not publish the next release yet.</strong>
-          <p>The normal test suite is healthy, but the audit found failures outside its current assertions. The most serious are destructive legacy-upgrade rollback, install-root traversal, release identity drift, a dependency-confusion path in the 0.x bridge, and non-reproducible runtime materialization.</p>
-          <p>This is not a rewrite verdict. Archive safety, payload sealing, current-1.x rollback, cache locking, manifest integrity, and the normal ZIP and 7-Zip paths held up well. The required work is concentrated and testable.</p>
+          <strong>Remediation complete. Prepare the next release candidate.</strong>
+          <p>All 11 release blockers, 13 contract gaps, and 3 documentation defects identified by this audit have implemented fixes and regression coverage. The destructive installer, release identity, dependency, runtime, schema, output, performance, and packaged-help contracts have been hardened on 1.x.</p>
+          <p>The completed branches passed Python 3.11, 3.12, and 3.13 tests, MyPy, Black, and the Windows installer workflow. Focused rehearsals also covered a real cold runtime, reuse, accidental Pydantic 1 presence, a user-site wheel, the legacy bridge, managed versions, and 32,000-path payload validation.</p>
         </div>
         <div class="panel">
           <div class="scoreboard">
-            <div class="metric"><strong class="p1-text">11</strong><span>P1 blockers</span></div>
-            <div class="metric"><strong class="p2-text">13</strong><span>P2 gaps</span></div>
-            <div class="metric"><strong class="p3-text">3</strong><span>P3 docs</span></div>
+            <div class="metric"><strong class="p1-text">11</strong><span>P1 fixed</span></div>
+            <div class="metric"><strong class="p2-text">13</strong><span>P2 fixed</span></div>
+            <div class="metric"><strong class="p3-text">3</strong><span>P3 fixed</span></div>
           </div>
           <p><strong>Confidence:</strong> high for every listed finding. Each has a direct source-to-effect trace; most have a throwaway or real Windows reproduction.</p>
         </div>
@@ -476,22 +476,22 @@
     </section>
 
     <section id="fix-order">
-      <h2>Recommended fix order</h2>
+      <h2>Completed remediation sequence</h2>
       <ol>
-        <li><strong>Stop destructive or unsafe installation.</strong> Fix legacy rollback, canonical install-root enforcement, and ExeWrap apostrophe handling. Add real final-EXE tests first.</li>
-        <li><strong>Bind publication identity.</strong> Seal build commit and repository identity, validate draft target, and reorder existing-release reconciliation.</li>
-        <li><strong>Make dependency materialization deterministic.</strong> Fix local bridge selection, stale package removal, managed-version locks, and bridge locks.</li>
-        <li><strong>Repair first-use contracts.</strong> Make generated config build, make <code>init</code> non-destructive, and handle all accepted config filenames.</li>
-        <li><strong>Unify schema behavior.</strong> Resolve prerelease validation, Pydantic support bounds, exported constraints, and optional-output semantics.</li>
-        <li><strong>Harden runtime operations.</strong> Lock and atomically promote runtimes, disambiguate free-threaded packages, add network deadlines, and optimize payload validation.</li>
-        <li><strong>Regenerate and verify all docs.</strong> Fix local help lookup, examples, and cache locations, then run docs snapshot and wheel-install tests.</li>
+        <li><strong>Stopped destructive or unsafe installation.</strong> Added legacy rollback, canonical install-root enforcement, apostrophe-safe ExeWrap launch, and real final-EXE tests.</li>
+        <li><strong>Bound publication identity.</strong> Sealed build commit and repository identity, validated draft targets, and reordered existing-release reconciliation.</li>
+        <li><strong>Made dependency materialization deterministic.</strong> Fixed local bridge selection, stale package removal, managed-version locks, and bridge locks.</li>
+        <li><strong>Repaired first-use contracts.</strong> Made generated config buildable, made <code>init</code> non-destructive, and standardized on <code>app_builder.yaml</code>.</li>
+        <li><strong>Unified schema behavior.</strong> Aligned prerelease validation, Pydantic support bounds, exported constraints, and optional-output semantics.</li>
+        <li><strong>Hardened runtime operations.</strong> Added locked atomic promotion, excluded accidental free-threaded packages, bounded network work, and optimized payload validation.</li>
+        <li><strong>Regenerated and verified current docs.</strong> Fixed local help lookup, examples, and cache locations, then passed docs snapshots and a real user-site wheel test.</li>
       </ol>
-      <div class="callout"><strong>Release gate:</strong> all P1 findings fixed with regression tests; P2 findings either fixed or explicitly accepted in release notes; full Windows suite, final ZIP and 7-Zip installer rehearsals, managed-version cold start, 0.x bridge dispatch, and a dry-run GitHub publication contract test pass from a clean clone.</div>
+      <div class="callout"><strong>Release gate status:</strong> all audited P1, P2, and P3 items are fixed. The full Windows suite, ZIP and 7-Zip installer workflow, managed-version cold start, 0.x bridge dispatch, deterministic dependency checks, and dry-run GitHub publication contract tests have passed. The next step is versioning and rehearsing the resulting release candidate, not another unresolved audit implementation.</div>
     </section>
   </main>
 
   <footer>
-    Documentation-only audit. No production code or release state was changed.
+    Original 1.6.0 audit with remediation records implemented and merged into 1.x.
   </footer>
 </body>
 </html>
