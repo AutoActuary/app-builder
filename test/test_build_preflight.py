@@ -140,6 +140,27 @@ class TestBuildPreflight(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "protected Windows"):
                     validate_build_configuration(project_root, config, version="1.2.3")
 
+    def test_rejects_install_directory_traversal_before_and_after_normalization(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            subprocess.run(
+                ["git", "init"], cwd=project_root, check=True, capture_output=True
+            )
+            config = AppBuilderConfig(
+                installer=InstallerOptions(
+                    name="Demo",
+                    install_directory=r"%LOCALAPPDATA%\..\..\Windows\Demo",
+                )
+            )
+            with self.assertRaisesRegex(ValueError, "parent-directory traversal"):
+                validate_build_configuration(project_root, config, version="1.2.3")
+
+            config.installer.install_directory = r"C:\harmless-name\.."
+            with self.assertRaisesRegex(ValueError, "parent-directory traversal"):
+                validate_build_configuration(project_root, config, version="1.2.3")
+
 
 if __name__ == "__main__":
     unittest.main()

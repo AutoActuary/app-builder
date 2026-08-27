@@ -100,6 +100,10 @@ def _validate_install_directory(value: str) -> None:
             "installer.install_directory must be a non-empty, trimmed path."
         )
     windows_path = PureWindowsPath(value)
+    if ".." in windows_path.parts:
+        raise ValueError(
+            "installer.install_directory must not contain parent-directory traversal."
+        )
     references = [name.casefold() for name in _ENV_REFERENCE.findall(value)]
     if references:
         if len(references) != 1 or not value.casefold().startswith(
@@ -124,12 +128,12 @@ def _validate_install_directory(value: str) -> None:
             "installer.install_directory must be absolute or begin with %LOCALAPPDATA%, "
             "%APPDATA%, or %USERPROFILE%."
         )
-    if len(windows_path.parts) <= 1:
+    resolved = _normalize_windows_path(value)
+    if len(PureWindowsPath(resolved).parts) <= 1:
         raise ValueError(
             "installer.install_directory must not be a drive or filesystem root."
         )
 
-    resolved = _normalize_windows_path(value)
     user_roots = {
         _normalize_windows_path(path)
         for path in (

@@ -81,6 +81,7 @@ class PathsMapping:
             "app_builder.yaml",
             "application-templates",
             "bin/python",
+            "README.md",
         ],
     )
     exclude: list[str] = config_field(
@@ -125,7 +126,7 @@ class InstallerOptions:
         example="MyApp",
     )
     install_directory: str = config_field(
-        description="Windows install directory. A variable-root path must start with %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the installer expands it on the user's machine. A fixed absolute path is also allowed when it is not a drive root or protected Windows directory.",
+        description="Windows install directory. A variable-root path must start with %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the installer expands it on the user's machine. Parent-directory traversal is rejected. A fixed absolute path is also allowed when it is not a drive root or protected Windows directory.",
         example=r"%LOCALAPPDATA%\MyCompany\MyApp",
     )
     icon: str | None = config_field(

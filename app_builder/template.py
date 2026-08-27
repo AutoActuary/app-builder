@@ -231,8 +231,9 @@ def initialize_project(start: Path, *, force: bool) -> Path:
     template_assets_dir.mkdir(exist_ok=True)
     package_assets_dir = Path(__file__).resolve().parent / "assets" / "templates"
     for asset in package_assets_dir.iterdir():
-        if asset.is_file():
-            shutil.copy2(asset, template_assets_dir / asset.name)
+        destination = template_assets_dir / asset.name
+        if asset.is_file() and not destination.exists():
+            shutil.copy2(asset, destination)
 
     config_path.write_text(render_config_template_yaml(), encoding="utf-8")
     return config_path

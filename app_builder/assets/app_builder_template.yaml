@@ -47,8 +47,9 @@ installer:
 
   # Required string. Windows install directory. A variable-root path must start with
   # %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the
-  # installer expands it on the user's machine. A fixed absolute path is also allowed when
-  # it is not a drive root or protected Windows directory.
+  # installer expands it on the user's machine. Parent-directory traversal is rejected. A
+  # fixed absolute path is also allowed when it is not a drive root or protected Windows
+  # directory.
   install_directory: '%LOCALAPPDATA%\MyCompany\MyApp'
 
   # Optional, nullable string | null. Optional project-relative .ico file embedded into
@@ -123,6 +124,7 @@ installer:
       - app_builder.yaml
       - application-templates
       - bin/python
+      - README.md
 
     # Optional list[string]. Project-relative files or globs removed from the selected
     # payload. Default if omitted: [].

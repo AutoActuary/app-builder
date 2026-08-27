@@ -58,8 +58,9 @@ installer:
 
   # Required string. Windows install directory. A variable-root path must start with
   # %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the
-  # installer expands it on the user's machine. A fixed absolute path is also allowed when
-  # it is not a drive root or protected Windows directory.
+  # installer expands it on the user's machine. Parent-directory traversal is rejected. A
+  # fixed absolute path is also allowed when it is not a drive root or protected Windows
+  # directory.
   install_directory: '%LOCALAPPDATA%\MyCompany\MyApp'
 
   # Optional, nullable string | null. Optional project-relative .ico file embedded into
@@ -134,6 +135,7 @@ installer:
       - app_builder.yaml
       - application-templates
       - bin/python
+      - README.md
 
     # Optional list[string]. Project-relative files or globs removed from the selected
     # payload. Default if omitted: [].
@@ -285,7 +287,7 @@ installer:
 | Field | Type | Required | Default | Example | Description |
 | --- | --- | --- | --- | --- | --- |
 | `name` | `string` | yes | required | `MyApp` | Human-facing application name and Windows install identity. It must be a trimmed, filename-safe, non-reserved Windows name. |
-| `install_directory` | `string` | yes | required | `'%LOCALAPPDATA%\MyCompany\MyApp'` | Windows install directory. A variable-root path must start with %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the installer expands it on the user's machine. A fixed absolute path is also allowed when it is not a drive root or protected Windows directory. |
+| `install_directory` | `string` | yes | required | `'%LOCALAPPDATA%\MyCompany\MyApp'` | Windows install directory. A variable-root path must start with %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the installer expands it on the user's machine. Parent-directory traversal is rejected. A fixed absolute path is also allowed when it is not a drive root or protected Windows directory. |
 | `icon` | `string \| null` | no | `null` | `application-templates/icon.ico` | Optional project-relative .ico file embedded into generated executables. Start Menu shortcuts with no icon inherit it, and app-builder includes it in the payload automatically at its normal or remapped destination. |
 | `payload_format` | `string` | no | `zip` | `zip` | Inner payload archive format. Use zip for the Windows tar.exe path or 7z for stronger compression with bundled 7-Zip extraction. |
 | `wait_on_exit` | `boolean` | no | `true` | `true` | Whether generated installer scripts should wait briefly before exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait, while --no-wait skips only the wait. |
@@ -323,7 +325,7 @@ installer:
 
 | Field | Type | Required | Default | Example | Description |
 | --- | --- | --- | --- | --- | --- |
-| `include` | `list[string]` | no | `[]` | `[app_builder.yaml, application-templates, bin/python]` | Required project-relative files or globs included in the release payload. Every entry must match, and the final payload must be nonempty after excludes. |
+| `include` | `list[string]` | no | `[]` | `[app_builder.yaml, application-templates, bin/python, README.md]` | Required project-relative files or globs included in the release payload. Every entry must match, and the final payload must be nonempty after excludes. |
 | `exclude` | `list[string]` | no | `[]` | `['**/__pycache__', dist, venv]` | Project-relative files or globs removed from the selected payload. |
 | `include_dist` | `boolean` | no | `false` | `false` | Whether files beneath installer.dist may enter the application payload. The default excludes dist even when a broad include selects the project root, preventing old release files and build logs from being installed. |
 | `remap` | `list[tuple[string, string]]` | no | `[]` | `[[README.md, docs/README.md]]` | Two-item source and archive-destination pairs. Each source must be a selected literal project-relative path; destinations must be safe, unique archive paths. |

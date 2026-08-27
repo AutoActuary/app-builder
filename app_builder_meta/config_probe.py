@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-CONFIG_FILENAMES = ("app_builder.yaml", "app-builder.yaml")
+CONFIG_FILENAMES = ("app_builder.yaml",)
 LEGACY_CONFIG_FILENAMES = ("application.yaml",)
 
 

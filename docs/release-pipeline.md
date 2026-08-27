@@ -157,7 +157,7 @@ The generated bootstrap:
 
 1. runs `installer.bootstrap_hooks.pre_extract`;
 2. creates a random temp extraction directory under `%TEMP%`;
-3. extracts the outer layer with `tar.exe -xf '<installer.exe>' -C <temp>`;
+3. receives the installer path through ExeWrap's child environment and extracts the outer layer with `tar.exe -xf <installer.exe> -C <temp>`;
 4. runs the PowerShell installer script and forwards all command-line arguments;
 5. removes the temp extraction directory.
 
@@ -179,12 +179,14 @@ Because this hook runs before extraction, it cannot use the app payload, `instal
 - recognizes selected legacy app-builder install shapes for upgrade;
 - refuses unknown directories and different app-builder apps by default;
 - runs `pre_install`;
-- replaces the app directory with rollback support for recognized current installs;
+- moves a recognized current or legacy install to a private sibling backup before replacement;
 - writes the installed manifest;
 - copies `bin\uninstall.cmd` and `bin\uninstall.ps1` into the installed app's own `bin` directory when enabled;
 - creates Start Menu shortcuts;
 - registers a per-user Windows Installed Apps entry when the uninstaller is enabled;
 - runs `post_install` after files, shortcuts, uninstall support, and Installed Apps registration are complete;
+- removes superseded legacy Windows integration and the backup only after `post_install` succeeds;
+- restores the prior directory, Start Menu group, and registration state when replacement fails;
 - waits before closing when configured.
 
 For existing `.py` installer-hook entrypoints, automatic dispatch checks

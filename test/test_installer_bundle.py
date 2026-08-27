@@ -185,16 +185,20 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
 
         self.assertIn(expected_group, stamped)
 
-    def test_bootstrap_config_uses_powershell_single_quoted_exe_path(self) -> None:
+    def test_bootstrap_config_passes_exe_path_through_environment(self) -> None:
         config = _load_exewrap_config_for_assertion(_render_bootstrap_config())
 
+        self.assertEqual("@{exe_path}", config["env"]["APP_BUILDER_INSTALLER_EXE"])
         command = config["command"]
         self.assertEqual("powershell.exe", command[0])
         self.assertEqual("-NoProfile", command[1])
         self.assertIn("-ExecutionPolicy", command)
         self.assertIn("Bypass", command)
         script = command[-1]
-        self.assertIn("tar.exe -xf '@{exe_path}' -C $extractDir", script)
+        self.assertIn(
+            "tar.exe -xf $env:APP_BUILDER_INSTALLER_EXE -C $extractDir", script
+        )
+        self.assertNotIn("'@{exe_path}'", script)
         self.assertIn("bin\\install.ps1", script)
         self.assertIn("$InstallerArgsJson = '@{args_as_json}'", script)
         self.assertIn(
@@ -234,8 +238,56 @@ class TestExeWrapInstallerBundle(unittest.TestCase):
         self.assertIn("cmd.exe", script)
         self.assertLess(
             script.index("Invoke-AppBuilderBootstrapCommand $RawCommand"),
-            script.index("tar.exe -xf '@{exe_path}'"),
+            script.index("tar.exe -xf $env:APP_BUILDER_INSTALLER_EXE"),
         )
+
+    @unittest.skipIf(os.name != "nt", "ExeWrap installer smoke targets Windows")
+    def test_final_installer_runs_from_apostrophe_path(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            apostrophe_dir = temp_dir / "O'Brien downloads"
+            apostrophe_dir.mkdir()
+            install_dir = temp_dir / "installed"
+            payload = apostrophe_dir / "payload.zip"
+            with ZipFile(payload, "w") as archive:
+                archive.writestr("hello.txt", "hello")
+            manifest = apostrophe_dir / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "name": "Apostrophe Demo",
+                        "version": "1.0.0",
+                        "install_directory": str(install_dir),
+                        "payload_archive": payload.name,
+                        "start_menu": [],
+                        "install_hooks": {
+                            "pre_install": [],
+                            "post_install": [],
+                            "pre_uninstall": [],
+                            "post_uninstall": [],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            installer = apostrophe_dir / "demo-installer.exe"
+            create_exewrap_zip_installer(
+                installer,
+                payload_archive=payload,
+                manifest_path=manifest,
+                app_name="Apostrophe Demo",
+                wait_on_exit=False,
+                add_uninstaller=False,
+            )
+
+            result = subprocess.run(
+                [str(installer), "--yes"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(0, result.returncode, result.stderr)
 
     def test_json_for_embedded_powershell_rewrites_apostrophes(self) -> None:
         payload = _json_for_embedded_powershell(
