@@ -22,8 +22,9 @@ manifest, so the installer identity and `app-builder --version` cannot diverge.
 `app_builder.yaml` is parsed as YAML, then string interpolation runs before dataclass schema validation.
 
 Before dependencies or hooks run, release preflight rejects unsafe Windows app
-names, invalid Git tag versions, dangerous install roots, non-exact Python
-versions, empty hook argv, and unsafe dist/runtime write paths. Dist,
+names, invalid Git tag versions, dangerous install roots, invalid Python version
+selectors, empty hook argv, and unsafe dist/runtime write paths. A runtime section
+requires an explicit `python_version`; omitting the whole section disables it. Dist,
 `python_bundled.path`, and `python_venv.path` must resolve to project
 subdirectories. Install paths must be an
 absolute application subdirectory or live beneath `%LOCALAPPDATA%`, `%APPDATA%`,
@@ -68,8 +69,16 @@ records this build-input provenance.
 
 Each project runtime records the lock digest and groups installed into it. A
 different lock, changed group selection, or missing marker causes the runtime to
-be rebuilt before dependencies are installed. This also applies when the new
-selection is empty, so removed packages cannot survive from an earlier build.
+be rebuilt before dependencies are installed. Runtime creation is serialized per
+target path. The complete candidate is built and validated in a unique sibling
+directory, then atomically promoted, so a concurrent or failed build cannot expose
+a partial runtime or destroy the previous usable one. This also applies when the
+new selection is empty, so removed packages cannot survive from an earlier build.
+
+Python.org index and artifact requests have a 30-second socket deadline and at
+most three attempts for transient network failures. Normal runtime selection
+excludes free-threaded package variants unless a future explicit config contract
+opts into them.
 
 Automatic `.py` entrypoint dispatch follows runtime availability: the two hooks before bundled-Python materialization use app-builder's current interpreter; hooks after that prefer bundled Python; hooks after venv materialization prefer the venv, then bundled Python, then app-builder's interpreter. The authoritative per-hook table is in [Hook Python dispatch](app-builder-help.html#hook-python). An explicit command such as `[python, scripts/build.py]` intentionally uses whatever `python` the machine provides.
 
@@ -374,6 +383,8 @@ and manifest are complete.
 
 Use `app-builder versions list` to inspect the cache and
 `app-builder versions remove <ref>` for deliberate eviction.
+These cache-management commands always run in the installed outer CLI, even when
+the current project pins another app-builder version.
 
 ## 16. Release Owner Checklist
 

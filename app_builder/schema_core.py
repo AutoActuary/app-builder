@@ -260,6 +260,8 @@ def _materialize_value(annotation: Any, value: Any, path: str) -> Any:
                 return _materialize_value(option, value, path)
             except ConfigError as error:
                 errors.append(error)
+        if len(errors) == 1:
+            raise errors[0]
         raise ConfigError(
             path,
             f"expected {_describe_type(annotation)}, got {_type_name(value)}.",

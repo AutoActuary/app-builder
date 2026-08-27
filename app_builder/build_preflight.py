@@ -6,7 +6,7 @@ import re
 import subprocess
 from pathlib import Path, PureWindowsPath
 
-from .schema import AppBuilderConfig
+from .schema import AppBuilderConfig, is_valid_python_version_selector
 
 _WINDOWS_RESERVED_NAMES = {
     "aux",
@@ -16,7 +16,6 @@ _WINDOWS_RESERVED_NAMES = {
     *(f"com{number}" for number in range(1, 10)),
     *(f"lpt{number}" for number in range(1, 10)),
 }
-_EXACT_PYTHON_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 _ENV_REFERENCE = re.compile(r"%([^%]+)%")
 
 
@@ -179,9 +178,9 @@ def _validate_python_version(options: object | None, *, label: str) -> None:
     if options is None:
         return
     version = getattr(options, "python_version", None)
-    if not isinstance(version, str) or _EXACT_PYTHON_VERSION.fullmatch(version) is None:
+    if not is_valid_python_version_selector(version):
         raise ValueError(
-            f"{label}.python_version must pin an exact major.minor.patch version."
+            f"{label}.python_version must be an exact stable version or supported prerelease selector."
         )
 
 

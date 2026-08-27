@@ -69,6 +69,8 @@ def dispatch(argv: list[str], *, cwd: Path | None = None) -> int:
 def choose_target(argv: list[str], cwd: Path) -> Target:
     if argv[:1] == ["0.x"]:
         return Legacy0x(argv=argv[1:])
+    if argv[:1] in (["cache"], ["versions"]):
+        return CurrentInstall(argv=argv)
 
     probe = probe_project_config(cwd)
     if probe is None:

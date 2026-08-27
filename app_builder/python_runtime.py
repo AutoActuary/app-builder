@@ -50,6 +50,8 @@ _EXE_WRAP_CONFIG_START_MARKER = b"8c0e8d4c-32af-4fd8-9c68-6a0f97efeb6a"
 _EXE_WRAP_CONSOLE_LAUNCHER = "ExeWrap-console.exe"
 _EXE_WRAP_WINDOWED_LAUNCHER = "ExeWrap-windowed.exe"
 _EXE_WRAP_SOURCE_MARKER = ".app-builder-exewrap-source.json"
+_NETWORK_TIMEOUT_SECONDS = 30.0
+_NETWORK_ATTEMPTS = 3
 
 
 class PythonVersionNotFoundError(RuntimeError):
@@ -310,13 +312,29 @@ def _load_python_index_json(url: str) -> dict[str, Any]:
         url,
         headers={"Accept": "application/json", "User-Agent": "app-builder"},
     )
-    try:
-        with urllib.request.urlopen(request) as response:
-            payload: Any = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise RuntimeError(
-            f"Could not read the Python.org Windows runtime index from {url}: {error}."
-        ) from error
+    payload: Any = None
+    for attempt in range(1, _NETWORK_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(
+                request, timeout=_NETWORK_TIMEOUT_SECONDS
+            ) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            break
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise RuntimeError(
+                f"Could not parse the Python.org Windows runtime index from {url}: {error}."
+            ) from error
+        except urllib.error.HTTPError as error:
+            raise RuntimeError(
+                f"Could not read the Python.org Windows runtime index from {url}: "
+                f"server returned HTTP {error.code}."
+            ) from error
+        except (urllib.error.URLError, TimeoutError) as error:
+            if attempt == _NETWORK_ATTEMPTS:
+                raise RuntimeError(
+                    f"Could not read the Python.org Windows runtime index from {url} "
+                    f"after {_NETWORK_ATTEMPTS} attempts: {error}."
+                ) from error
     if not isinstance(payload, dict):
         raise RuntimeError(f"Unexpected Python.org runtime index response from {url}.")
     return payload
@@ -349,6 +367,12 @@ def _load_python_runtime_packages() -> list[PythonRuntimePackage]:
                 and isinstance(runtime_id, str)
                 and isinstance(tag, str)
                 and tag.endswith(f"-{architecture}")
+                and re.fullmatch(
+                    rf"pythoncore-[0-9]+(?:\.[0-9]+)*-{re.escape(architecture)}",
+                    runtime_id,
+                    re.IGNORECASE,
+                )
+                is not None
                 and isinstance(download_url, str)
                 and download_url.startswith(_PYTHON_RUNTIME_INDEX_ROOT)
                 and isinstance(digest, str)
@@ -392,16 +416,24 @@ def _resolve_python_runtime_package(
 def _download_file(url: str, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(url, headers={"User-Agent": "app-builder"})
-    try:
-        with urllib.request.urlopen(request) as response:
-            with destination.open("wb") as output:
-                shutil.copyfileobj(response, output)
-    except urllib.error.HTTPError as error:
-        raise RuntimeError(
-            f"Could not download {url}: server returned HTTP {error.code}."
-        ) from error
-    except urllib.error.URLError as error:
-        raise RuntimeError(f"Could not download {url}: {error}.") from error
+    for attempt in range(1, _NETWORK_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(
+                request, timeout=_NETWORK_TIMEOUT_SECONDS
+            ) as response:
+                with destination.open("wb") as output:
+                    shutil.copyfileobj(response, output)
+            return
+        except urllib.error.HTTPError as error:
+            raise RuntimeError(
+                f"Could not download {url}: server returned HTTP {error.code}."
+            ) from error
+        except (urllib.error.URLError, TimeoutError) as error:
+            destination.unlink(missing_ok=True)
+            if attempt == _NETWORK_ATTEMPTS:
+                raise RuntimeError(
+                    f"Could not download {url} after {_NETWORK_ATTEMPTS} attempts: {error}."
+                ) from error
 
 
 def _download_cache_path(url: str) -> Path:
@@ -730,43 +762,105 @@ def _extract_python_runtime_package(package_path: Path, python_root: Path) -> No
     )
 
 
+def _write_self_contained_runtime_home(runtime_root: Path, final_root: Path) -> None:
+    (runtime_root / "pyvenv.cfg").write_text(
+        f"home = {(final_root / 'python').resolve().as_posix()}\n"
+        "include-system-site-packages = false\n",
+        encoding="utf-8",
+    )
+
+
+def _runtime_lock_path(runtime_root: Path) -> Path:
+    resolved = str(runtime_root.resolve()).casefold().encode("utf-8")
+    key = hashlib.sha256(resolved).hexdigest()[:20]
+    return runtime_root.parent / ".app-builder-runtime-locks" / f"{key}.lock"
+
+
+def _runtime_staging_path(runtime_root: Path) -> Path:
+    return runtime_root.parent / (
+        f".{runtime_root.name}.app-builder-building-{os.getpid()}-{uuid.uuid4().hex}"
+    )
+
+
+def _promote_runtime(staging_root: Path, runtime_root: Path) -> None:
+    runtime_root.parent.mkdir(parents=True, exist_ok=True)
+    backup_root = runtime_root.parent / (
+        f".{runtime_root.name}.app-builder-previous-{uuid.uuid4().hex}"
+    )
+    moved_existing = False
+    try:
+        if runtime_root.exists():
+            os.replace(runtime_root, backup_root)
+            moved_existing = True
+        os.replace(staging_root, runtime_root)
+    except BaseException:
+        if moved_existing and backup_root.exists() and not runtime_root.exists():
+            os.replace(backup_root, runtime_root)
+        raise
+    finally:
+        if staging_root.exists():
+            shutil.rmtree(staging_root, ignore_errors=True)
+    if backup_root.exists():
+        shutil.rmtree(backup_root, ignore_errors=True)
+
+
 def _python_matches(python_executable: Path, version_pattern: str | None) -> bool:
     if not python_executable.exists():
         return False
-    completed = subprocess.run(
-        [str(python_executable), "-V"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        completed = subprocess.run(
+            [str(python_executable), "-V"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return False
     if completed.returncode != 0:
         return False
     version = (completed.stdout or completed.stderr).strip().split()[-1]
     return _matches_version_pattern(version_pattern, version)
 
 
+def _build_bundled_runtime_at(
+    runtime_root: Path, options: PythonBundledOptions
+) -> Path:
+    package = _resolve_python_runtime_package(options.python_version)
+    package_path = _ensure_downloaded_file(package.download_url, package.digest)
+    _extract_python_runtime_package(package_path, runtime_root)
+    _write_python_source_marker(runtime_root, package)
+    return _bundled_python_executable(runtime_root)
+
+
+def _bundled_runtime_matches(runtime_root: Path, options: PythonBundledOptions) -> bool:
+    return _python_matches(
+        _bundled_python_executable(runtime_root), options.python_version
+    ) and _python_source_marker_matches(runtime_root, options.python_version)
+
+
 def establish_bundled_python(
     project_root: Path,
     options: PythonBundledOptions,
 ) -> Path:
-    python_root = project_root / options.path
-    python_executable = _bundled_python_executable(python_root)
-    if not (
-        _python_matches(python_executable, options.python_version)
-        and _python_source_marker_matches(python_root, options.python_version)
-    ):
-        package = _resolve_python_runtime_package(options.python_version)
-        package_path = _ensure_downloaded_file(package.download_url, package.digest)
-        _extract_python_runtime_package(package_path, python_root)
-        _write_python_source_marker(python_root, package)
+    runtime_root = project_root / options.path
+    with exclusive_cache_lock(_runtime_lock_path(runtime_root)):
+        if _bundled_runtime_matches(runtime_root, options):
+            return _bundled_python_executable(runtime_root)
 
-    python_executable = _bundled_python_executable(python_root)
-    if not _python_matches(python_executable, options.python_version):
-        raise RuntimeError(
-            f"Materialized Python at {python_executable} did not match "
-            f"configured version {options.python_version!r}."
-        )
-    return python_executable
+        staging_root = _runtime_staging_path(runtime_root)
+        try:
+            staging_python = _build_bundled_runtime_at(staging_root, options)
+            if not _python_matches(staging_python, options.python_version):
+                raise RuntimeError(
+                    f"Materialized Python at {staging_python} did not match "
+                    f"configured version {options.python_version!r}."
+                )
+            _write_self_contained_runtime_home(staging_root, runtime_root)
+            _promote_runtime(staging_root, runtime_root)
+        finally:
+            if staging_root.exists():
+                shutil.rmtree(staging_root, ignore_errors=True)
+    return _bundled_python_executable(runtime_root)
 
 
 def _ensure_bundled_python(
@@ -774,15 +868,36 @@ def _ensure_bundled_python(
     options: PythonBundledOptions,
     poetry_lock: PoetryLock,
 ) -> Path:
-    python_executable = establish_bundled_python(project_root, options)
-    _ensure_pip(python_executable)
-    install_locked_poetry_dependencies(
-        project_root=project_root,
-        python_executable=python_executable,
-        poetry_lock=poetry_lock,
-        groups={MAIN_GROUP},
-    )
-    return python_executable
+    runtime_root = project_root / options.path
+    groups = {MAIN_GROUP}
+    with exclusive_cache_lock(_runtime_lock_path(runtime_root)):
+        if _bundled_runtime_matches(
+            runtime_root, options
+        ) and _dependency_state_matches(runtime_root, poetry_lock, groups):
+            return _bundled_python_executable(runtime_root)
+
+        staging_root = _runtime_staging_path(runtime_root)
+        try:
+            staging_python = _build_bundled_runtime_at(staging_root, options)
+            _ensure_pip(staging_python)
+            install_locked_poetry_dependencies(
+                project_root=project_root,
+                python_executable=staging_python,
+                poetry_lock=poetry_lock,
+                groups=groups,
+            )
+            _write_dependency_state(staging_root, poetry_lock, groups)
+            if not _python_matches(staging_python, options.python_version):
+                raise RuntimeError(
+                    f"Materialized Python at {staging_python} did not match "
+                    f"configured version {options.python_version!r}."
+                )
+            _write_self_contained_runtime_home(staging_root, runtime_root)
+            _promote_runtime(staging_root, runtime_root)
+        finally:
+            if staging_root.exists():
+                shutil.rmtree(staging_root, ignore_errors=True)
+    return _bundled_python_executable(runtime_root)
 
 
 def _dependency_state(poetry_lock: PoetryLock, groups: set[str]) -> dict[str, object]:
@@ -804,17 +919,6 @@ def _dependency_state_matches(
     except (OSError, json.JSONDecodeError):
         return False
     return payload == _dependency_state(poetry_lock, groups)
-
-
-def _prepare_dependency_runtime(
-    runtime_root: Path,
-    poetry_lock: PoetryLock,
-    groups: set[str],
-) -> None:
-    if runtime_root.exists() and not _dependency_state_matches(
-        runtime_root, poetry_lock, groups
-    ):
-        shutil.rmtree(runtime_root)
 
 
 def _write_dependency_state(
@@ -1003,6 +1107,62 @@ def _create_self_contained_venv(
     return _self_contained_venv_launcher_executable(venv_root)
 
 
+def _venv_runtime_matches(
+    venv_root: Path,
+    options: PythonVenvOptions,
+    bundled_root: Path | None,
+) -> bool:
+    if bundled_root is not None:
+        return _venv_matches_bundled_python(
+            venv_root, bundled_root
+        ) and _python_matches(_python_executable(venv_root), options.python_version)
+    return _self_contained_venv_matches(venv_root, options.python_version)
+
+
+def _ensure_venv(
+    project_root: Path,
+    options: PythonVenvOptions,
+    poetry_lock: PoetryLock,
+    groups: set[str],
+    *,
+    bundled_root: Path | None,
+) -> Path:
+    venv_root = project_root / options.path
+    with exclusive_cache_lock(_runtime_lock_path(venv_root)):
+        if _venv_runtime_matches(
+            venv_root, options, bundled_root
+        ) and _dependency_state_matches(venv_root, poetry_lock, groups):
+            return _python_executable(venv_root)
+
+        staging_root = _runtime_staging_path(venv_root)
+        try:
+            if bundled_root is not None:
+                staging_python = _create_venv_from_bundled_python(
+                    staging_root, bundled_root
+                )
+            else:
+                staging_python = _create_self_contained_venv(staging_root, options)
+            install_locked_poetry_dependencies(
+                project_root=project_root,
+                python_executable=staging_python,
+                poetry_lock=poetry_lock,
+                groups=groups,
+            )
+            _write_dependency_state(staging_root, poetry_lock, groups)
+            if not _venv_runtime_matches(staging_root, options, bundled_root):
+                raise RuntimeError(
+                    f"Materialized Python environment at {staging_root} did not "
+                    "pass validation."
+                )
+            if bundled_root is None:
+                _write_self_contained_runtime_home(staging_root, venv_root)
+            _promote_runtime(staging_root, venv_root)
+        finally:
+            if staging_root.exists():
+                shutil.rmtree(staging_root, ignore_errors=True)
+    return _python_executable(venv_root)
+
+
 @dataclass(slots=True)
 class PythonEnvironmentResult:
     python_bundled: Path | None
@@ -1040,15 +1200,11 @@ class PythonEnvironmentMaterializer:
             return self.python_bundled
         if self.config.python_bundled is not None:
             assert self.poetry_lock is not None
-            bundled_root = self.project_root / self.config.python_bundled.path
-            bundled_groups = {MAIN_GROUP}
-            _prepare_dependency_runtime(bundled_root, self.poetry_lock, bundled_groups)
             self.python_bundled = _ensure_bundled_python(
                 self.project_root,
                 self.config.python_bundled,
                 self.poetry_lock,
             )
-            _write_dependency_state(bundled_root, self.poetry_lock, bundled_groups)
         self._bundled_materialized = True
         return self.python_bundled
 
@@ -1061,30 +1217,22 @@ class PythonEnvironmentMaterializer:
             )
         if self.config.python_venv is not None:
             assert self.poetry_lock is not None
-            venv_root = self.project_root / self.config.python_venv.path
             if self.config.python_bundled is not None:
                 venv_groups = {DEV_GROUP}
             else:
                 venv_groups = {MAIN_GROUP, DEV_GROUP}
-            _prepare_dependency_runtime(venv_root, self.poetry_lock, venv_groups)
-            if self.config.python_bundled is not None:
-                bundled_root = self.project_root / self.config.python_bundled.path
-                self.python_venv = _create_venv_from_bundled_python(
-                    venv_root,
-                    bundled_root,
-                )
-            else:
-                self.python_venv = _create_self_contained_venv(
-                    venv_root,
-                    self.config.python_venv,
-                )
-            install_locked_poetry_dependencies(
-                project_root=self.project_root,
-                python_executable=self.python_venv,
-                poetry_lock=self.poetry_lock,
-                groups=venv_groups,
+            bundled_root = (
+                self.project_root / self.config.python_bundled.path
+                if self.config.python_bundled is not None
+                else None
             )
-            _write_dependency_state(venv_root, self.poetry_lock, venv_groups)
+            self.python_venv = _ensure_venv(
+                self.project_root,
+                self.config.python_venv,
+                self.poetry_lock,
+                venv_groups,
+                bundled_root=bundled_root,
+            )
         self._venv_materialized = True
         return self.python_venv
 
