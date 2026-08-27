@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import builtins
+import hashlib
 import subprocess
 import sys
 import unittest
@@ -28,6 +29,7 @@ from app_builder_meta.version_cache import (
     ManagedVersion,
     _cache_key,
     _resolve_source_ref,
+    _source_file_sha256,
     default_cache_root,
     managed_version_manifests,
     remove_managed_version,
@@ -263,6 +265,38 @@ class TestAppBuilderMetaExecutionAdapters(unittest.TestCase):
         self.assertEqual("tag", tag_kind)
         self.assertEqual("branch", branch_kind)
         self.assertEqual(tag_commit, branch_commit)
+
+    def test_managed_dependency_lock_digest_comes_from_resolved_commit(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            repository = Path(temp_dir_str) / "repo"
+            repository.mkdir()
+            subprocess.run(["git", "init"], cwd=repository, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "cache@example.invalid"],
+                cwd=repository,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "cache test"],
+                cwd=repository,
+                check=True,
+            )
+            lock_path = repository / "poetry.lock"
+            lock_path.write_bytes(b"first lock\n")
+            subprocess.run(["git", "add", "poetry.lock"], cwd=repository, check=True)
+            subprocess.run(["git", "commit", "-m", "lock"], cwd=repository, check=True)
+            commit = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=repository,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            lock_path.write_bytes(b"uncommitted replacement\n")
+
+            digest = _source_file_sha256(repository, commit, "poetry.lock")
+
+        self.assertEqual(hashlib.sha256(b"first lock\n").hexdigest(), digest)
 
     def test_managed_cache_can_be_listed_and_removed_by_ref(self) -> None:
         with TemporaryDirectory() as temp_dir_str:

@@ -36,6 +36,7 @@ PYTHON_RUNTIME_INDEX_URL = "https://www.python.org/ftp/python/index-windows.json
 _PYTHON_RUNTIME_INDEX_ROOT = "https://www.python.org/ftp/python/"
 _VERSION_PATTERN_RE = re.compile(r"^\d+(?:\.\d+)*(?:(?:a|b|rc)\d+)?$")
 _PYTHON_SOURCE_MARKER = ".app-builder-python-source.json"
+_DEPENDENCY_STATE_MARKER = ".app-builder-dependencies.json"
 EXE_WRAP_VERSION = "v2.1.0"
 _EXE_WRAP_RELEASE_BASE_URL = (
     f"https://github.com/AutoActuary/ExeWrap/releases/download/{EXE_WRAP_VERSION}"
@@ -784,6 +785,50 @@ def _ensure_bundled_python(
     return python_executable
 
 
+def _dependency_state(poetry_lock: PoetryLock, groups: set[str]) -> dict[str, object]:
+    return {
+        "poetry_lock_sha256": poetry_lock.sha256 or "",
+        "poetry_content_hash": poetry_lock.content_hash or "",
+        "groups": sorted(groups),
+    }
+
+
+def _dependency_state_matches(
+    runtime_root: Path,
+    poetry_lock: PoetryLock,
+    groups: set[str],
+) -> bool:
+    marker_path = runtime_root / _DEPENDENCY_STATE_MARKER
+    try:
+        payload: object = json.loads(marker_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return payload == _dependency_state(poetry_lock, groups)
+
+
+def _prepare_dependency_runtime(
+    runtime_root: Path,
+    poetry_lock: PoetryLock,
+    groups: set[str],
+) -> None:
+    if runtime_root.exists() and not _dependency_state_matches(
+        runtime_root, poetry_lock, groups
+    ):
+        shutil.rmtree(runtime_root)
+
+
+def _write_dependency_state(
+    runtime_root: Path,
+    poetry_lock: PoetryLock,
+    groups: set[str],
+) -> None:
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / _DEPENDENCY_STATE_MARKER).write_text(
+        json.dumps(_dependency_state(poetry_lock, groups), indent=2),
+        encoding="utf-8",
+    )
+
+
 def _read_pyvenv_executable(venv_root: Path) -> Path | None:
     return _read_pyvenv_path(venv_root, "executable")
 
@@ -995,11 +1040,15 @@ class PythonEnvironmentMaterializer:
             return self.python_bundled
         if self.config.python_bundled is not None:
             assert self.poetry_lock is not None
+            bundled_root = self.project_root / self.config.python_bundled.path
+            bundled_groups = {MAIN_GROUP}
+            _prepare_dependency_runtime(bundled_root, self.poetry_lock, bundled_groups)
             self.python_bundled = _ensure_bundled_python(
                 self.project_root,
                 self.config.python_bundled,
                 self.poetry_lock,
             )
+            _write_dependency_state(bundled_root, self.poetry_lock, bundled_groups)
         self._bundled_materialized = True
         return self.python_bundled
 
@@ -1014,24 +1063,28 @@ class PythonEnvironmentMaterializer:
             assert self.poetry_lock is not None
             venv_root = self.project_root / self.config.python_venv.path
             if self.config.python_bundled is not None:
+                venv_groups = {DEV_GROUP}
+            else:
+                venv_groups = {MAIN_GROUP, DEV_GROUP}
+            _prepare_dependency_runtime(venv_root, self.poetry_lock, venv_groups)
+            if self.config.python_bundled is not None:
                 bundled_root = self.project_root / self.config.python_bundled.path
                 self.python_venv = _create_venv_from_bundled_python(
                     venv_root,
                     bundled_root,
                 )
-                venv_groups = {DEV_GROUP}
             else:
                 self.python_venv = _create_self_contained_venv(
                     venv_root,
                     self.config.python_venv,
                 )
-                venv_groups = {MAIN_GROUP, DEV_GROUP}
             install_locked_poetry_dependencies(
                 project_root=self.project_root,
                 python_executable=self.python_venv,
                 poetry_lock=self.poetry_lock,
                 groups=venv_groups,
             )
+            _write_dependency_state(venv_root, self.poetry_lock, venv_groups)
         self._venv_materialized = True
         return self.python_venv
 
@@ -1093,6 +1146,7 @@ def _python_environment_build_inputs(
             for marker_name, kind in (
                 (_PYTHON_SOURCE_MARKER, "python_runtime"),
                 (_EXE_WRAP_SOURCE_MARKER, "exewrap"),
+                (_DEPENDENCY_STATE_MARKER, "python_dependencies"),
             ):
                 marker_path = marker_root / marker_name
                 if not marker_path.is_file():
