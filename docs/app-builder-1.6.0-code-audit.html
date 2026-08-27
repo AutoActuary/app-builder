@@ -389,16 +389,19 @@
         <h3><span class="badge p3">P3</span>User-site wheel installs cannot find their packaged help</h3>
         <p>The wheel puts help under the user data scheme, while lookup checks package-adjacent docs and <code>sys.prefix\share</code>. An isolated <code>pip --user</code> install fell back to GitHub despite the local help file being present.</p>
         <p class="source">Source: <a href="../app_builder/main.py">main.py:40</a> and <a href="../pyproject.toml">pyproject.toml:41</a>.</p>
+        <div class="implementation"><strong>Implementation:</strong> help lookup now covers source checkout, ordinary prefix, user installation data scheme, and target-style package-adjacent <code>share</code> locations. Unit coverage and a real disposable <code>pip --user</code> wheel install prove <code>--help</code> prints the packaged local HTML URI.</div>
       </article>
       <article class="finding p3">
         <h3><span class="badge p3">P3</span>The managed-version example names a nonexistent tag</h3>
         <p>The help uses <code>v1.0.0</code>, but resolution is literal and the repository's 1.x release tags are unprefixed. Replace it with a real supported tag.</p>
         <p class="source">Source: <a href="app-builder-help.html#managed-versions">app-builder-help.html:1696</a>.</p>
+        <div class="implementation"><strong>Implementation:</strong> the managed-version example now uses the real unprefixed <code>1.6.0</code> release tag while retaining branch and commit examples.</div>
       </article>
       <article class="finding p3">
         <h3><span class="badge p3">P3</span>The help names the obsolete download-cache location</h3>
         <p>The packaged guide says <code>%TEMP%\app-builder-downloads</code>. The current default is <code>%LOCALAPPDATA%\app-builder\cache\downloads</code>, subject to the configured cache root.</p>
         <p class="source">Source: <a href="app-builder-help.html#cache">app-builder-help.html:1376</a> and <a href="../app_builder_meta/environment.py">environment.py:99</a>.</p>
+        <div class="implementation"><strong>Implementation:</strong> packaged help now names <code>%LOCALAPPDATA%\app-builder\cache\downloads</code> as the default and keeps cache-root inspection tied to <code>app-builder cache path</code> and <code>cache info</code>.</div>
       </article>
     </section>
 
@@ -479,7 +482,7 @@
         <li><strong>Bind publication identity.</strong> Seal build commit and repository identity, validate draft target, and reorder existing-release reconciliation.</li>
         <li><strong>Make dependency materialization deterministic.</strong> Fix local bridge selection, stale package removal, managed-version locks, and bridge locks.</li>
         <li><strong>Repair first-use contracts.</strong> Make generated config build, make <code>init</code> non-destructive, and handle all accepted config filenames.</li>
-        <li><strong>Unify schema behavior.</strong> Resolve prerelease validation, Pydantic 1 support, exported constraints, and optional-output semantics.</li>
+        <li><strong>Unify schema behavior.</strong> Resolve prerelease validation, Pydantic support bounds, exported constraints, and optional-output semantics.</li>
         <li><strong>Harden runtime operations.</strong> Lock and atomically promote runtimes, disambiguate free-threaded packages, add network deadlines, and optimize payload validation.</li>
         <li><strong>Regenerate and verify all docs.</strong> Fix local help lookup, examples, and cache locations, then run docs snapshot and wheel-install tests.</li>
       </ol>
