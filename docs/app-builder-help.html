@@ -1374,7 +1374,7 @@ publications:
           when dependency declarations change. Git sources require a full resolved commit. Mutable Poetry
           <code>file</code> and <code>directory</code> sources are rejected; publish a hashed artifact or use a
           pinned Git source instead. Complete Python runtimes are selected from Python.org's Windows runtime index,
-          cached under <code>%TEMP%\app-builder-downloads</code>, and verified against the SHA-256 published in that index.
+          cached under <code>%LOCALAPPDATA%\app-builder\cache\downloads</code> by default, and verified against the SHA-256 published in that index.
         </p>
         <p>
           Each runtime records the exact lock digest and dependency groups installed into it. When either changes,
@@ -1706,7 +1706,7 @@ steps:
           </thead>
           <tbody>
             <tr><td>missing, blank, or <code>current</code></td><td>Use the installed 1.x app-builder.</td></tr>
-            <tr><td><code>v1.0.0</code>, branch, or commit</td><td>Check out that ref into the managed version cache and run it.</td></tr>
+            <tr><td><code>1.6.0</code>, branch, or commit</td><td>Check out that ref into the managed version cache and run it.</td></tr>
             <tr><td><code>0.x</code> or <code>v0.*</code></td><td>Error. Use <code>app-builder 0.x &lt;command&gt;</code>.</td></tr>
           </tbody>
         </table>

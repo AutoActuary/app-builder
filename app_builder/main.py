@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import sysconfig
 from pathlib import Path
 
 import click
@@ -41,7 +42,13 @@ def _help_html_candidates() -> tuple[Path, ...]:
     package_parent = Path(__file__).resolve().parents[1]
     return (
         package_parent / "docs" / "app-builder-help.html",
+        package_parent / "share" / "app-builder" / "docs" / "app-builder-help.html",
         Path(sys.prefix) / "share" / "app-builder" / "docs" / "app-builder-help.html",
+        Path(sysconfig.get_path("data", scheme=sysconfig.get_preferred_scheme("user")))
+        / "share"
+        / "app-builder"
+        / "docs"
+        / "app-builder-help.html",
     )
 
 

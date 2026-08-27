@@ -75,6 +75,29 @@ class TestCliHelp(unittest.TestCase):
 
         self.assertEqual(installed_help.resolve().as_uri(), help_url)
 
+    def test_user_site_wheel_data_file_location_is_used(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            prefix = Path(temp_dir_str) / "system"
+            user_data = Path(temp_dir_str) / "user"
+            package_file = prefix / "Lib" / "site-packages" / "app_builder" / "main.py"
+            installed_help = (
+                user_data / "share" / "app-builder" / "docs" / "app-builder-help.html"
+            )
+            installed_help.parent.mkdir(parents=True)
+            installed_help.write_text("user help", encoding="utf-8")
+
+            with (
+                patch("app_builder.main.__file__", str(package_file)),
+                patch("app_builder.main.sys.prefix", str(prefix)),
+                patch(
+                    "app_builder.main.sysconfig.get_path",
+                    return_value=str(user_data),
+                ),
+            ):
+                help_url = _help_html_url()
+
+        self.assertEqual(installed_help.resolve().as_uri(), help_url)
+
 
 if __name__ == "__main__":
     unittest.main()
