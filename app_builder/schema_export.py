@@ -79,7 +79,11 @@ def _schema_for_annotation(annotation: Any) -> dict[str, Any]:
     if _is_dataclass_type(annotation):
         return _schema_for_dataclass(annotation)
     if origin is list and len(args) == 1:
-        return {"type": "array", "items": _schema_for_annotation(args[0])}
+        item_schema = _schema_for_annotation(args[0])
+        if _is_hook_command_annotation(args[0]):
+            item_schema["minItems"] = 1
+            item_schema["prefixItems"] = [{"type": "string", "pattern": r".*\S.*"}]
+        return {"type": "array", "items": item_schema}
     if origin is tuple:
         return _tuple_schema(args)
     if _is_union(origin):
@@ -108,6 +112,10 @@ def _apply_field_metadata(schema: dict[str, Any], field_: Field[Any]) -> None:
         schema["description"] = meta.description
     if meta.aliases:
         schema["x-aliases"] = list(meta.aliases)
+    if meta.allowed_values:
+        schema["enum"] = list(meta.allowed_values)
+    if meta.pattern is not None:
+        schema["pattern"] = meta.pattern
     if meta.example is not REQUIRED:
         schema["examples"] = [_plain_value(meta.example)]
     elif meta.example_factory is not None:
@@ -137,6 +145,10 @@ def _plain_value(value: Any) -> Any:
 
 def _format_annotation(annotation: Any) -> str:
     return str(annotation).replace("typing.", "")
+
+
+def _is_hook_command_annotation(annotation: Any) -> bool:
+    return get_origin(annotation) is list and get_args(annotation) == (str,)
 
 
 def _is_union(origin: Any) -> bool:

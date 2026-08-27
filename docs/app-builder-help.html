@@ -1477,6 +1477,11 @@ publications:
           <code>post_dist</code>, so only outputs produced by the current build can be collected. Match counts,
           duplicate paths, and GitHub filename collisions are enforced.
         </p>
+        <p>
+          Output names, patterns, bounds, and publication selections are checked before dependencies or hooks run.
+          Set <code>min_matches: 0</code> only for a genuinely optional asset. The logical output remains selectable
+          when no file matches and contributes no GitHub asset for that build.
+        </p>
         <pre><code>build_hooks:
   post_dist:
     - [scripts/build_wheels.py]

@@ -335,13 +335,13 @@
             <td><span class="badge p2">P2</span></td>
             <td><strong>The claimed Pydantic 1.x extra crashes on import</strong><br><span class="source"><a href="../pyproject.toml">pyproject.toml:18</a>, <a href="../app_builder/pydantic_models.py">pydantic_models.py:134</a></span></td>
             <td>An isolated allowed install with Pydantic 1.10.24 failed with a metaclass conflict.</td>
-            <td>Implement version-specific model configuration or narrow support to Pydantic 2, then test both declared bounds.</td>
+            <td>Implement version-specific model configuration or narrow support to Pydantic 2, then test both declared bounds.<div class="implementation"><strong>Implementation:</strong> the optional schema extra now declares the supported <code>pydantic&gt;=2,&lt;3</code> range instead of claiming broken 1.x compatibility. The adapter uses the v2 model API and becomes inert rather than crashing when an undeclared v1 installation happens to be present.</div></td>
           </tr>
           <tr>
             <td><span class="badge p2">P2</span></td>
             <td><strong>Exported schemas accept config rejected by the real loader</strong><br><span class="source"><a href="../app_builder/schema_export.py">schema_export.py:63</a>, <a href="../app_builder/pydantic_models.py">pydantic_models.py:54</a></span></td>
             <td>Pydantic 2 and JSON Schema accept values such as <code>payload_format: rar</code> and <code>python_version: 3.12</code> that the canonical loader rejects.</td>
-            <td>Put enums, patterns, and hook constraints in shared schema metadata consumed by all three validators.</td>
+            <td>Put enums, patterns, and hook constraints in shared schema metadata consumed by all three validators.<div class="implementation"><strong>Implementation:</strong> <code>config_field</code> metadata now owns allowed values and string patterns. The canonical loader, JSON Schema exporter, and Pydantic fields consume those constraints; nested hook argv lists also share non-empty <code>argv[0]</code> semantics. The root Pydantic model finishes by invoking the canonical loader, covering cross-field output rules as well.</div></td>
           </tr>
           <tr>
             <td><span class="badge p2">P2</span></td>
@@ -353,19 +353,19 @@
             <td><span class="badge p2">P2</span></td>
             <td><strong>Static output errors are detected after hooks and installer assembly</strong><br><span class="source"><a href="../app_builder/build.py">build.py:230</a>, <a href="../app_builder/release_outputs.py">release_outputs.py:182</a></span></td>
             <td>An invalid output name ran <code>pre_dist</code> and created the installer before failing in output resolution.</td>
-            <td>Validate declaration-only properties in configuration preflight; defer only file-match checks.</td>
+            <td>Validate declaration-only properties in configuration preflight; defer only file-match checks.<div class="implementation"><strong>Implementation:</strong> output names, reserved/duplicate names, safe patterns, match bounds, duplicate publication selections, and unknown logical names are validated while config loads. An integration test proves an invalid declaration fails before dependency materialization or any hook; only filesystem match counts remain deferred until outputs exist.</div></td>
           </tr>
           <tr>
             <td><span class="badge p2">P2</span></td>
             <td><strong>A selected optional zero-match output is reported as unknown</strong><br><span class="source"><a href="../app_builder/release_outputs.py">release_outputs.py:151</a></span></td>
             <td>A declared output with <code>min_matches: 0</code> resolves correctly to no files, but selecting its name for GitHub publication fails as unknown.</td>
-            <td>Preserve declared logical names independently of their current files, or reject and document this combination.</td>
+            <td>Preserve declared logical names independently of their current files, or reject and document this combination.<div class="implementation"><strong>Implementation:</strong> publication selection now receives the configured logical-name set independently from resolved files. A selected declaration with <code>min_matches: 0</code> is known and valid when it has no current files, contributing zero assets instead of raising an unknown-output error.</div></td>
           </tr>
           <tr>
             <td><span class="badge p2">P2</span></td>
             <td><strong>Payload collision validation is quadratic and repeated</strong><br><span class="source"><a href="../app_builder/fileset.py">fileset.py:210</a>, <a href="../app_builder/build.py">build.py:145,407</a></span></td>
             <td>A measured 32,000-file validation pass took 15.1 seconds and is repeated three times for ZIP and four for 7-Zip.</td>
-            <td>Use sorted normalized paths or a trie for O(n log n) validation, then validate the final mapping once.</td>
+            <td>Use sorted normalized paths or a trie for O(n log n) validation, then validate the final mapping once.<div class="implementation"><strong>Implementation:</strong> collision validation now normalizes once, sorts destinations, and checks duplicates and ancestor paths through a keyed prefix set in <code>O(n log n)</code> time. The release path validates after its final launcher injection and archive writers no longer repeat that work; standalone 7-Zip callers retain their defensive boundary check. A 32,000-entry regression is capped at three seconds.</div></td>
           </tr>
           <tr>
             <td><span class="badge p2">P2</span></td>

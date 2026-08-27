@@ -179,7 +179,7 @@ def validate_remap_table(
     reserved = {
         _archive_collision_key(validate_archive_path(path)) for path in reserved_paths
     }
-    destinations: dict[str, tuple[Path, PurePosixPath]] = {}
+    destinations: list[tuple[str, Path, PurePosixPath]] = []
     for source, raw_destination in remap_table.items():
         destination = validate_archive_path(raw_destination)
         key = _archive_collision_key(destination)
@@ -187,7 +187,12 @@ def validate_remap_table(
             raise ValueError(
                 f"Archive destination {destination.as_posix()!r} is reserved by app-builder."
             )
-        previous = destinations.get(key)
+        destinations.append((key, source, destination))
+
+    destinations.sort(key=lambda item: item[0])
+    seen: dict[str, tuple[Path, PurePosixPath]] = {}
+    for key, source, destination in destinations:
+        previous = seen.get(key)
         if previous is not None:
             previous_source, previous_destination = previous
             raise ValueError(
@@ -196,32 +201,17 @@ def validate_remap_table(
                 f"{previous_destination.as_posix()!r}."
             )
 
-        parent_key = key
-        while "/" in parent_key:
-            parent_key = parent_key.rsplit("/", 1)[0]
-            parent = destinations.get(parent_key)
+        parts = key.split("/")
+        for parent_length in range(1, len(parts)):
+            parent_key = "/".join(parts[:parent_length])
+            parent = seen.get(parent_key)
             if parent is not None:
                 raise ValueError(
                     "Archive file/directory collision: "
                     f"{parent[0]} maps to {parent[1].as_posix()!r}, which is a parent "
                     f"of {destination.as_posix()!r}."
                 )
-        child_prefix = key + "/"
-        child = next(
-            (
-                existing
-                for existing_key, existing in destinations.items()
-                if existing_key.startswith(child_prefix)
-            ),
-            None,
-        )
-        if child is not None:
-            raise ValueError(
-                "Archive file/directory collision: "
-                f"{source} maps to {destination.as_posix()!r}, which is a parent of "
-                f"{child[1].as_posix()!r}."
-            )
-        destinations[key] = (source, destination)
+        seen[key] = (source, destination)
 
 
 def _archive_collision_key(path: PurePosixPath) -> str:

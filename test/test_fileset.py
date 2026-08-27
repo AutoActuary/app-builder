@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import time
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 
@@ -90,6 +91,20 @@ class TestArchiveDestinationValidation(unittest.TestCase):
                 {Path("custom.txt"): PurePosixPath("VERSION.txt")},
                 reserved_paths=("version.txt",),
             )
+
+    def test_large_remap_validation_is_not_quadratic(self) -> None:
+        remap_table = {
+            Path(f"source-{index}.txt"): PurePosixPath(
+                f"packages/group-{index // 1000}/file-{index}.txt"
+            )
+            for index in range(32_000)
+        }
+
+        started = time.monotonic()
+        validate_remap_table(remap_table)
+        elapsed = time.monotonic() - started
+
+        self.assertLess(elapsed, 3.0)
 
     def test_build_remap_table_rejects_unsafe_and_duplicate_remaps(self) -> None:
         with TemporaryDirectory() as temp_dir_str:

@@ -292,7 +292,9 @@ def build_release(
             describe_output("checksums", checksums_path),
         )
         github_outputs = select_publication_outputs(
-            outputs, config.publications.github.outputs
+            outputs,
+            config.publications.github.outputs,
+            declared_names=(spec.name for spec in config.outputs),
         )
         write_release_notes(
             project_root,
@@ -426,13 +428,13 @@ def _write_payload_archive(
     version: str,
     payload_format: str = "zip",
 ) -> None:
-    validate_remap_table(remap_table, reserved_paths=("version.txt",))
     if payload_format == "7z":
         create_7z_payload_archive(
             payload_archive,
             project_root,
             remap_table,
             version=version,
+            _paths_validated=True,
         )
         return
     if payload_format != "zip":

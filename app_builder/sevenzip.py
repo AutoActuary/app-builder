@@ -66,8 +66,10 @@ def create_7z_payload_archive(
     *,
     version: str,
     sevenzip_bin: Path | None = None,
+    _paths_validated: bool = False,
 ) -> None:
-    validate_remap_table(remap_table, reserved_paths=("version.txt",))
+    if not _paths_validated:
+        validate_remap_table(remap_table, reserved_paths=("version.txt",))
     if sevenzip_bin is None:
         sevenzip_bin = vendored_7zip_executable()
 

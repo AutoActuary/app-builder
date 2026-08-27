@@ -277,6 +277,9 @@ collection such as wheels produced by `post_dist`. `publications.github.outputs`
 selects built-in names (`payload`, `installer`, `manifest`, `checksums`) and
 configured names explicitly. Unknown selections, duplicate paths, broad recursive
 globs, unmet match counts, and case-insensitive GitHub filename collisions fail.
+Declaration-only errors fail during config loading, before dependency work or
+hooks. A selected configured output with `min_matches: 0` remains a known logical
+output when no file matches and simply contributes no asset to that release.
 Files matching named-output declarations are removed before `post_dist`, so a
 successful build cannot silently republish an asset left by an earlier run.
 

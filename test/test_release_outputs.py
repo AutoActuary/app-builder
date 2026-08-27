@@ -1,19 +1,68 @@
 from __future__ import annotations
 
+import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from app_builder.release_outputs import (
     describe_output,
     prepare_configured_output_locations,
     resolve_configured_outputs,
     select_publication_outputs,
+    validate_output_declarations,
 )
-from app_builder.schema import ConfigError, ReleaseOutputSpec
+from app_builder.schema import ConfigError, ReleaseOutputSpec, load_app_builder_config
+from app_builder.build import build_release
 
 
 class TestReleaseOutputs(unittest.TestCase):
+    def test_static_output_errors_fail_before_dependency_or_hook_execution(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            subprocess.run(
+                ["git", "init"], cwd=project_root, check=True, capture_output=True
+            )
+            (project_root / "app_builder.yaml").write_text(
+                """
+installer:
+  name: Demo
+  install_directory: "%LOCALAPPDATA%\\\\Demo"
+outputs:
+  - name: 9-invalid
+    pattern: "*.exe"
+""".strip(),
+                encoding="utf-8",
+            )
+
+            with (
+                patch("app_builder.build._run_dependency_stages") as deps,
+                patch("app_builder.build.run_hook_commands") as hooks,
+                self.assertRaisesRegex(ConfigError, "beginning with a letter"),
+            ):
+                build_release(project_root, version="1.0.0")
+
+            deps.assert_not_called()
+            hooks.assert_not_called()
+
+    def test_declaration_validation_rejects_unknown_publication_names(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "unknown output"):
+            validate_output_declarations([], ["missing"])
+
+        with self.assertRaisesRegex(ConfigError, "unknown output"):
+            load_app_builder_config(
+                {
+                    "installer": {
+                        "name": "Demo",
+                        "install_directory": r"%LOCALAPPDATA%\Demo",
+                    },
+                    "publications": {"github": {"outputs": ["missing"]}},
+                }
+            )
+
     def test_prepares_named_outputs_by_removing_only_stale_candidates(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             dist = Path(temp_dir_str) / "dist"
@@ -155,6 +204,15 @@ class TestReleaseOutputs(unittest.TestCase):
             )
             with self.assertRaisesRegex(ConfigError, "filename collision"):
                 select_publication_outputs(outputs, ["wheels"])
+
+            self.assertEqual(
+                (),
+                select_publication_outputs(
+                    outputs,
+                    ["optional-symbols"],
+                    declared_names=["optional-symbols"],
+                ),
+            )
 
 
 if __name__ == "__main__":

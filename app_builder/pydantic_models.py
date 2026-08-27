@@ -11,7 +11,6 @@ from typing import get_args, get_origin, get_type_hints
 
 from .schema import AppBuilderConfig, load_app_builder_config
 from .schema_core import REQUIRED, get_config_meta
-from .schema_export import app_builder_json_schema
 
 _NONE_TYPE = type(None)
 
@@ -32,15 +31,15 @@ def to_pydantic_model(config: AppBuilderConfig) -> Any:
     if not PYDANTIC_AVAILABLE:
         return None
     model_type = AppBuilderPydanticModel
-    if hasattr(model_type, "model_validate"):
-        return model_type.model_validate(config.to_dict())
-    return model_type.parse_obj(config.to_dict())
+    return model_type.model_validate(config.to_dict())
 
 
 def _derive_pydantic_model(config_type: type[Any]) -> Any | None:
     try:
         pydantic = importlib.import_module("pydantic")
     except ImportError:
+        return None
+    if not hasattr(pydantic, "model_validator"):
         return None
     state = _PydanticDerivationState(pydantic)
     return state.model_for_dataclass(config_type)
@@ -72,11 +71,20 @@ class _PydanticDerivationState:
 
         create_model = self._pydantic.create_model
         model_config = self._model_config()
-        if config_type is AppBuilderConfig and isinstance(model_config, dict):
-            model_config["json_schema_extra"] = app_builder_json_schema()
+        validators: dict[str, Any] = {}
+        if config_type is AppBuilderConfig:
+
+            def validate_canonical(model: Any) -> Any:
+                load_app_builder_config(model.model_dump(mode="python"))
+                return model
+
+            validators["validate_canonical"] = self._pydantic.model_validator(
+                mode="after"
+            )(validate_canonical)
         model_type = create_model(
             model_name,
             __config__=model_config,
+            __validators__=validators,
             **field_definitions,
         )
         self._models[config_type] = model_type
@@ -114,12 +122,17 @@ class _PydanticDerivationState:
         meta = get_config_meta(field_)
         if meta.description:
             kwargs["description"] = meta.description
+        json_schema_extra: dict[str, Any] = {}
+        if meta.allowed_values:
+            json_schema_extra["enum"] = list(meta.allowed_values)
+        if meta.pattern is not None:
+            kwargs["pattern"] = meta.pattern
         if meta.example is not REQUIRED:
-            kwargs["json_schema_extra"] = {"examples": [_plain_value(meta.example)]}
+            json_schema_extra["examples"] = [_plain_value(meta.example)]
         elif meta.example_factory is not None:
-            kwargs["json_schema_extra"] = {
-                "examples": [_plain_value(meta.example_factory())]
-            }
+            json_schema_extra["examples"] = [_plain_value(meta.example_factory())]
+        if json_schema_extra:
+            kwargs["json_schema_extra"] = json_schema_extra
 
         field_factory = self._pydantic.Field
         if field_.default is not MISSING:
@@ -132,10 +145,7 @@ class _PydanticDerivationState:
         return field_factory(..., **kwargs)
 
     def _model_config(self) -> Any:
-        config_dict = getattr(self._pydantic, "ConfigDict", None)
-        if config_dict is not None:
-            return config_dict(extra="forbid")
-        return type("Config", (), {"extra": "forbid"})
+        return self._pydantic.ConfigDict(extra="forbid", validate_default=True)
 
 
 def _plain_default_factory(factory: Callable[[], Any]) -> Callable[[], Any]:

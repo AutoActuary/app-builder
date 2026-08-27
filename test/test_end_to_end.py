@@ -1091,10 +1091,15 @@ build_hooks:
                 env=env,
             )
             deadline = time.monotonic() + 10
-            while (
-                install_dir.exists()
-                or not (markers_dir / "post-uninstall.txt").exists()
-            ) and time.monotonic() < deadline:
+            post_uninstall_marker = markers_dir / "post-uninstall.txt"
+            while time.monotonic() < deadline:
+                marker_text = (
+                    post_uninstall_marker.read_text(encoding="utf-8").strip()
+                    if post_uninstall_marker.exists()
+                    else ""
+                )
+                if not install_dir.exists() and marker_text == "post-uninstall":
+                    break
                 time.sleep(0.1)
             self.assertFalse(install_dir.exists())
             self.assertEqual(
@@ -1103,7 +1108,5 @@ build_hooks:
             )
             self.assertEqual(
                 "post-uninstall",
-                (markers_dir / "post-uninstall.txt")
-                .read_text(encoding="utf-8")
-                .strip(),
+                post_uninstall_marker.read_text(encoding="utf-8").strip(),
             )

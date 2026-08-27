@@ -9,11 +9,11 @@ from typing import Any, TypeAlias, cast
 from .schema_core import ConfigError as ConfigError, config_field, materialize_config
 
 HookCommand: TypeAlias = list[str]
-_PYTHON_VERSION_SELECTOR = re.compile(
+_PYTHON_VERSION_SELECTOR_PATTERN = (
     r"^[0-9]+\.[0-9]+\.[0-9]+"
-    r"(?:(?:a|b|rc)[0-9]+|-(?:alpha|beta|candidate|rc)(?:[.-]?[0-9]+)?)?$",
-    re.IGNORECASE,
+    r"(?:(?:a|b|rc)[0-9]+|-(?:alpha|beta|candidate|rc)(?:[.-]?[0-9]+)?)?$"
 )
+_PYTHON_VERSION_SELECTOR = re.compile(_PYTHON_VERSION_SELECTOR_PATTERN)
 
 
 @dataclass(slots=True)
@@ -21,6 +21,8 @@ class PythonBundledOptions:
     python_version: str = config_field(
         description="Exact Python.org Windows runtime version to materialize. Use major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or 3.15.0-beta.",
         example="3.12.10",
+        pattern=_PYTHON_VERSION_SELECTOR_PATTERN,
+        constraint_message="expected major.minor.patch, optionally followed by a Python prerelease such as b4, rc1, or -beta.",
     )
     path: str = config_field(
         default="bin/python",
@@ -34,6 +36,8 @@ class PythonVenvOptions:
     python_version: str = config_field(
         description="Exact Python.org Windows runtime version used when the virtual environment is self-contained because python_bundled is disabled. Prerelease selectors are supported.",
         example="3.12.10",
+        pattern=_PYTHON_VERSION_SELECTOR_PATTERN,
+        constraint_message="expected major.minor.patch, optionally followed by a Python prerelease such as b4, rc1, or -beta.",
     )
     path: str = config_field(
         default="venv",
@@ -136,6 +140,7 @@ class InstallerOptions:
         default="zip",
         description="Inner payload archive format. Use zip for the Windows tar.exe path or 7z for stronger compression with bundled 7-Zip extraction.",
         example="zip",
+        allowed_values=("zip", "7z"),
     )
     wait_on_exit: bool = config_field(
         default=True,
@@ -313,22 +318,9 @@ def load_app_builder_config(
             "legacy application.yaml layout is not supported. Expected app_builder.yaml 1.x keys such as 'installer', 'python_bundled', and 'build_hooks'.",
         )
     config = materialize_config(AppBuilderConfig, value, path=path)
-    if config.installer.payload_format not in {"zip", "7z"}:
-        raise ConfigError(
-            f"{path}.installer.payload_format",
-            "expected one of: 'zip', '7z'.",
-        )
-    for section_name, options in (
-        ("python_bundled", config.python_bundled),
-        ("python_venv", config.python_venv),
-    ):
-        if options is not None and not is_valid_python_version_selector(
-            options.python_version
-        ):
-            raise ConfigError(
-                f"{path}.{section_name}.python_version",
-                "expected major.minor.patch, optionally followed by a Python prerelease such as b4, rc1, or -beta.",
-            )
+    from .release_outputs import validate_output_declarations
+
+    validate_output_declarations(config.outputs, config.publications.github.outputs)
     return config
 
 

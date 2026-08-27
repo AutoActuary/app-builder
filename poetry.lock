@@ -1950,4 +1950,4 @@ test = ["mypy", "types-PyYAML"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "8cafb87666fec17fccd7de77545a7ebd5de6204eb0691206d45fe5424e888641"
+content-hash = "39c1f6910b460082c1879991e5fc55d531b1545791bd459ec72a5eab64f0c250"

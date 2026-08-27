@@ -22,6 +22,43 @@ class ReleaseOutput:
     sha256: str
 
 
+def validate_output_declarations(
+    specs: Iterable[ReleaseOutputSpec], requested_names: Iterable[str] = ()
+) -> None:
+    """Validate output declarations without touching the filesystem."""
+
+    known_names = {name.casefold(): name for name in BUILTIN_OUTPUT_NAMES}
+    for index, spec in enumerate(specs):
+        config_path = f"config.outputs[{index}]"
+        _validate_output_name(spec.name, config_path)
+        name_key = spec.name.casefold()
+        if name_key in known_names:
+            raise ConfigError(
+                f"{config_path}.name",
+                f"duplicate or reserved output name {spec.name!r}.",
+            )
+        known_names[name_key] = spec.name
+        _validate_output_pattern(spec.pattern, config_path)
+        _validate_match_bounds(spec, config_path)
+
+    seen_requests: set[str] = set()
+    for index, requested_name in enumerate(requested_names):
+        key = requested_name.casefold()
+        config_path = f"config.publications.github.outputs[{index}]"
+        if key in seen_requests:
+            raise ConfigError(
+                config_path,
+                f"duplicate output name {requested_name!r}.",
+            )
+        seen_requests.add(key)
+        if key not in known_names:
+            available = ", ".join(sorted(known_names.values()))
+            raise ConfigError(
+                config_path,
+                f"unknown output {requested_name!r}. Available outputs: {available}.",
+            )
+
+
 def resolve_configured_outputs(
     dist_dir: Path,
     specs: Iterable[ReleaseOutputSpec],
@@ -130,6 +167,8 @@ def prepare_configured_output_locations(
 def select_publication_outputs(
     outputs: Iterable[ReleaseOutput],
     requested_names: Iterable[str],
+    *,
+    declared_names: Iterable[str] = (),
 ) -> tuple[ReleaseOutput, ...]:
     grouped: dict[str, list[ReleaseOutput]] = {}
     canonical_names: dict[str, str] = {}
@@ -137,6 +176,10 @@ def select_publication_outputs(
         key = output.name.casefold()
         grouped.setdefault(key, []).append(output)
         canonical_names[key] = output.name
+    for declared_name in declared_names:
+        key = declared_name.casefold()
+        canonical_names.setdefault(key, declared_name)
+        grouped.setdefault(key, [])
 
     selected: list[ReleaseOutput] = []
     seen_requests: set[str] = set()
