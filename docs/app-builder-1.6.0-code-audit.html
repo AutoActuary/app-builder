@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>app-builder 1.6.0 code audit</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f7f8fa;
+      --surface: #ffffff;
+      --ink: #17202a;
+      --muted: #5d6773;
+      --line: #d9dee5;
+      --p1: #a82820;
+      --p1-bg: #fff0ee;
+      --p2: #8a5600;
+      --p2-bg: #fff7e5;
+      --p3: #245a76;
+      --p3-bg: #edf7fb;
+      --ok: #23643c;
+      --ok-bg: #eef8f1;
+      --accent: #315b9a;
+      --code: #f0f2f5;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 15px/1.58 "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+    a { color: #185fa5; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+    code {
+      background: var(--code);
+      border: 1px solid #e1e4e8;
+      border-radius: 3px;
+      padding: 0.08em 0.3em;
+      font: 0.92em Consolas, "Courier New", monospace;
+      overflow-wrap: anywhere;
+    }
+    header {
+      background: #202b38;
+      color: #fff;
+      border-bottom: 5px solid #d2a044;
+    }
+    header .inner, main, footer { width: min(1180px, calc(100% - 36px)); margin: 0 auto; }
+    header .inner { padding: 42px 0 36px; }
+    h1 { margin: 0 0 8px; font-size: clamp(30px, 5vw, 48px); line-height: 1.08; letter-spacing: 0; }
+    header p { margin: 8px 0 0; color: #dbe3ec; max-width: 900px; }
+    .meta { font: 13px Consolas, monospace; color: #aebccc; }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(255,255,255,0.97);
+      border-bottom: 1px solid var(--line);
+      overflow-x: auto;
+    }
+    nav .inner { width: min(1180px, calc(100% - 36px)); margin: 0 auto; display: flex; gap: 20px; }
+    nav a { flex: none; padding: 12px 0 10px; color: #34404d; text-decoration: none; font-weight: 600; border-bottom: 2px solid transparent; }
+    nav a:hover { border-color: var(--accent); }
+    main { padding: 34px 0 64px; }
+    section { margin: 0 0 34px; }
+    h2 { margin: 0 0 14px; font-size: 25px; line-height: 1.2; letter-spacing: 0; }
+    h3 { margin: 0 0 8px; font-size: 18px; line-height: 1.25; letter-spacing: 0; }
+    p { margin: 7px 0 12px; }
+    ul, ol { margin: 8px 0 14px; padding-left: 24px; }
+    li { margin: 5px 0; }
+    .verdict {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+    .panel, .finding, .note {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 20px;
+    }
+    .verdict-main { border-left: 6px solid var(--p1); }
+    .verdict-main strong { color: var(--p1); font-size: 21px; }
+    .scoreboard { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .metric { border: 1px solid var(--line); border-radius: 5px; padding: 13px 10px; text-align: center; background: #fbfcfd; }
+    .metric strong { display: block; font-size: 28px; line-height: 1; }
+    .metric span { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; text-transform: uppercase; }
+    .p1-text { color: var(--p1); }
+    .p2-text { color: var(--p2); }
+    .p3-text { color: var(--p3); }
+    .finding { margin: 0 0 14px; padding-left: 18px; }
+    .finding.p1 { border-left: 5px solid var(--p1); }
+    .finding.p2 { border-left: 5px solid var(--p2); }
+    .finding.p3 { border-left: 5px solid var(--p3); }
+    .badge {
+      display: inline-block;
+      min-width: 34px;
+      margin-right: 8px;
+      border-radius: 4px;
+      padding: 2px 7px;
+      color: #fff;
+      font: 700 12px/1.5 "Segoe UI", sans-serif;
+      text-align: center;
+      vertical-align: 2px;
+    }
+    .badge.p1 { background: var(--p1); }
+    .badge.p2 { background: var(--p2); }
+    .badge.p3 { background: var(--p3); }
+    .labels { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0 12px; }
+    .label { background: #edf0f4; border-radius: 4px; padding: 3px 8px; color: #46515d; font-size: 12px; }
+    .evidence { background: #f8fafc; border: 1px solid #e2e7ec; border-radius: 4px; padding: 12px 14px; margin: 10px 0; }
+    .fix { background: var(--ok-bg); border-left: 4px solid var(--ok); padding: 10px 13px; margin-top: 10px; }
+    .source { color: var(--muted); font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: #edf1f5; font-size: 13px; }
+    tr:last-child td { border-bottom: 0; }
+    .nowrap { white-space: nowrap; }
+    .method-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .callout { border-left: 5px solid var(--accent); background: #eef4fd; padding: 14px 16px; }
+    .ok { background: var(--ok-bg); border-color: #bedbc7; }
+    .known { background: var(--p2-bg); border-color: #ead298; }
+    footer { padding: 0 0 42px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 800px) {
+      .verdict, .method-grid { grid-template-columns: 1fr; }
+      .scoreboard { grid-template-columns: repeat(3, 1fr); }
+      header .inner, main, footer, nav .inner { width: min(100% - 22px, 1180px); }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="inner">
+      <div class="meta">Independent repository audit | 27 August 2026</div>
+      <h1>app-builder 1.6.0 code audit</h1>
+      <p>Audit of the exact source published as 1.6.0, with repository-wide tracing, independent specialist reviews, focused Windows reproductions, and false-positive challenge.</p>
+      <p class="meta">commit c7dfafbfa79529605bc942dd9bb7dcaf17a81945 | origin/1.x | tag 1.6.0</p>
+    </div>
+  </header>
+
+  <nav aria-label="Audit sections">
+    <div class="inner">
+      <a href="#verdict">Verdict</a>
+      <a href="#p1">Release blockers</a>
+      <a href="#p2">Contract gaps</a>
+      <a href="#p3">Documentation</a>
+      <a href="#limits">Known limits</a>
+      <a href="#method">Method</a>
+      <a href="#coverage">Coverage</a>
+      <a href="#fix-order">Fix order</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="verdict">
+      <h2>Verdict</h2>
+      <div class="verdict">
+        <div class="panel verdict-main">
+          <strong>Do not publish the next release yet.</strong>
+          <p>The normal test suite is healthy, but the audit found failures outside its current assertions. The most serious are destructive legacy-upgrade rollback, install-root traversal, release identity drift, a dependency-confusion path in the 0.x bridge, and non-reproducible runtime materialization.</p>
+          <p>This is not a rewrite verdict. Archive safety, payload sealing, current-1.x rollback, cache locking, manifest integrity, and the normal ZIP and 7-Zip paths held up well. The required work is concentrated and testable.</p>
+        </div>
+        <div class="panel">
+          <div class="scoreboard">
+            <div class="metric"><strong class="p1-text">11</strong><span>P1 blockers</span></div>
+            <div class="metric"><strong class="p2-text">13</strong><span>P2 gaps</span></div>
+            <div class="metric"><strong class="p3-text">3</strong><span>P3 docs</span></div>
+          </div>
+          <p><strong>Confidence:</strong> high for every listed finding. Each has a direct source-to-effect trace; most have a throwaway or real Windows reproduction.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="p1">
+      <h2>Release blockers</h2>
+
+      <article class="finding p1" id="p1-legacy-rollback">
+        <h3><span class="badge p1">P1</span>A failed 0.x upgrade destroys the old installation</h3>
+        <div class="labels"><span class="label">installer</span><span class="label">rollback</span><span class="label">data loss</span></div>
+        <p>A recognized current 1.x installation is moved to a sibling backup before replacement. A recognized legacy installation is instead removed immediately. If any later step fails, including <code>post_install</code>, rollback removes the new files but has no legacy backup to restore.</p>
+        <div class="evidence"><strong>Reproduction:</strong> a generated installer was run against a recognized legacy-shaped directory with a new <code>post_install</code> hook that exits 19. The installer returned failure and left neither the legacy files nor the replacement directory.</div>
+        <p class="source">Source: <a href="../app_builder/installer_bundle.py">installer_bundle.py:338-397</a>. Existing tests cover current-install rollback and a failing legacy pre-uninstall hook, but not failure after legacy removal.</p>
+        <div class="fix"><strong>Fix direction:</strong> preserve the validated legacy directory and its Windows integration state until every new-install step succeeds. Restore both on failure. Add a real Windows regression that fails after legacy removal.</div>
+      </article>
+
+      <article class="finding p1" id="p1-install-root">
+        <h3><span class="badge p1">P1</span>Variable-root install paths can escape their approved root</h3>
+        <div class="labels"><span class="label">installer</span><span class="label">path safety</span><span class="label">uninstall authority</span></div>
+        <p>The preflight accepts a leading approved variable and returns before checking <code>..</code> components or the normalized destination. The installer later expands and canonicalizes the path, so a value that appears user-scoped can resolve to <code>C:\</code>, <code>C:\Windows</code>, or <code>C:\ProgramData</code>. The resulting uninstaller treats that resolved directory as its deletion root.</p>
+        <div class="evidence"><strong>Reproductions:</strong> <code>%USERPROFILE%\..\..\Windows\Demo</code> passed preflight and resolved to <code>C:\Windows\Demo</code>. <code>C:\harmless-name\..</code> also passed and normalized to the drive root.</div>
+        <p class="source">Source: <a href="../app_builder/build_preflight.py">build_preflight.py:97-159</a>; runtime normalization in <a href="../app_builder/installer_bundle.py">installer_bundle.py:549</a>.</p>
+        <div class="fix"><strong>Fix direction:</strong> reject dot segments, expand known variables during release preflight, require the normalized target to be a strict child of the permitted user root, and repeat the invariant inside the generated installer.</div>
+      </article>
+
+      <article class="finding p1" id="p1-apostrophe">
+        <h3><span class="badge p1">P1</span>Installer EXEs fail when their path contains an apostrophe</h3>
+        <div class="labels"><span class="label">ExeWrap</span><span class="label">PowerShell</span><span class="label">first launch</span></div>
+        <p>The ExeWrap bootstrap inserts <code>@{exe_path}</code> directly into a PowerShell single-quoted literal. Apostrophes in a user profile or download directory terminate that literal before extraction begins.</p>
+        <div class="evidence"><strong>Reproduction:</strong> a real generated installer launched from an <code>O'Brien</code> directory exited 1 with <code>The string is missing the terminator: '</code>.</div>
+        <p class="source">Source: <a href="../app_builder/installer_bundle.py">installer_bundle.py:144</a>.</p>
+        <div class="fix"><strong>Fix direction:</strong> carry the executable path through an ExeWrap JSON-safe value or environment value and read that value in PowerShell. Add final-EXE tests for apostrophes, spaces, brackets, Unicode, and trailing punctuation.</div>
+      </article>
+
+      <article class="finding p1" id="p1-template">
+        <h3><span class="badge p1">P1</span>The generated starter config cannot build its own payload</h3>
+        <div class="labels"><span class="label">init</span><span class="label">first use</span><span class="label">config contract</span></div>
+        <p>The generated <code>paths.include</code> list omits <code>README.md</code>, while the same generated config requires a remap from <code>README.md</code> to <code>docs/README.md</code>. The remap validator correctly refuses a source outside the selected file set.</p>
+        <div class="evidence"><strong>Reproduction:</strong> after generating the documented assets and providing the runtime placeholder, payload mapping failed with <code>Payload remap source is not present in the resolved file set</code>.</div>
+        <p class="source">Source: <a href="../app_builder/schema.py">schema.py:75-100</a>; enforcement in <a href="../app_builder/fileset.py">fileset.py:114</a>.</p>
+        <div class="fix"><strong>Fix direction:</strong> include <code>README.md</code> in the generated selection or remove the example remap. Add an acceptance test that runs <code>init</code> and then builds the generated project without hand editing.</div>
+      </article>
+
+      <article class="finding p1" id="p1-init-force">
+        <h3><span class="badge p1">P1</span><code>init --force</code> overwrites customized application assets</h3>
+        <div class="labels"><span class="label">init</span><span class="label">data loss</span></div>
+        <p>The CLI describes <code>--force</code> as overwriting the template config. The implementation also unconditionally replaces every file under <code>application-templates</code>, including a customized launcher and icon.</p>
+        <div class="evidence"><strong>Reproduction:</strong> modify <code>application-templates/program.cmd</code>, run forced initialization, and the packaged default silently replaces the custom file.</div>
+        <p class="source">Source: <a href="../app_builder/template.py">template.py:222-238</a>; option help in <a href="../app_builder/main.py">main.py:69</a>.</p>
+        <div class="fix"><strong>Fix direction:</strong> make config replacement and starter-asset replacement separate explicit choices. Never overwrite an existing asset under the current <code>--force</code> contract.</div>
+      </article>
+
+      <article class="finding p1" id="p1-dependency-confusion">
+        <h3><span class="badge p1">P1</span>The 0.x compatibility bridge can be replaced by an index package</h3>
+        <div class="labels"><span class="label">supply chain</span><span class="label">0.x bridge</span><span class="label">pip</span></div>
+        <p>The root requirements file adds the local bridge with <code>--find-links</code> and then asks pip for <code>app-builder-0x-version-bridge==1.0.0</code> by name. This does not require the local candidate. An index wheel with that name and version can win resolution. The package name was unclaimed on PyPI at audit time.</p>
+        <div class="evidence"><strong>Reproduction:</strong> an isolated pip solve containing a local bridge candidate and an index-style wheel with the same name/version selected the wheel rather than the local source.</div>
+        <p class="source">Source: <a href="../requirements.txt">requirements.txt:3</a> and <a href="../__app_builder_0x_version_bridge__/bridge-links.html">bridge-links.html:5</a>.</p>
+        <div class="fix"><strong>Fix direction:</strong> use a direct relative requirement that identifies the local bridge itself. Do not resolve this compatibility shim by a public package name.</div>
+      </article>
+
+      <article class="finding p1" id="p1-build-commit">
+        <h3><span class="badge p1">P1</span>Published artifacts are not bound to the commit that built them</h3>
+        <div class="labels"><span class="label">release-gh</span><span class="label">provenance</span></div>
+        <p>Artifacts are assembled before <code>pre_github_release</code>. Publication preflight later validates the current clean <code>HEAD</code>, but the sealed manifest does not record and verify the build commit. A hook or concurrent process can commit B after artifacts were built from A, causing A's bytes to be published against B.</p>
+        <div class="evidence"><strong>Reproduction:</strong> artifacts and notes were built at commit A, commit B was created without rebuilding, and publication preflight accepted the unchanged artifacts at B.</div>
+        <p class="source">Source: <a href="../app_builder/build.py">build.py:724-747</a> and <a href="../app_builder/release_preflight.py">release_preflight.py:93</a>.</p>
+        <div class="fix"><strong>Fix direction:</strong> record the exact build commit in the manifest and release result, then require publication <code>HEAD</code> and the tag target to equal it.</div>
+      </article>
+
+      <article class="finding p1" id="p1-github-repository">
+        <h3><span class="badge p1">P1</span>GitHub validation and upload can address different repositories</h3>
+        <div class="labels"><span class="label">release-gh</span><span class="label">repository identity</span></div>
+        <p>Preflight resolves a repository with <code>gh repo view</code>, but later <code>gh release</code> calls omit <code>--repo</code>. An ambient <code>GH_REPO</code> can therefore redirect release reads and mutations away from the repository that was validated.</p>
+        <div class="evidence"><strong>Reproduction:</strong> in this worktree with <code>GH_REPO=cli/cli</code>, <code>gh repo view</code> resolved <code>AutoActuary/app-builder</code> while <code>gh release list</code> addressed <code>cli/cli</code>.</div>
+        <p class="source">Source: <a href="../app_builder/build.py">build.py:766-864</a>.</p>
+        <div class="fix"><strong>Fix direction:</strong> normalize one repository identity during preflight and pass it explicitly to every view, create, upload, edit, and asset-delete command.</div>
+      </article>
+
+      <article class="finding p1" id="p1-draft-target">
+        <h3><span class="badge p1">P1</span>An existing draft can keep an obsolete target commit</h3>
+        <div class="labels"><span class="label">release-gh</span><span class="label">draft release</span></div>
+        <p>Existing release metadata requests only URL and assets. When a tagless draft already targets commit A and the project advances to B, app-builder uploads B's outputs and edits title/notes without inspecting or updating <code>targetCommitish</code>.</p>
+        <div class="evidence"><strong>Trace:</strong> the current <code>gh release view</code> request omits <code>targetCommitish</code>, and <code>gh release edit</code> omits <code>--target</code>. Remote tag validation returns early when the tag does not yet exist.</div>
+        <p class="source">Source: <a href="../app_builder/build.py">build.py:777-840</a>.</p>
+        <div class="fix"><strong>Fix direction:</strong> inspect draft status and target. Update a tagless draft to the verified build commit or reject the mismatch before uploading.</div>
+      </article>
+
+      <article class="finding p1" id="p1-stale-dependencies">
+        <h3><span class="badge p1">P1</span>Removed dependencies survive into later releases</h3>
+        <div class="labels"><span class="label">Python runtime</span><span class="label">reproducibility</span><span class="label">stale code</span></div>
+        <p>Existing bundled and venv runtimes are reused when their Python marker matches. Dependency materialization only installs packages currently selected by <code>poetry.lock</code>. It never removes packages deleted from the lock, and returns immediately when the selected set is empty.</p>
+        <div class="evidence"><strong>Reproduction:</strong> a disposable runtime containing <code>obsolete_dependency</code> was materialized against an empty lock. The package remained importable before and after. The manifest would record only the new lock while the payload retained old code.</div>
+        <p class="source">Source: <a href="../app_builder/poetry_dependencies.py">poetry_dependencies.py:146-197</a>; runtime reuse in <a href="../app_builder/python_runtime.py">python_runtime.py:747-784</a>.</p>
+        <div class="fix"><strong>Fix direction:</strong> key environments to the selected lock digest and rebuild them atomically when it changes, or reconcile installed distributions against an exact lock inventory. Add consecutive-build tests.</div>
+      </article>
+
+      <article class="finding p1" id="p1-immutable-refs">
+        <h3><span class="badge p1">P1</span>Immutable source refs still resolve mutable dependency graphs</h3>
+        <div class="labels"><span class="label">managed versions</span><span class="label">0.x bridge</span><span class="label">reproducibility</span></div>
+        <p>A cold managed-version cache upgrades pip and installs the checked-out repository using ranged project dependencies instead of that ref's committed lock. The dogfood 0.x bridge also checks out a tag without an expected commit and installs wildcard legacy requirements without hashes. Rebuilding one immutable tag at different times can produce different executable environments.</p>
+        <div class="evidence"><strong>Reproductions:</strong> a clean managed install of tag 1.6.0 selected Click 8.5.0 while its <code>poetry.lock</code> records 8.4.1. The generated bridge contained 18 independently resolved distributions not represented in the release manifest.</div>
+        <p class="source">Source: <a href="../app_builder_meta/version_cache.py">version_cache.py:104-121</a> and <a href="../scripts/build_legacy_0x_bridge.py">build_legacy_0x_bridge.py:43-63</a>.</p>
+        <div class="fix"><strong>Fix direction:</strong> define committed, hash-checked bootstrap constraints for managed versions and the bridge; install the repository itself with <code>--no-deps</code>; pin the 0.x commit; record dependency-input digests in the build manifest.</div>
+      </article>
+    </section>
+
+    <section id="p2">
+      <h2>Contract gaps and hardening</h2>
+      <table>
+        <thead><tr><th>Priority</th><th>Finding</th><th>Verified effect</th><th>Required change</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="nowrap"><span class="badge p2">P2</span></td>
+            <td><strong>Documented Python prereleases fail release preflight</strong><br><span class="source"><a href="../app_builder/build_preflight.py">build_preflight.py:174-181</a>, <a href="../app_builder/schema.py">schema.py:12-15</a></span></td>
+            <td><code>3.15.0-beta</code> loads and resolves, then the duplicated stable-only preflight regex rejects it.</td>
+            <td>Use one shared selector validator and add an end-to-end prerelease preflight test.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td><strong>Cache commands dispatch through the pinned project version</strong><br><span class="source"><a href="../app_builder_meta/dispatch.py">dispatch.py:69-82</a>, <a href="../app_builder_meta/version_cache.py">version_cache.py:250</a></span></td>
+            <td><code>cache path</code> can be sent to an older version without that command. Removing the currently executing cached version fails on Windows with access denied.</td>
+            <td>Keep launcher/cache management in the current outer CLI and defer self-removal until the child exits.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td><strong>Normal runtime selection can choose free-threaded Python</strong><br><span class="source"><a href="../app_builder/python_runtime.py">python_runtime.py:350-388</a></span></td>
+            <td>Both <code>pythoncore-3.13-64</code> and <code>pythoncore-3.13t-64</code> pass the filter. Index ordering decides which ABI is shipped.</td>
+            <td>Match the exact non-<code>t</code> package identity, or make free-threading an explicit option.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td><strong>Concurrent runtime materialization can corrupt the project runtime</strong><br><span class="source"><a href="../app_builder/python_runtime.py">python_runtime.py:685</a></span></td>
+            <td>Two synchronized extractions raced while deleting/populating one directory, raised errors, and left a partial target.</td>
+            <td>Use a per-runtime lock, sibling staging directory, validation, and atomic promotion.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td><strong>Python index and artifact downloads have no deadline</strong><br><span class="source"><a href="../app_builder/python_runtime.py">python_runtime.py:313,395</a></span></td>
+            <td>A local server that accepted a connection and stopped responding left the build blocked beyond the reproduction deadline.</td>
+            <td>Add finite connect/read timeouts and bounded retries, with a stalled-server test.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td><strong>Existing-release reconciliation deletes stale assets too early</strong><br><span class="source"><a href="../app_builder/build.py">build.py:794-820</a></span></td>
+            <td>If replacement upload fails, stale assets have already been deleted and the public release is left partially changed.</td>
+            <td>Upload and edit first, delete stale assets last, and test each failure boundary.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td><strong>The claimed Pydantic 1.x extra crashes on import</strong><br><span class="source"><a href="../pyproject.toml">pyproject.toml:18</a>, <a href="../app_builder/pydantic_models.py">pydantic_models.py:134</a></span></td>
+            <td>An isolated allowed install with Pydantic 1.10.24 failed with a metaclass conflict.</td>
+            <td>Implement version-specific model configuration or narrow support to Pydantic 2, then test both declared bounds.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td><strong>Exported schemas accept config rejected by the real loader</strong><br><span class="source"><a href="../app_builder/schema_export.py">schema_export.py:63</a>, <a href="../app_builder/pydantic_models.py">pydantic_models.py:54</a></span></td>
+            <td>Pydantic 2 and JSON Schema accept values such as <code>payload_format: rar</code> and <code>python_version: 3.12</code> that the canonical loader rejects.</td>
+            <td>Put enums, patterns, and hook constraints in shared schema metadata consumed by all three validators.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td><strong><code>init</code> can silently shadow <code>app-builder.yaml</code></strong><br><span class="source"><a href="../app_builder/template.py">template.py:222-228</a>, <a href="../app_builder/config.py">config.py:10</a></span></td>
+            <td>Initialization creates preferred <code>app_builder.yaml</code> beside the accepted hyphenated config, changing which project definition loads.</td>
+            <td>Check every accepted filename before initialization and reject ambiguous projects.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td><strong>Static output errors are detected after hooks and installer assembly</strong><br><span class="source"><a href="../app_builder/build.py">build.py:230</a>, <a href="../app_builder/release_outputs.py">release_outputs.py:182</a></span></td>
+            <td>An invalid output name ran <code>pre_dist</code> and created the installer before failing in output resolution.</td>
+            <td>Validate declaration-only properties in configuration preflight; defer only file-match checks.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td><strong>A selected optional zero-match output is reported as unknown</strong><br><span class="source"><a href="../app_builder/release_outputs.py">release_outputs.py:151</a></span></td>
+            <td>A declared output with <code>min_matches: 0</code> resolves correctly to no files, but selecting its name for GitHub publication fails as unknown.</td>
+            <td>Preserve declared logical names independently of their current files, or reject and document this combination.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td><strong>Payload collision validation is quadratic and repeated</strong><br><span class="source"><a href="../app_builder/fileset.py">fileset.py:210</a>, <a href="../app_builder/build.py">build.py:145,407</a></span></td>
+            <td>A measured 32,000-file validation pass took 15.1 seconds and is repeated three times for ZIP and four for 7-Zip.</td>
+            <td>Use sorted normalized paths or a trie for O(n log n) validation, then validate the final mapping once.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td><strong>The app-builder PATH hook does not always put app-builder first</strong><br><span class="source"><a href="../scripts/post-install.ps1">post-install.ps1:25-45</a></span></td>
+            <td>If the install directory already appears later in user PATH, the hook leaves it there. An earlier executable can still win, and duplicates remain.</td>
+            <td>Remove every normalized match, prepend exactly one install path, and test middle/duplicate entries.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note known" style="margin-top:14px">
+        <h3>Secure default needs a decision</h3>
+        <p>Both Python runtime sections still default to <code>3.11.1</code> from December 2022. Python 3.11.16 is the current security release, and 3.11 is now security-fixes-only. Because app-builder requires an exact version for reproducibility, the clean contract is likely to require <code>python_version</code> whenever a runtime section is enabled, rather than silently choosing an old patch. See <a href="../app_builder/schema.py">schema.py:26-42</a> and the <a href="https://www.python.org/downloads/release/python-31116/">Python 3.11.16 release</a>.</p>
+      </div>
+    </section>
+
+    <section id="p3">
+      <h2>Documentation and packaging defects</h2>
+      <article class="finding p3">
+        <h3><span class="badge p3">P3</span>User-site wheel installs cannot find their packaged help</h3>
+        <p>The wheel puts help under the user data scheme, while lookup checks package-adjacent docs and <code>sys.prefix\share</code>. An isolated <code>pip --user</code> install fell back to GitHub despite the local help file being present.</p>
+        <p class="source">Source: <a href="../app_builder/main.py">main.py:40</a> and <a href="../pyproject.toml">pyproject.toml:41</a>.</p>
+      </article>
+      <article class="finding p3">
+        <h3><span class="badge p3">P3</span>The managed-version example names a nonexistent tag</h3>
+        <p>The help uses <code>v1.0.0</code>, but resolution is literal and the repository's 1.x release tags are unprefixed. Replace it with a real supported tag.</p>
+        <p class="source">Source: <a href="app-builder-help.html#managed-versions">app-builder-help.html:1696</a>.</p>
+      </article>
+      <article class="finding p3">
+        <h3><span class="badge p3">P3</span>The help names the obsolete download-cache location</h3>
+        <p>The packaged guide says <code>%TEMP%\app-builder-downloads</code>. The current default is <code>%LOCALAPPDATA%\app-builder\cache\downloads</code>, subject to the configured cache root.</p>
+        <p class="source">Source: <a href="app-builder-help.html#cache">app-builder-help.html:1376</a> and <a href="../app_builder_meta/environment.py">environment.py:99</a>.</p>
+      </article>
+    </section>
+
+    <section id="limits">
+      <h2>Known limits and rejected candidates</h2>
+      <div class="method-grid">
+        <div class="note known">
+          <h3>Known: uninstall completion is asynchronous</h3>
+          <p>The uninstaller returns success after launching a detached cleanup worker. A later locked-file or <code>post_uninstall</code> failure cannot change the caller's exit code; the worker leaves temp diagnostics. The test suite explicitly asserts this behavior. This was already documented as an accepted limitation, so it is not counted again as a new defect, but automation cannot treat exit 0 as proof of completed removal.</p>
+          <p class="source"><a href="../app_builder/installer_bundle.py">installer_bundle.py:1209-1324</a>; <a href="../test/test_installer_failure_modes.py">test_installer_failure_modes.py:716-778</a>.</p>
+        </div>
+        <div class="note known">
+          <h3>Known: unsigned installers can trigger reputation systems</h3>
+          <p>Open issue <a href="https://github.com/AutoActuary/app-builder/issues/76">#76</a> records a Defender ML detection that later rescanned clean. The published bytes and digests matched, but releases are not Authenticode signed. Signing and a final Defender scan remain release-process hardening, not proof of a source defect.</p>
+        </div>
+        <div class="note">
+          <h3>Rejected: a modified cache manifest can name another executable</h3>
+          <p>The managed cache trusts its own manifest paths. This is worth containment hardening, but it was not counted as a security blocker because the cache is private user-writable state. A same-user actor able to replace that manifest can already replace the launcher, cached Python, or checkout. Treat invalid containment as cache corruption and rebuild it.</p>
+        </div>
+        <div class="note ok">
+          <h3>No defect found in archive containment</h3>
+          <p>ZIP and 7-Zip destination validation rejects traversal, absolute paths, Windows reserved names, case-insensitive collisions, and parent file/directory collisions. Safe extraction and embedded-payload equality also held.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="method">
+      <h2>Audit method</h2>
+      <div class="callout">
+        <strong>Rule used throughout:</strong> first-pass suspicion is not a finding. A finding needed a complete source-to-effect path plus a reproduction, an executable test, or a cross-file proof that survived challenge.
+      </div>
+      <p>No single guide is the whole state of the art. This audit combined the strongest current practices from repository-level agent research, secure code review, threat modeling, and agent-review guidance:</p>
+      <ol>
+        <li><strong>Model the whole system.</strong> Map entry points, trust boundaries, persistent state, generated code, network inputs, and irreversible actions before reviewing functions.</li>
+        <li><strong>Use independent specialist passes.</strong> Six reviewers were assigned installer lifecycle, config and execution, release and supply chain, public contract, tests and performance, and an adversarial whole-repository pass. Two were stopped by an automated classifier; five completed, including the whole-repository pass.</li>
+        <li><strong>Trace across files.</strong> Follow data from config or environment through validation, generated PowerShell, filesystem/registry mutation, cache reuse, and GitHub CLI calls.</li>
+        <li><strong>Validate path feasibility.</strong> Reproduce on Windows or in disposable repositories and environments. Measure performance claims rather than inferring them from loop shape.</li>
+        <li><strong>Challenge false positives.</strong> Deduplicate common root causes, distinguish same-user cache trust from a crossed boundary, and keep accepted limitations separate.</li>
+        <li><strong>Report for repair.</strong> Every finding identifies workflow, effect, evidence, source, fix direction, and missing regression test.</li>
+      </ol>
+      <p>Primary references: <a href="https://proceedings.mlr.press/v267/guo25n.html">RepoAudit, ICML 2025</a>, <a href="https://help.openai.com/en/articles/20001107-codex-security">Codex Security</a>, <a href="https://cheatsheetseries.owasp.org/cheatsheets/Secure_Code_Review_Cheat_Sheet.html">OWASP Secure Code Review</a>, <a href="https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html">OWASP Threat Modeling</a>, <a href="https://docs.github.com/en/copilot/concepts/agents/code-review">GitHub agent code review guidance</a>, and <a href="https://openai.com/business/guides-and-resources/how-openai-uses-codex/">How OpenAI uses Codex</a>.</p>
+    </section>
+
+    <section id="coverage">
+      <h2>Coverage and verification</h2>
+      <div class="method-grid">
+        <div class="panel ok">
+          <h3>Local gates</h3>
+          <ul>
+            <li><strong>215</strong> unit and Windows integration tests passed in 49.7 seconds.</li>
+            <li>Black passed on 62 files.</li>
+            <li>MyPy passed on 61 source files.</li>
+            <li><code>compileall</code> and <code>pip check</code> passed.</li>
+            <li>The worktree started clean at the exact 1.6.0 commit.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Focused validation</h3>
+          <ul>
+            <li>Real Windows installer failure and legacy rollback.</li>
+            <li>Real ExeWrap launch beneath an apostrophe path.</li>
+            <li>Disposable runtimes, managed caches, wheels, and Pydantic environments.</li>
+            <li>Throwaway Git repositories and mocked GitHub release failure boundaries.</li>
+            <li>Payload validation timing through 32,000 files.</li>
+          </ul>
+        </div>
+      </div>
+      <h3 style="margin-top:18px">Areas that held up</h3>
+      <p>Archive traversal and collision defenses, safe Python ZIP extraction, payload sealing, installer/payload/manifest byte equality, checksums, current-1.x install rollback, cache locking and atomic cache promotion, version/tag/package identity for 1.6.0, packaged template/help inclusion, strict unknown-key loading, and ZIP/7-Zip normal paths.</p>
+      <h3>External tests not performed</h3>
+      <p>No live GitHub release was mutated. No UAC/elevated install, ARM Windows, x86 Windows, code-signing flow, or hostile network proxy was exercised. The final public 1.6.0 installer was not re-published.</p>
+    </section>
+
+    <section id="fix-order">
+      <h2>Recommended fix order</h2>
+      <ol>
+        <li><strong>Stop destructive or unsafe installation.</strong> Fix legacy rollback, canonical install-root enforcement, and ExeWrap apostrophe handling. Add real final-EXE tests first.</li>
+        <li><strong>Bind publication identity.</strong> Seal build commit and repository identity, validate draft target, and reorder existing-release reconciliation.</li>
+        <li><strong>Make dependency materialization deterministic.</strong> Fix local bridge selection, stale package removal, managed-version locks, and bridge locks.</li>
+        <li><strong>Repair first-use contracts.</strong> Make generated config build, make <code>init</code> non-destructive, and handle all accepted config filenames.</li>
+        <li><strong>Unify schema behavior.</strong> Resolve prerelease validation, Pydantic 1 support, exported constraints, and optional-output semantics.</li>
+        <li><strong>Harden runtime operations.</strong> Lock and atomically promote runtimes, disambiguate free-threaded packages, add network deadlines, and optimize payload validation.</li>
+        <li><strong>Regenerate and verify all docs.</strong> Fix local help lookup, examples, and cache locations, then run docs snapshot and wheel-install tests.</li>
+      </ol>
+      <div class="callout"><strong>Release gate:</strong> all P1 findings fixed with regression tests; P2 findings either fixed or explicitly accepted in release notes; full Windows suite, final ZIP and 7-Zip installer rehearsals, managed-version cold start, 0.x bridge dispatch, and a dry-run GitHub publication contract test pass from a clean clone.</div>
+    </section>
+  </main>
+
+  <footer>
+    Documentation-only audit. No production code or release state was changed.
+  </footer>
+</body>
+</html>
