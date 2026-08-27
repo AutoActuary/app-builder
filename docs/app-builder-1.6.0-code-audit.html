@@ -245,6 +245,7 @@
         <div class="evidence"><strong>Reproduction:</strong> artifacts and notes were built at commit A, commit B was created without rebuilding, and publication preflight accepted the unchanged artifacts at B.</div>
         <p class="source">Source: <a href="../app_builder/build.py">build.py:724-747</a> and <a href="../app_builder/release_preflight.py">release_preflight.py:93</a>.</p>
         <div class="fix"><strong>Fix direction:</strong> record the exact build commit in the manifest and release result, then require publication <code>HEAD</code> and the tag target to equal it.</div>
+        <div class="implementation"><strong>Implementation:</strong> each release manifest now records Git <code>HEAD</code> at build start, the build stops if <code>HEAD</code> changes during assembly, and publication refuses any manifest whose build commit differs from current <code>HEAD</code>. The embedded manifest receives the same field, so stale artifacts cannot be relabeled as a newer commit.</div>
       </article>
 
       <article class="finding p1" id="p1-github-repository">
@@ -254,6 +255,7 @@
         <div class="evidence"><strong>Reproduction:</strong> in this worktree with <code>GH_REPO=cli/cli</code>, <code>gh repo view</code> resolved <code>AutoActuary/app-builder</code> while <code>gh release list</code> addressed <code>cli/cli</code>.</div>
         <p class="source">Source: <a href="../app_builder/build.py">build.py:766-864</a>.</p>
         <div class="fix"><strong>Fix direction:</strong> normalize one repository identity during preflight and pass it explicitly to every view, create, upload, edit, and asset-delete command.</div>
+        <div class="implementation"><strong>Implementation:</strong> publication resolves <code>nameWithOwner</code> once and passes it through <code>--repo</code> to every release view, create, upload, edit, and delete operation. Tests set up the full command sequence and assert that no release mutation can fall back to ambient <code>GH_REPO</code>.</div>
       </article>
 
       <article class="finding p1" id="p1-draft-target">
@@ -263,6 +265,7 @@
         <div class="evidence"><strong>Trace:</strong> the current <code>gh release view</code> request omits <code>targetCommitish</code>, and <code>gh release edit</code> omits <code>--target</code>. Remote tag validation returns early when the tag does not yet exist.</div>
         <p class="source">Source: <a href="../app_builder/build.py">build.py:777-840</a>.</p>
         <div class="fix"><strong>Fix direction:</strong> inspect draft status and target. Update a tagless draft to the verified build commit or reject the mismatch before uploading.</div>
+        <div class="implementation"><strong>Implementation:</strong> existing release lookup now requires <code>isDraft</code> and <code>targetCommitish</code>. A tagless draft is retargeted to the manifest-verified <code>HEAD</code>; an impossible published release without a readable tag is rejected.</div>
       </article>
 
       <article class="finding p1" id="p1-stale-dependencies">
@@ -323,7 +326,7 @@
             <td><span class="badge p2">P2</span></td>
             <td><strong>Existing-release reconciliation deletes stale assets too early</strong><br><span class="source"><a href="../app_builder/build.py">build.py:794-820</a></span></td>
             <td>If replacement upload fails, stale assets have already been deleted and the public release is left partially changed.</td>
-            <td>Upload and edit first, delete stale assets last, and test each failure boundary.</td>
+            <td>Upload and edit first, delete stale assets last, and test each failure boundary.<div class="implementation"><strong>Implementation:</strong> existing releases now upload replacements first, refresh title, notes, and any draft target second, and remove stale assets only after both succeed. A simulated failed upload proves that no delete command is issued.</div></td>
           </tr>
           <tr>
             <td><span class="badge p2">P2</span></td>

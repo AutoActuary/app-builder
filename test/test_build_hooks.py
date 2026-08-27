@@ -392,6 +392,8 @@ build_hooks:
                 "release",
                 "view",
                 "1.2.3",
+                "--repo",
+                "AutoActuary/demo",
                 "--json",
                 "url",
                 "--jq",
@@ -466,6 +468,7 @@ build_hooks:
                 elif args[1:3] == ["release", "view"]:
                     stdout = (
                         '{"url":"https://github.example/releases/1.2.3",'
+                        '"isDraft":false,"targetCommitish":"1.2.3",'
                         '"assets":[{"name":"demo-1.2.3.zip"},'
                         '{"name":"obsolete.zip"}]}'
                     )
@@ -500,6 +503,8 @@ build_hooks:
                 "1.2.3",
                 "obsolete.zip",
                 "--yes",
+                "--repo",
+                "AutoActuary/demo",
             ],
             gh_calls,
         )
@@ -509,6 +514,166 @@ build_hooks:
         self.assertIn(str(paths["checksums"]), upload_call)
         edit_call = next(call for call in gh_calls if call[1:3] == ["release", "edit"])
         self.assertIn(str(paths["notes"]), edit_call)
+        mutation_calls = [
+            call
+            for call in gh_calls
+            if call[1:3]
+            in (
+                ["release", "view"],
+                ["release", "upload"],
+                ["release", "edit"],
+                ["release", "delete-asset"],
+            )
+        ]
+        self.assertTrue(mutation_calls)
+        for call in mutation_calls:
+            self.assertEqual("AutoActuary/demo", call[call.index("--repo") + 1])
+        self.assertLess(gh_calls.index(upload_call), gh_calls.index(edit_call))
+        delete_call = next(
+            call for call in gh_calls if call[1:3] == ["release", "delete-asset"]
+        )
+        self.assertLess(gh_calls.index(edit_call), gh_calls.index(delete_call))
+
+    def test_existing_tagless_draft_is_retargeted_to_verified_head(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            _write_config(project_root, "  pre_github_release: []")
+            dist_dir = project_root / "dist"
+            dist_dir.mkdir()
+            paths = [
+                dist_dir / "demo-1.2.3.zip",
+                dist_dir / "demo-1.2.3-installer.exe",
+                dist_dir / "demo-1.2.3-manifest.json",
+                dist_dir / "demo-1.2.3-SHA256SUMS.txt",
+                dist_dir / "demo-1.2.3-release-notes.md",
+            ]
+            for path in paths:
+                path.write_text(path.name, encoding="utf-8")
+            release = build_module.ReleaseResult(
+                version="1.2.3",
+                payload_archive=paths[0],
+                installer_archive=paths[1],
+                manifest_path=paths[2],
+                checksums_path=paths[3],
+                release_notes_path=paths[4],
+            )
+            gh_calls: list[list[str]] = []
+
+            def fake_run(
+                args: list[str],
+                *,
+                cwd: Path,
+                capture_output: bool,
+                text: bool,
+            ) -> subprocess.CompletedProcess[str]:
+                gh_calls.append(args)
+                if args[1:3] == ["repo", "view"]:
+                    stdout, returncode, stderr = "AutoActuary/demo\n", 0, ""
+                elif args[1] == "api":
+                    stdout, returncode, stderr = "", 1, "HTTP 404"
+                elif args[1:3] == ["release", "view"]:
+                    stdout, returncode, stderr = (
+                        '{"url":"https://github.example/draft",'
+                        '"isDraft":true,"targetCommitish":"old-main",'
+                        '"assets":[]}',
+                        0,
+                        "",
+                    )
+                else:
+                    stdout, returncode, stderr = "", 0, ""
+                return subprocess.CompletedProcess(args, returncode, stdout, stderr)
+
+            with (
+                patch("app_builder.build._resolve_github_cli", return_value="gh.exe"),
+                patch(
+                    "app_builder.build.run_publication_preflight",
+                    return_value=PublicationPreflightResult(
+                        head_commit="d" * 40,
+                        origin_url="https://github.example/demo.git",
+                    ),
+                ),
+                patch("app_builder.build.subprocess.run", side_effect=fake_run),
+                patch("app_builder.build.run_hook_commands"),
+            ):
+                build_module.upload_release_to_github(
+                    project_root, release=release, draft=True
+                )
+
+        edit_call = next(call for call in gh_calls if call[1:3] == ["release", "edit"])
+        self.assertEqual("d" * 40, edit_call[edit_call.index("--target") + 1])
+
+    def test_failed_replacement_upload_does_not_delete_stale_assets(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            _write_config(project_root, "  pre_github_release: []")
+            paths = [
+                project_root / name
+                for name in (
+                    "payload.zip",
+                    "installer.exe",
+                    "manifest.json",
+                    "checksums.txt",
+                    "notes.md",
+                )
+            ]
+            for path in paths:
+                path.write_text(path.name, encoding="utf-8")
+            release = build_module.ReleaseResult(
+                version="1.2.3",
+                payload_archive=paths[0],
+                installer_archive=paths[1],
+                manifest_path=paths[2],
+                checksums_path=paths[3],
+                release_notes_path=paths[4],
+            )
+            gh_calls: list[list[str]] = []
+
+            def fake_run(
+                args: list[str],
+                *,
+                cwd: Path,
+                capture_output: bool,
+                text: bool,
+            ) -> subprocess.CompletedProcess[str]:
+                gh_calls.append(args)
+                if args[1:3] == ["repo", "view"]:
+                    stdout, returncode, stderr = "AutoActuary/demo\n", 0, ""
+                elif args[1] == "api":
+                    stdout = '{"object":{"type":"commit","sha":"' + ("e" * 40) + '"}}'
+                    returncode, stderr = 0, ""
+                elif args[1:3] == ["release", "view"]:
+                    stdout = (
+                        '{"url":"https://github.example/release",'
+                        '"isDraft":false,"targetCommitish":"1.2.3",'
+                        '"assets":[{"name":"obsolete.zip"}]}'
+                    )
+                    returncode, stderr = 0, ""
+                elif args[1:3] == ["release", "upload"]:
+                    stdout, returncode, stderr = "", 1, "upload failed"
+                else:
+                    stdout, returncode, stderr = "", 0, ""
+                return subprocess.CompletedProcess(args, returncode, stdout, stderr)
+
+            with (
+                patch("app_builder.build._resolve_github_cli", return_value="gh.exe"),
+                patch(
+                    "app_builder.build.run_publication_preflight",
+                    return_value=PublicationPreflightResult(
+                        head_commit="e" * 40,
+                        origin_url="https://github.example/demo.git",
+                    ),
+                ),
+                patch("app_builder.build.subprocess.run", side_effect=fake_run),
+                patch("app_builder.build.run_hook_commands"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "upload failed"):
+                    build_module.upload_release_to_github(
+                        project_root, release=release, draft=False
+                    )
+
+        self.assertFalse(
+            any(call[1:3] == ["release", "delete-asset"] for call in gh_calls)
+        )
 
     def test_github_cli_resolver_uses_known_locations(self) -> None:
         with TemporaryDirectory() as temp_dir_str:

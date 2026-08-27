@@ -75,12 +75,27 @@ class ReleaseResult:
         )
 
 
+def _current_git_commit(project_root: Path) -> str | None:
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "HEAD"],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    commit = result.stdout.strip()
+    return commit or None
+
+
 def build_release(
     project_root: Path,
     *,
     version: str | None = None,
     verbose: bool = False,
 ) -> ReleaseResult:
+    build_commit = _current_git_commit(project_root)
     version = version or detect_version(project_root)
     _, config = load_project_config(project_root, app_version=version)
     validate_build_configuration(project_root, config, version=version)
@@ -170,6 +185,12 @@ def build_release(
         f"{config.installer.payload_format}"
     )
     with reporter.stage("Payload archive and manifest"):
+        current_commit = _current_git_commit(project_root)
+        if build_commit is not None and current_commit != build_commit:
+            raise RuntimeError(
+                "Git HEAD changed while release artifacts were being built. "
+                "Run the release again from a stable checkout."
+            )
         _write_payload_archive(
             payload_archive,
             project_root,
@@ -181,6 +202,7 @@ def build_release(
         manifest = {
             "name": config.installer.name,
             "version": version,
+            "build_commit": build_commit,
             "install_directory": config.installer.install_directory,
             "add_uninstaller": config.installer.add_uninstaller,
             "payload_archive": payload_archive.name,
@@ -764,7 +786,7 @@ def upload_release_to_github(
     ).stdout.strip()
     if not repository:
         raise RuntimeError("GitHub release preflight could not resolve the repository.")
-    _validate_github_tag_target(
+    remote_tag_exists = _validate_github_tag_target(
         project_root,
         gh_executable,
         repository=repository,
@@ -774,7 +796,15 @@ def upload_release_to_github(
     view_result = _run_gh(
         project_root,
         gh_executable,
-        ["release", "view", release.version, "--json", "url,assets"],
+        [
+            "release",
+            "view",
+            release.version,
+            "--repo",
+            repository,
+            "--json",
+            "url,assets,isDraft,targetCommitish",
+        ],
         check=False,
     )
     if view_result.returncode == 0:
@@ -785,6 +815,17 @@ def upload_release_to_github(
                 "GitHub release preflight received invalid release metadata."
             ) from error
         html_url = str(release_payload.get("url", "")).strip()
+        is_draft = release_payload.get("isDraft")
+        target_commitish = release_payload.get("targetCommitish")
+        if not isinstance(is_draft, bool) or not isinstance(target_commitish, str):
+            raise RuntimeError(
+                "GitHub release metadata did not contain a valid draft target."
+            )
+        if not remote_tag_exists and not is_draft:
+            raise RuntimeError(
+                "GitHub reports an existing published release without a readable "
+                f"tag {release.version!r}."
+            )
         expected_asset_names = {artifact.name for artifact in artifacts}
         existing_assets = release_payload.get("assets", [])
         if not isinstance(existing_assets, list):
@@ -798,6 +839,39 @@ def upload_release_to_github(
             and isinstance(asset.get("name"), str)
             and asset["name"] not in expected_asset_names
         )
+        _run_gh(
+            project_root,
+            gh_executable,
+            [
+                "release",
+                "upload",
+                release.version,
+                *(str(artifact) for artifact in artifacts),
+                "--clobber",
+                "--repo",
+                repository,
+            ],
+            check=True,
+        )
+        edit_args = [
+            "release",
+            "edit",
+            release.version,
+            "--title",
+            f"{config.installer.name} {release.version}",
+            "--notes-file",
+            str(release.release_notes_path),
+            "--repo",
+            repository,
+        ]
+        if is_draft and not remote_tag_exists:
+            edit_args.extend(["--target", preflight.head_commit])
+        _run_gh(
+            project_root,
+            gh_executable,
+            edit_args,
+            check=True,
+        )
         for asset_name in stale_asset_names:
             _run_gh(
                 project_root,
@@ -808,35 +882,11 @@ def upload_release_to_github(
                     release.version,
                     asset_name,
                     "--yes",
+                    "--repo",
+                    repository,
                 ],
                 check=True,
             )
-        _run_gh(
-            project_root,
-            gh_executable,
-            [
-                "release",
-                "upload",
-                release.version,
-                *(str(artifact) for artifact in artifacts),
-                "--clobber",
-            ],
-            check=True,
-        )
-        _run_gh(
-            project_root,
-            gh_executable,
-            [
-                "release",
-                "edit",
-                release.version,
-                "--title",
-                f"{config.installer.name} {release.version}",
-                "--notes-file",
-                str(release.release_notes_path),
-            ],
-            check=True,
-        )
     else:
         create_args = [
             "release",
@@ -849,6 +899,8 @@ def upload_release_to_github(
             str(release.release_notes_path),
             "--target",
             preflight.head_commit,
+            "--repo",
+            repository,
         ]
         if draft:
             create_args.append("--draft")
@@ -856,7 +908,17 @@ def upload_release_to_github(
         html_url = _run_gh(
             project_root,
             gh_executable,
-            ["release", "view", release.version, "--json", "url", "--jq", ".url"],
+            [
+                "release",
+                "view",
+                release.version,
+                "--repo",
+                repository,
+                "--json",
+                "url",
+                "--jq",
+                ".url",
+            ],
             check=True,
         ).stdout.strip()
 
@@ -886,7 +948,7 @@ def _validate_github_tag_target(
     repository: str,
     version: str,
     head_commit: str,
-) -> None:
+) -> bool:
     encoded_version = quote(version, safe="")
     result = _run_gh(
         project_root,
@@ -896,7 +958,7 @@ def _validate_github_tag_target(
     )
     if result.returncode != 0:
         if "404" in result.stderr:
-            return
+            return False
         detail = result.stderr.strip() or result.stdout.strip() or "unknown gh error"
         raise RuntimeError(
             f"GitHub release preflight could not inspect tag {version!r}: {detail}"
@@ -928,6 +990,7 @@ def _validate_github_tag_target(
             f"GitHub release preflight failed: tag {version!r} points to "
             f"{target_sha}, not HEAD {head_commit}."
         )
+    return True
 
 
 def _github_cli_candidates() -> list[Path]:

@@ -1617,16 +1617,18 @@ app-builder release-gh --version 1.2.3 --draft</code></pre>
         <p>
           Publication uploads exactly the built-in and named outputs selected by
           <code>publications.github.outputs</code>. Generated release notes become the GitHub release body. A new
-          release targets the exact audited HEAD commit. An existing release has intended assets replaced, stale
-          assets removed, and its title and notes refreshed. <code>--draft</code> controls creation of a new
+          release targets the exact commit recorded when its artifacts were built. An existing tagless draft is
+          retargeted to that verified commit. Existing releases upload replacements and refresh metadata before
+          stale assets are removed. <code>--draft</code> controls creation of a new
           release; updating an existing release preserves its current draft or published state.
         </p>
         <p>
           Before upload, app-builder requires a clean Git worktree outside <code>installer.dist</code>, validates
-          version and local/GitHub tag identity, verifies the manifest, outer installer layout, artifact inventory,
+          version, build-commit, and local/GitHub tag identity, verifies the manifest, outer installer layout, artifact inventory,
           and SHA-256 checksums, and confirms that <code>gh.exe</code> is authenticated for the repository. The
           standalone payload must match the bytes embedded in the installer, and the published manifest must
-          match the manifest embedded in its scripts. For app-builder itself, the release version must match
+          match the manifest embedded in its scripts. Every GitHub command is pinned to the repository resolved by
+          preflight, so an ambient <code>GH_REPO</code> cannot redirect publication. For app-builder itself, the release version must match
           <code>pyproject.toml</code>.
         </p>
         <p>

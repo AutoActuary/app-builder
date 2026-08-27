@@ -108,6 +108,7 @@ def run_publication_preflight(
         release_notes_path=release_notes_path.resolve(),
         app_name=app_name,
         version=version,
+        head_commit=head_commit,
     )
     return PublicationPreflightResult(head_commit=head_commit, origin_url=origin_url)
 
@@ -228,6 +229,7 @@ def _validate_artifacts(
     release_notes_path: Path,
     app_name: str,
     version: str,
+    head_commit: str,
 ) -> None:
     if len(set(artifacts)) != len(artifacts):
         raise RuntimeError("Release preflight failed: artifact paths are not unique.")
@@ -269,6 +271,11 @@ def _validate_artifacts(
         raise RuntimeError(
             "Release preflight failed: installer manifest identity does not match "
             f"{app_name!r} {version!r}."
+        )
+    if manifest.get("build_commit") != head_commit:
+        raise RuntimeError(
+            "Release preflight failed: artifacts were not built from current "
+            f"HEAD {head_commit}. Rebuild the release before publishing."
         )
     if manifest.get("payload_archive") != payload_archive.name:
         raise RuntimeError(
