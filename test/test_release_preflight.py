@@ -151,6 +151,17 @@ class TestPublicationPreflight(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "manifest identity"):
                 _run_preflight(project_root, release)
 
+    def test_rejects_artifacts_built_from_an_earlier_commit(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root, _ = _create_repository(Path(temp_dir_str))
+            release = _write_release(project_root)
+            (project_root / "tracked.txt").write_text("second", encoding="utf-8")
+            _run(project_root, "git", "add", "tracked.txt")
+            _run(project_root, "git", "commit", "-m", "Second commit")
+
+            with self.assertRaisesRegex(RuntimeError, "not built from current HEAD"):
+                _run_preflight(project_root, release)
+
     def test_rejects_extra_checksum_entry(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             project_root, _ = _create_repository(Path(temp_dir_str))
@@ -237,6 +248,7 @@ def _write_release(
     manifest_payload = {
         "name": app_name,
         "version": version,
+        "build_commit": _git(project_root, "rev-parse", "HEAD"),
         "payload_archive": payload.name,
     }
     manifest.write_text(json.dumps(manifest_payload), encoding="utf-8")

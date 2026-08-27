@@ -63,8 +63,8 @@ They print timed build stages immediately and keep a detailed diagnostic log
 under the configured dist directory's `build-logs` folder.
 Before GitHub publication, app-builder requires a clean Git worktree outside
 the configured dist directory, validates the artifact set and checksums, verifies
-version and tag identity, checks `gh auth status`, and targets the exact audited
-HEAD commit.
+version, build-commit, repository, and tag identity, checks `gh auth status`, and
+targets the exact commit recorded in the release manifest.
 
 ## Commands
 

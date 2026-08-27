@@ -122,6 +122,7 @@ The 7z writer keeps the useful 0.x behaviors without reviving the old tool folde
 The release manifest is written next to the artifacts and embedded into the installer scripts. It contains:
 
 - app name and version;
+- the exact Git commit checked out when the build started;
 - configured install directory;
 - payload archive name;
 - uninstaller flag;
@@ -275,14 +276,18 @@ Before upload, publication preflight enforces:
 - local and authenticated GitHub tag targets that either do not exist yet or point to HEAD;
 - nonempty artifacts inside the configured dist directory;
 - matching manifest identity and payload name;
+- a manifest build commit equal to the current clean HEAD;
 - a readable outer installer ZIP with its required bootstrap files;
 - byte-for-byte agreement between the standalone payload and the payload embedded
   in the installer, plus semantic agreement between published and embedded manifests;
 - matching SHA-256 checksums and no unexpected same-version files;
 - authenticated `gh.exe` and a resolvable GitHub repository.
 
-New releases target the exact audited HEAD commit. Existing releases have their
-intended assets replaced, stale assets removed, and title and notes refreshed.
+Every GitHub release command is pinned to the one repository resolved during
+preflight, regardless of ambient `GH_REPO`. New releases target the exact audited
+HEAD commit. Existing tagless drafts are retargeted to that commit. Existing
+releases upload replacement assets and refresh metadata before stale assets are
+removed, so a failed upload leaves the old release inventory intact.
 `--draft` controls newly created releases; an existing release keeps its current
 draft or published state when it is updated.
 
