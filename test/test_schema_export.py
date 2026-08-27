@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import unittest
+import tomllib
+from pathlib import Path
 from typing import Any
 
 from app_builder import pydantic_models
@@ -53,10 +55,22 @@ class TestSchemaExport(unittest.TestCase):
         hook_items = schema["properties"]["build_hooks"]["properties"]["pre_dist"][
             "items"
         ]
+        self.assertEqual("array", hook_items["type"])
+        self.assertEqual({"type": "string"}, hook_items["items"])
+        self.assertEqual(1, hook_items["minItems"])
         self.assertEqual(
-            {"type": "array", "items": {"type": "string"}},
-            hook_items,
+            [{"type": "string", "pattern": r".*\S.*"}],
+            hook_items["prefixItems"],
         )
+
+        installer = schema["properties"]["installer"]["properties"]
+        self.assertEqual(["zip", "7z"], installer["payload_format"]["enum"])
+        bundled = next(
+            item
+            for item in python_bundled_schema["anyOf"]
+            if item.get("type") == "object"
+        )
+        self.assertIn("pattern", bundled["properties"]["python_version"])
 
     def test_validate_mapping_uses_primary_loader_errors(self) -> None:
         with self.assertRaisesRegex(
@@ -104,6 +118,29 @@ class TestSchemaExport(unittest.TestCase):
                     }
                 },
             )
+        for invalid in (
+            {
+                **VALID_MAPPING,
+                "installer": {**VALID_MAPPING["installer"], "payload_format": "rar"},
+            },
+            {**VALID_MAPPING, "python_bundled": {"python_version": "3.12"}},
+            {**VALID_MAPPING, "build_hooks": {"pre_dist": [[]]}},
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(Exception):
+                    _validate_pydantic_model(model_type, invalid)
+
+    def test_optional_pydantic_extra_declares_only_supported_major(self) -> None:
+        pyproject = tomllib.loads(
+            (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        self.assertEqual(
+            ["pydantic>=2,<3"],
+            pyproject["project"]["optional-dependencies"]["schema"],
+        )
 
     @unittest.skipUnless(
         pydantic_models.PYDANTIC_AVAILABLE,

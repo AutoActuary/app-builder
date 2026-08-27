@@ -58,7 +58,8 @@ app-builder release-gh --version 0.1.0 --draft
 Local releases also create a SHA-256 checksum file and generated release notes.
 Named `outputs` can collect hook-generated files under `installer.dist`, and
 `publications.github.outputs` selects exactly which built-in and named outputs
-are uploaded.
+are uploaded. Set `min_matches: 0` for a genuinely optional asset; selecting that
+logical output is valid even when the current build produces no matching file.
 They print timed build stages immediately and keep a detailed diagnostic log
 under the configured dist directory's `build-logs` folder.
 Before GitHub publication, app-builder requires a clean Git worktree outside

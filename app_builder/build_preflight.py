@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path, PureWindowsPath
 
 from .schema import AppBuilderConfig, is_valid_python_version_selector
+from .release_outputs import validate_output_declarations
 
 _WINDOWS_RESERVED_NAMES = {
     "aux",
@@ -42,6 +43,7 @@ def validate_build_configuration(
             project_root, config.python_venv.path, label="python_venv.path"
         )
     _validate_hook_commands(config)
+    validate_output_declarations(config.outputs, config.publications.github.outputs)
 
 
 def _validate_windows_name(value: str, *, label: str) -> None:

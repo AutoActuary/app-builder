@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import types
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import Field, MISSING, dataclass, field, fields, is_dataclass
@@ -41,6 +42,9 @@ class ConfigMeta:
     aliases: tuple[str, ...] = ()
     example: Any = REQUIRED
     example_factory: Callable[[], Any] | None = None
+    allowed_values: tuple[Any, ...] = ()
+    pattern: str | None = None
+    constraint_message: str | None = None
 
 
 def config_field(
@@ -52,6 +56,9 @@ def config_field(
     aliases: Iterable[str] = (),
     example: Any = REQUIRED,
     example_factory: Callable[[], Any] | _Required = REQUIRED,
+    allowed_values: Iterable[Any] = (),
+    pattern: str | None = None,
+    constraint_message: str | None = None,
 ) -> Any:
     """Create a dataclass field carrying config schema metadata."""
 
@@ -77,6 +84,9 @@ def config_field(
         aliases=aliases_tuple,
         example=example,
         example_factory=resolved_example_factory,
+        allowed_values=tuple(allowed_values),
+        pattern=pattern,
+        constraint_message=constraint_message,
     )
     kwargs: dict[str, Any] = {"metadata": {_CONFIG_META_KEY: meta}}
     if default is not REQUIRED:
@@ -235,6 +245,9 @@ def _materialize_dataclass(
                 field_path,
                 f"missing required value. Expected {_describe_type(annotation)}.",
             )
+        _validate_field_constraints(
+            kwargs[field_.name], get_config_meta(field_), field_path
+        )
     return config_type(**kwargs)
 
 
@@ -281,10 +294,19 @@ def _materialize_value(annotation: Any, value: Any, path: str) -> Any:
             )
         if not isinstance(value, list):
             raise ConfigError(path, f"expected list, got {_type_name(value)}.")
-        return [
+        materialized = [
             _materialize_value(args[0], item, _index_path(path, index))
             for index, item in enumerate(value)
         ]
+        if _is_hook_command_list(annotation):
+            for index, command in enumerate(materialized):
+                command_path = _index_path(path, index)
+                if not command or not command[0].strip():
+                    raise ConfigError(
+                        command_path,
+                        "must contain a non-empty argv[0].",
+                    )
+        return materialized
     if origin is tuple:
         return _materialize_tuple(annotation, value, path)
     if annotation is str:
@@ -343,6 +365,28 @@ def _plain_value(value: Any) -> Any:
     if isinstance(value, dict):
         return {_plain_value(key): _plain_value(item) for key, item in value.items()}
     return value
+
+
+def _validate_field_constraints(value: Any, meta: ConfigMeta, path: str) -> None:
+    if meta.allowed_values and value not in meta.allowed_values:
+        expected = ", ".join(repr(item) for item in meta.allowed_values)
+        raise ConfigError(path, f"expected one of: {expected}.")
+    if meta.pattern is not None and (
+        not isinstance(value, str) or re.fullmatch(meta.pattern, value) is None
+    ):
+        message = meta.constraint_message or (
+            f"does not match required pattern {meta.pattern!r}."
+        )
+        raise ConfigError(path, message)
+
+
+def _is_hook_command_list(annotation: Any) -> bool:
+    if get_origin(annotation) is not list:
+        return False
+    outer_args = get_args(annotation)
+    if len(outer_args) != 1 or get_origin(outer_args[0]) is not list:
+        return False
+    return get_args(outer_args[0]) == (str,)
 
 
 def _nested_dataclass_type(annotation: Any) -> type[Any] | None:
