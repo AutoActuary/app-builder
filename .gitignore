@@ -32,6 +32,7 @@ MANIFEST
 *.iml
 
 /bin/python
+/bin/.app-builder-runtime-locks/
 /bin/git
 /__app_builder_0x__/
 /tools/
