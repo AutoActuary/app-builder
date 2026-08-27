@@ -417,8 +417,9 @@ installer:
 
   # Required string. Windows install directory. A variable-root path must start with
   # %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the
-  # installer expands it on the user&#x27;s machine. A fixed absolute path is also allowed when
-  # it is not a drive root or protected Windows directory.
+  # installer expands it on the user&#x27;s machine. Parent-directory traversal is rejected. A
+  # fixed absolute path is also allowed when it is not a drive root or protected Windows
+  # directory.
   install_directory: &#x27;%LOCALAPPDATA%\MyCompany\MyApp&#x27;
 
   # Optional, nullable string | null. Optional project-relative .ico file embedded into
@@ -493,6 +494,7 @@ installer:
       - app_builder.yaml
       - application-templates
       - bin/python
+      - README.md
 
     # Optional list[string]. Project-relative files or globs removed from the selected
     # payload. Default if omitted: [].
@@ -753,7 +755,7 @@ publications:
               <td>yes</td>
               <td></td>
               <td><code>&#x27;%LOCALAPPDATA%\MyCompany\MyApp&#x27;</code></td>
-              <td>Windows install directory. A variable-root path must start with %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the installer expands it on the user&#x27;s machine. A fixed absolute path is also allowed when it is not a drive root or protected Windows directory.</td>
+              <td>Windows install directory. A variable-root path must start with %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the installer expands it on the user&#x27;s machine. Parent-directory traversal is rejected. A fixed absolute path is also allowed when it is not a drive root or protected Windows directory.</td>
             </tr>
             <tr>
               <td><code>icon</code></td>
@@ -956,7 +958,7 @@ publications:
               <td><code>list[string]</code></td>
               <td>no</td>
               <td><code>[]</code></td>
-              <td><code>[app_builder.yaml, application-templates, bin/python]</code></td>
+              <td><code>[app_builder.yaml, application-templates, bin/python, README.md]</code></td>
               <td>Required project-relative files or globs included in the release payload. Every entry must match, and the final payload must be nonempty after excludes.</td>
             </tr>
             <tr>
@@ -1567,7 +1569,7 @@ bin/7z.dll              # only when installer.payload_format: 7z
             </tr>
             <tr>
               <td>Recognized legacy app-builder install for the same app</td>
-              <td>Runs recognized legacy pre-uninstall hooks and removes the legacy install before installing the new payload.</td>
+              <td>Runs recognized legacy pre-uninstall hooks, moves the old install to a backup sibling, installs the new payload, and restores the legacy directory and Windows integration if replacement fails.</td>
             </tr>
             <tr>
               <td>Different app-builder app</td>

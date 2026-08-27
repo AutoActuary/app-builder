@@ -110,6 +110,9 @@ def _render_bootstrap_config(
 ) -> bytes:
     return json.dumps(
         {
+            "env": {
+                "APP_BUILDER_INSTALLER_EXE": "@{exe_path}",
+            },
             "command": [
                 "powershell.exe",
                 "-NoProfile",
@@ -119,7 +122,7 @@ def _render_bootstrap_config(
                 "& { "
                 + _render_powershell_bootstrap(bootstrap_pre_extract_commands)
                 + " }",
-            ]
+            ],
         },
         separators=(",", ":"),
     ).encode("utf-8")
@@ -141,7 +144,7 @@ def _render_powershell_bootstrap(
         "try { "
         f"{bootstrap_hooks} "
         "New-Item -ItemType Directory -Path $extractDir | Out-Null; "
-        "tar.exe -xf '@{exe_path}' -C $extractDir; "
+        "tar.exe -xf $env:APP_BUILDER_INSTALLER_EXE -C $extractDir; "
         "if ($LASTEXITCODE -ne 0) { "
         "$exitCode = $LASTEXITCODE; "
         'throw "tar.exe failed with exit code $exitCode" '
@@ -299,7 +302,7 @@ $InstallerRoot = Split-Path -Parent $ScriptRoot
 $Manifest = Read-AppBuilderManifestJson $EmbeddedManifestJson
 $ManifestUninstallEnabled = Get-AppBuilderObjectProperty $Manifest 'add_uninstaller'
 $AppBuilderUninstallEnabled = $AppBuilderUninstallEnabled -and ($null -ne $ManifestUninstallEnabled) -and [bool]$ManifestUninstallEnabled
-$InstallDir = Resolve-AppBuilderPath ([string]$Manifest.install_directory) $null
+$InstallDir = Resolve-AppBuilderInstallDirectory ([string]$Manifest.install_directory)
 $PayloadPath = Join-Path $InstallerRoot ([string]$Manifest.payload_archive)
 $StagingDir = Join-Path $env:TEMP ('app-builder-install-' + [guid]::NewGuid().ToString('N'))
 $BackupDir = $null
@@ -345,7 +348,8 @@ try {
             Move-AppBuilderDirectory $InstallDir $BackupDir 'existing install directory'
         } elseif ($ExistingInstallKind -eq 'legacy') {
             Invoke-AppBuilderLegacyPreUninstall $Manifest $InstallDir
-            Remove-AppBuilderLegacyInstall $Manifest $InstallDir $StartMenuDir
+            $BackupDir = Join-Path $InstallParent ((Split-Path -Leaf $InstallDir) + '.app-builder-backup-' + [guid]::NewGuid().ToString('N'))
+            Move-AppBuilderDirectory $InstallDir $BackupDir 'legacy install directory'
         } else {
             throw "Internal error: unknown install target kind $ExistingInstallKind"
         }
@@ -371,6 +375,11 @@ try {
 
     Invoke-AppBuilderHookList $Manifest.install_hooks.post_install $InstallDir $Manifest
 
+    if ($ExistingInstallKind -eq 'legacy') {
+        Remove-AppBuilderLegacyUninstallRegistryEntries $Manifest $InstallDir $UninstallRegistryPath
+        Remove-AppBuilderLegacyStartMenuEntries $Manifest $InstallDir $StartMenuDir
+    }
+
     Remove-AppBuilderBackupDirectory $BackupDir 'previous install backup'
     Remove-AppBuilderBackupDirectory $StartMenuBackupDir 'previous Start Menu backup'
     Write-Host ('Installed to {0}' -f $InstallDir)
@@ -391,7 +400,7 @@ try {
     if ($StartMenuBackupDir -and (Test-Path -LiteralPath $StartMenuBackupDir)) {
         Restore-AppBuilderDirectory $StartMenuBackupDir $StartMenuDir 'previous Start Menu directory'
     }
-    if (($ExistingInstallKind -eq 'current') -and $BackupDir -and (Test-Path -LiteralPath $BackupDir)) {
+    if ($BackupDir -and (Test-Path -LiteralPath $BackupDir)) {
         Restore-AppBuilderDirectory $BackupDir $InstallDir 'previous install directory'
     }
     throw
@@ -554,6 +563,63 @@ function Resolve-AppBuilderPath {
         return [System.IO.Path]::GetFullPath($Expanded)
     }
     return [System.IO.Path]::GetFullPath((Join-Path $BaseDirectory $Expanded))
+}
+
+function Test-AppBuilderPathIsSameOrChild {
+    param([string]$Candidate, [string]$Root)
+    $CanonicalCandidate = [System.IO.Path]::GetFullPath($Candidate).TrimEnd([char[]]'\/')
+    $CanonicalRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd([char[]]'\/')
+    if ($CanonicalCandidate.Equals($CanonicalRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+    }
+    return $CanonicalCandidate.StartsWith(
+        $CanonicalRoot + [System.IO.Path]::DirectorySeparatorChar,
+        [System.StringComparison]::OrdinalIgnoreCase
+    )
+}
+
+function Resolve-AppBuilderInstallDirectory {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path) -or $Path.Trim() -ne $Path) {
+        throw 'Installer install_directory must be a non-empty, trimmed path.'
+    }
+    $PathParts = $Path -split '[\\/]'
+    if (@($PathParts | Where-Object { $_ -eq '..' }).Count -ne 0) {
+        throw 'Installer install_directory must not contain parent-directory traversal.'
+    }
+    $VariableMatch = [regex]::Match($Path, '^%([^%]+)%[\\/](.+)$')
+    if ($VariableMatch.Success) {
+        $VariableName = $VariableMatch.Groups[1].Value
+        if ($VariableName -notin @('LOCALAPPDATA', 'APPDATA', 'USERPROFILE')) {
+            throw 'Installer install_directory uses an unsupported root variable.'
+        }
+        $Root = [Environment]::GetEnvironmentVariable($VariableName)
+        if ([string]::IsNullOrWhiteSpace($Root)) {
+            throw "Installer install_directory root variable is not set: $VariableName"
+        }
+        $Resolved = [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($Path))
+        if (-not (Test-AppBuilderPathIsSameOrChild $Resolved $Root) -or $Resolved.TrimEnd([char[]]'\/').Equals([System.IO.Path]::GetFullPath($Root).TrimEnd([char[]]'\/'), [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Installer install_directory must resolve below %${VariableName}%."
+        }
+        return $Resolved
+    }
+    if ($Path.Contains('%')) {
+        throw 'Installer install_directory must use one leading supported environment variable.'
+    }
+    if (-not [System.IO.Path]::IsPathRooted($Path)) {
+        throw 'Installer install_directory must be absolute or use a supported root variable.'
+    }
+    $Resolved = [System.IO.Path]::GetFullPath($Path)
+    $ResolvedRoot = [System.IO.Path]::GetPathRoot($Resolved)
+    if ($Resolved.TrimEnd([char[]]'\/').Equals($ResolvedRoot.TrimEnd([char[]]'\/'), [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Installer install_directory must not be a filesystem root.'
+    }
+    foreach ($ProtectedRoot in @($env:WINDIR, $env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+        if (-not [string]::IsNullOrWhiteSpace($ProtectedRoot) -and (Test-AppBuilderPathIsSameOrChild $Resolved $ProtectedRoot)) {
+            throw 'Installer install_directory must not be inside a protected Windows directory.'
+        }
+    }
+    return $Resolved
 }
 
 function Get-SafeShortcutName {
@@ -1098,18 +1164,6 @@ function Invoke-AppBuilderLegacyPreUninstall {
     }
 }
 
-function Remove-AppBuilderLegacyInstall {
-    param($Manifest, [string]$InstallDir, [string]$StartMenuDir)
-    $Name = [string](Get-AppBuilderObjectProperty $Manifest 'name')
-    Write-Host ('Removing legacy app-builder install for {0}' -f $Name)
-    Remove-AppBuilderLegacyUninstallRegistryEntries $Manifest $InstallDir
-    Remove-AppBuilderLegacyStartMenuEntries $Manifest $InstallDir
-    if (Test-Path -LiteralPath $StartMenuDir) {
-        Remove-AppBuilderInstallDirectory $StartMenuDir
-    }
-    Remove-AppBuilderInstallDirectory $InstallDir
-}
-
 function Test-AppBuilderRegistryEntryTargetsInstallDirectory {
     param($Entry, [string]$InstallDir)
     $CanonicalInstallDir = [System.IO.Path]::GetFullPath($InstallDir).TrimEnd([char[]]'\\/')
@@ -1133,13 +1187,16 @@ function Test-AppBuilderRegistryEntryTargetsInstallDirectory {
 }
 
 function Remove-AppBuilderLegacyUninstallRegistryEntries {
-    param($Manifest, [string]$InstallDir)
+    param($Manifest, [string]$InstallDir, [AllowNull()][string]$CurrentRegistryPath)
     $RegistryRoot = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
     if (-not (Test-Path -LiteralPath $RegistryRoot)) {
         return
     }
     foreach ($Key in @(Get-ChildItem -LiteralPath $RegistryRoot -ErrorAction SilentlyContinue)) {
         try {
+            if (-not [string]::IsNullOrWhiteSpace($CurrentRegistryPath) -and $Key.PSPath.EndsWith($CurrentRegistryPath.Substring($CurrentRegistryPath.LastIndexOf('\') + 1), [System.StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
             $Entry = Get-ItemProperty -LiteralPath $Key.PSPath -ErrorAction Stop
             $DisplayName = [string](Get-AppBuilderObjectProperty $Entry 'DisplayName')
             if ((Test-AppBuilderLegacyNameMatchesManifest $DisplayName $Manifest) -and (Test-AppBuilderRegistryEntryTargetsInstallDirectory $Entry $InstallDir)) {
@@ -1151,13 +1208,16 @@ function Remove-AppBuilderLegacyUninstallRegistryEntries {
 }
 
 function Remove-AppBuilderLegacyStartMenuEntries {
-    param($Manifest, [string]$InstallDir)
+    param($Manifest, [string]$InstallDir, [AllowNull()][string]$CurrentStartMenuDir)
     $Programs = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
     if (-not (Test-Path -LiteralPath $Programs -PathType Container)) {
         return
     }
     $Shell = New-Object -ComObject WScript.Shell
     foreach ($Shortcut in @(Get-ChildItem -LiteralPath $Programs -File -Filter 'Uninstall *.lnk' -Recurse -ErrorAction SilentlyContinue)) {
+        if (-not [string]::IsNullOrWhiteSpace($CurrentStartMenuDir) -and (Test-AppBuilderPathIsSameOrChild $Shortcut.FullName $CurrentStartMenuDir)) {
+            continue
+        }
         $DisplayName = Get-AppBuilderLegacyUninstallDisplayName $Shortcut.Name
         if (-not (Test-AppBuilderLegacyNameMatchesManifest $DisplayName $Manifest)) {
             continue

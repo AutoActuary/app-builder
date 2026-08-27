@@ -7,7 +7,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, get_type_hints
 
-from app_builder.config import load_config
+from app_builder.config import find_config_path, load_config
+from app_builder.fileset import build_remap_table, collect_files
 from app_builder.schema import AppBuilderConfig, BuildHooks
 from app_builder.template import (
     TEMPLATE_SNAPSHOT_PATH,
@@ -60,6 +61,57 @@ class TestTemplateInitialization(unittest.TestCase):
             ["payload", "installer", "manifest", "checksums"],
             config.publications.github.outputs,
         )
+
+    def test_generated_template_resolves_its_required_readme_remap(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            (project_root / "app_builder.yaml").write_text(
+                render_config_template_yaml(), encoding="utf-8"
+            )
+            (project_root / "README.md").write_text("Demo\n", encoding="utf-8")
+            (project_root / "application-templates").mkdir()
+            (project_root / "application-templates" / "program.cmd").write_text(
+                "@echo off\n", encoding="utf-8"
+            )
+            (project_root / "bin" / "python").mkdir(parents=True)
+            (project_root / "bin" / "python" / "python.exe").write_bytes(b"fixture")
+            config = load_config(project_root / "app_builder.yaml")
+
+            files = collect_files(
+                project_root,
+                config.installer.paths.include,
+                config.installer.paths.exclude,
+            )
+            mapping = build_remap_table(
+                project_root, files, config.installer.paths.remap
+            )
+
+        self.assertIn("docs/README.md", {str(path) for path in mapping.values()})
+
+    def test_force_rewrites_only_config_and_preserves_custom_assets(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            subprocess.run(
+                ["git", "init"], cwd=project_root, check=True, capture_output=True
+            )
+            initialize_project(project_root, force=False)
+            program = project_root / "application-templates" / "program.cmd"
+            icon = project_root / "application-templates" / "icon.ico"
+            program.write_text("custom program\n", encoding="utf-8")
+            icon.write_bytes(b"custom icon")
+
+            initialize_project(project_root, force=True)
+
+            self.assertEqual("custom program\n", program.read_text(encoding="utf-8"))
+            self.assertEqual(b"custom icon", icon.read_bytes())
+
+    def test_only_underscored_config_filename_is_accepted(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            (project_root / "app-builder.yaml").write_text("installer: {}\n")
+
+            with self.assertRaisesRegex(FileNotFoundError, "app_builder.yaml"):
+                find_config_path(project_root)
 
     def test_template_asset_snapshot_matches_schema_metadata(self) -> None:
         self.assertEqual(

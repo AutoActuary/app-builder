@@ -713,6 +713,84 @@ class TestInstallerFailureModes(unittest.TestCase):
             self.assertEqual("old", (install_dir / "old.txt").read_text())
             self.assertFalse((install_dir / "new.txt").exists())
 
+    def test_failing_post_install_restores_legacy_installation(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            appdata_dir = temp_dir / "appdata"
+            install_dir = temp_dir / "installed app"
+            start_menu_dir = (
+                appdata_dir
+                / "Microsoft"
+                / "Windows"
+                / "Start Menu"
+                / "Programs"
+                / "Demo"
+            )
+            start_menu_dir.mkdir(parents=True)
+            (start_menu_dir / "legacy-shortcut.lnk").write_text(
+                "legacy shortcut", encoding="utf-8"
+            )
+            (install_dir / "bin").mkdir(parents=True)
+            (install_dir / "scripts").mkdir()
+            (install_dir / "bin" / "Uninstall Demo.bat").write_text(
+                "@echo off\nexit /b 0\n", encoding="utf-8"
+            )
+            (install_dir / "Uninstall Demo.lnk").write_text(
+                "legacy shortcut marker", encoding="utf-8"
+            )
+            (install_dir / "old.txt").write_text("old", encoding="utf-8")
+            winreg = _winreg()
+            registry_root = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+            legacy_key_name = "AppBuilder-Legacy-Rollback-" + temp_dir.name
+            with winreg.CreateKey(
+                winreg.HKEY_CURRENT_USER, registry_root + "\\" + legacy_key_name
+            ) as key:
+                winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "Demo")
+                winreg.SetValueEx(
+                    key, "InstallLocation", 0, winreg.REG_SZ, str(install_dir)
+                )
+            self.addCleanup(_remove_registry_entries_for_install, install_dir)
+            payload = temp_dir / "payload.zip"
+            _write_payload(
+                payload,
+                {"new.txt": "new", "fail-post.cmd": "@echo off\nexit /b 19\n"},
+            )
+            manifest = temp_dir / "manifest.json"
+            _write_manifest(
+                manifest,
+                name="Demo",
+                version="2.0",
+                install_dir=install_dir,
+                payload_name=payload.name,
+                install_hooks={
+                    "pre_install": [],
+                    "post_install": [["fail-post.cmd"]],
+                    "pre_uninstall": [],
+                    "post_uninstall": [],
+                },
+            )
+            extraction_dir = _build_and_extract_installer(
+                temp_dir, payload=payload, manifest=manifest
+            )
+
+            result = _run_install(extraction_dir, appdata_dir=appdata_dir)
+
+            self.assertNotEqual(0, result.returncode)
+            self.assertEqual("old", (install_dir / "old.txt").read_text())
+            self.assertTrue((install_dir / "bin" / "Uninstall Demo.bat").exists())
+            self.assertFalse((install_dir / "new.txt").exists())
+            self.assertEqual(
+                "legacy shortcut",
+                (start_menu_dir / "legacy-shortcut.lnk").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                legacy_key_name,
+                {
+                    key_name
+                    for key_name, _ in _registry_entries_for_install(install_dir)
+                },
+            )
+
     def test_failed_post_uninstall_retains_temp_error_diagnostics(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)

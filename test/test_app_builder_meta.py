@@ -85,6 +85,17 @@ class TestAppBuilderMetaDispatch(unittest.TestCase):
 
         self.assertEqual(CurrentInstall(argv=["release"]), target)
 
+    def test_hyphenated_config_filename_is_not_a_project_config(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            (temp_dir / "app-builder.yaml").write_text(
+                "app_builder_version: 1.5.0\n", encoding="utf-8"
+            )
+
+            target = choose_target(["release"], temp_dir)
+
+        self.assertEqual(CurrentInstall(argv=["release"]), target)
+
     def test_explicit_1x_ref_routes_to_managed_cache(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)

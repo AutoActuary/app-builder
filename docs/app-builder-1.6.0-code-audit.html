@@ -112,6 +112,8 @@
     .label { background: #edf0f4; border-radius: 4px; padding: 3px 8px; color: #46515d; font-size: 12px; }
     .evidence { background: #f8fafc; border: 1px solid #e2e7ec; border-radius: 4px; padding: 12px 14px; margin: 10px 0; }
     .fix { background: var(--ok-bg); border-left: 4px solid var(--ok); padding: 10px 13px; margin-top: 10px; }
+    .implementation { background: #eaf7ee; border: 1px solid #9bc9aa; border-left: 5px solid var(--ok); border-radius: 4px; padding: 11px 13px; margin-top: 12px; }
+    .implemented { display: inline-block; margin-left: 8px; color: var(--ok); font-size: 12px; font-weight: 700; text-transform: uppercase; vertical-align: 2px; }
     .source { color: var(--muted); font-size: 13px; }
     table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); }
     th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
@@ -184,6 +186,7 @@
         <div class="evidence"><strong>Reproduction:</strong> a generated installer was run against a recognized legacy-shaped directory with a new <code>post_install</code> hook that exits 19. The installer returned failure and left neither the legacy files nor the replacement directory.</div>
         <p class="source">Source: <a href="../app_builder/installer_bundle.py">installer_bundle.py:338-397</a>. Existing tests cover current-install rollback and a failing legacy pre-uninstall hook, but not failure after legacy removal.</p>
         <div class="fix"><strong>Fix direction:</strong> preserve the validated legacy directory and its Windows integration state until every new-install step succeeds. Restore both on failure. Add a real Windows regression that fails after legacy removal.</div>
+        <div class="implementation"><strong>Implementation:</strong> recognized 0.x directories now use the same private sibling-backup transaction as current installs. Legacy registry and shortcut cleanup is deferred until the replacement and <code>post_install</code> succeed; rollback restores the old directory and untouched integration. Windows tests cover successful adoption and failure after legacy removal.</div>
       </article>
 
       <article class="finding p1" id="p1-install-root">
@@ -193,6 +196,7 @@
         <div class="evidence"><strong>Reproductions:</strong> <code>%USERPROFILE%\..\..\Windows\Demo</code> passed preflight and resolved to <code>C:\Windows\Demo</code>. <code>C:\harmless-name\..</code> also passed and normalized to the drive root.</div>
         <p class="source">Source: <a href="../app_builder/build_preflight.py">build_preflight.py:97-159</a>; runtime normalization in <a href="../app_builder/installer_bundle.py">installer_bundle.py:549</a>.</p>
         <div class="fix"><strong>Fix direction:</strong> reject dot segments, expand known variables during release preflight, require the normalized target to be a strict child of the permitted user root, and repeat the invariant inside the generated installer.</div>
+        <div class="implementation"><strong>Implementation:</strong> build preflight rejects parent-directory components before accepting variable or fixed roots. The generated PowerShell installer independently expands and canonicalizes the final user-machine path, requires variable-root targets to remain strict children, and rejects filesystem and protected Windows roots.</div>
       </article>
 
       <article class="finding p1" id="p1-apostrophe">
@@ -202,6 +206,7 @@
         <div class="evidence"><strong>Reproduction:</strong> a real generated installer launched from an <code>O'Brien</code> directory exited 1 with <code>The string is missing the terminator: '</code>.</div>
         <p class="source">Source: <a href="../app_builder/installer_bundle.py">installer_bundle.py:144</a>.</p>
         <div class="fix"><strong>Fix direction:</strong> carry the executable path through an ExeWrap JSON-safe value or environment value and read that value in PowerShell. Add final-EXE tests for apostrophes, spaces, brackets, Unicode, and trailing punctuation.</div>
+        <div class="implementation"><strong>Implementation:</strong> ExeWrap now places <code>@{exe_path}</code> directly in the child environment. PowerShell passes that environment value to <code>tar.exe</code> as an argument, so the path is never inserted into PowerShell source. A real final installer test runs from an apostrophe-containing directory.</div>
       </article>
 
       <article class="finding p1" id="p1-template">
@@ -211,6 +216,7 @@
         <div class="evidence"><strong>Reproduction:</strong> after generating the documented assets and providing the runtime placeholder, payload mapping failed with <code>Payload remap source is not present in the resolved file set</code>.</div>
         <p class="source">Source: <a href="../app_builder/schema.py">schema.py:75-100</a>; enforcement in <a href="../app_builder/fileset.py">fileset.py:114</a>.</p>
         <div class="fix"><strong>Fix direction:</strong> include <code>README.md</code> in the generated selection or remove the example remap. Add an acceptance test that runs <code>init</code> and then builds the generated project without hand editing.</div>
+        <div class="implementation"><strong>Implementation:</strong> the schema-generated starter include list now selects <code>README.md</code>. The initialization test creates the full required fixture and proves the generated remap resolves to <code>docs/README.md</code>.</div>
       </article>
 
       <article class="finding p1" id="p1-init-force">
@@ -220,6 +226,7 @@
         <div class="evidence"><strong>Reproduction:</strong> modify <code>application-templates/program.cmd</code>, run forced initialization, and the packaged default silently replaces the custom file.</div>
         <p class="source">Source: <a href="../app_builder/template.py">template.py:222-238</a>; option help in <a href="../app_builder/main.py">main.py:69</a>.</p>
         <div class="fix"><strong>Fix direction:</strong> make config replacement and starter-asset replacement separate explicit choices. Never overwrite an existing asset under the current <code>--force</code> contract.</div>
+        <div class="implementation"><strong>Implementation:</strong> <code>--force</code> now replaces only <code>app_builder.yaml</code>. Starter files are copied only when absent, and tests preserve customized <code>program.cmd</code> and <code>icon.ico</code> bytes.</div>
       </article>
 
       <article class="finding p1" id="p1-dependency-confusion">
@@ -334,7 +341,7 @@
             <td><span class="badge p2">P2</span></td>
             <td><strong><code>init</code> can silently shadow <code>app-builder.yaml</code></strong><br><span class="source"><a href="../app_builder/template.py">template.py:222-228</a>, <a href="../app_builder/config.py">config.py:10</a></span></td>
             <td>Initialization creates preferred <code>app_builder.yaml</code> beside the accepted hyphenated config, changing which project definition loads.</td>
-            <td>Check every accepted filename before initialization and reject ambiguous projects.</td>
+            <td>Check every accepted filename before initialization and reject ambiguous projects.<div class="implementation"><strong>Implementation:</strong> 1.x now recognizes only <code>app_builder.yaml</code>. The loader and meta dispatcher ignore <code>app-builder.yaml</code>, eliminating precedence and ambiguity rather than supporting both spellings.</div></td>
           </tr>
           <tr>
             <td><span class="badge p2">P2</span></td>

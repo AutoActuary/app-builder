@@ -7,7 +7,7 @@ import yaml
 from .config_interpolation import interpolate_config
 from .schema import AppBuilderConfig, ConfigError, load_app_builder_config
 
-CONFIG_FILENAMES = ("app_builder.yaml", "app-builder.yaml")
+CONFIG_FILENAME = "app_builder.yaml"
 
 
 def load_config(
@@ -28,13 +28,10 @@ def load_config(
 
 
 def find_config_path(project_root: Path) -> Path:
-    for filename in CONFIG_FILENAMES:
-        path = project_root / filename
-        if path.exists():
-            return path
-    raise FileNotFoundError(
-        f"Could not find any config file in {project_root}. Expected one of: {', '.join(CONFIG_FILENAMES)}."
-    )
+    path = project_root / CONFIG_FILENAME
+    if path.is_file():
+        return path
+    raise FileNotFoundError(f"Could not find {CONFIG_FILENAME} in {project_root}.")
 
 
 def load_project_config(
