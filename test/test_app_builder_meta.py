@@ -109,6 +109,22 @@ class TestAppBuilderMetaDispatch(unittest.TestCase):
 
         self.assertEqual(Managed1xVersion(ref="v1.0.0", argv=["release"]), target)
 
+    def test_cache_management_stays_in_current_outer_cli(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            (temp_dir / "app_builder.yaml").write_text(
+                "app_builder_version: v1.0.0\n", encoding="utf-8"
+            )
+
+            cache_target = choose_target(["cache", "path"], temp_dir)
+            remove_target = choose_target(["versions", "remove", "v1.0.0"], temp_dir)
+
+        self.assertEqual(CurrentInstall(argv=["cache", "path"]), cache_target)
+        self.assertEqual(
+            CurrentInstall(argv=["versions", "remove", "v1.0.0"]),
+            remove_target,
+        )
+
     def test_legacy_version_in_1x_config_errors(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)

@@ -26,29 +26,28 @@ This is the full generated template. Required fields contain example values that
 app_builder_version: current
 
 # Optional, nullable mapping | null. Optional bundled Python runtime. Set to null to
-# disable. Default if omitted: PythonBundledOptions defaults.
+# disable. Default if omitted: null.
 python_bundled:
+  # Required string. Exact Python.org Windows runtime version to materialize. Use
+  # major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or
+  # 3.15.0-beta.
+  python_version: 3.12.10
+
   # Optional string. Project-relative directory where the bundled Python runtime is
   # materialized. Default if omitted: bin/python.
   path: bin/python
 
-  # Optional string. Python.org Windows runtime version to materialize. Use
-  # major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or
-  # 3.15.0-beta. Default if omitted: 3.11.1.
+# Optional, nullable mapping | null. Optional Poetry dev virtual environment derived from
+# bundled Python when available. Set to null to disable. Default if omitted: null.
+python_venv:
+  # Required string. Exact Python.org Windows runtime version used when the virtual
+  # environment is self-contained because python_bundled is disabled. Prerelease selectors
+  # are supported.
   python_version: 3.12.10
 
-# Optional, nullable mapping | null. Optional Poetry dev virtual environment derived from
-# bundled Python when available. Set to null to disable. Default if omitted:
-# PythonVenvOptions defaults.
-python_venv:
   # Optional string. Project-relative directory where the Poetry dev virtual environment
   # is created. Default if omitted: venv.
   path: venv
-
-  # Optional string. Python.org Windows runtime version used when the virtual environment
-  # is self-contained because python_bundled is disabled. Prerelease selectors are
-  # supported. Default if omitted: 3.11.1.
-  python_version: 3.12.10
 
 # Required mapping. Required installer metadata and release payload settings.
 installer:
@@ -261,8 +260,8 @@ installer:
 | Field | Type | Required | Default | Example | Description |
 | --- | --- | --- | --- | --- | --- |
 | `app_builder_version` | `string \| null` | no | `current` | `current` | Literal version selector read by the app-builder launcher before config interpolation. Use current for the installed 1.x version; explicit 1.x tags, branches, or commits use the managed version cache. Use app-builder 0.x for legacy projects. |
-| `python_bundled` | `mapping \| null` | no | `see nested defaults` |  | Optional bundled Python runtime. Set to null to disable. |
-| `python_venv` | `mapping \| null` | no | `see nested defaults` |  | Optional Poetry dev virtual environment derived from bundled Python when available. Set to null to disable. |
+| `python_bundled` | `mapping \| null` | no | `null` | `{python_version: 3.12.10, path: bin/python}` | Optional bundled Python runtime. Set to null to disable. |
+| `python_venv` | `mapping \| null` | no | `null` | `{python_version: 3.12.10, path: venv}` | Optional Poetry dev virtual environment derived from bundled Python when available. Set to null to disable. |
 | `installer` | `mapping` | yes | required |  | Required installer metadata and release payload settings. |
 | `build_hooks` | `mapping` | no | `see nested defaults` |  | Build and release hook command declarations. |
 | `outputs` | `list[mapping]` | no | `[]` |  | Named release output collections produced by hooks or other project build steps and picked up from installer.dist. |
@@ -272,15 +271,15 @@ installer:
 
 | Field | Type | Required | Default | Example | Description |
 | --- | --- | --- | --- | --- | --- |
+| `python_version` | `string` | yes | required | `3.12.10` | Exact Python.org Windows runtime version to materialize. Use major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or 3.15.0-beta. |
 | `path` | `string` | no | `bin/python` | `bin/python` | Project-relative directory where the bundled Python runtime is materialized. |
-| `python_version` | `string` | no | `3.11.1` | `3.12.10` | Python.org Windows runtime version to materialize. Use major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or 3.15.0-beta. |
 
 ## `config.python_venv`
 
 | Field | Type | Required | Default | Example | Description |
 | --- | --- | --- | --- | --- | --- |
+| `python_version` | `string` | yes | required | `3.12.10` | Exact Python.org Windows runtime version used when the virtual environment is self-contained because python_bundled is disabled. Prerelease selectors are supported. |
 | `path` | `string` | no | `venv` | `venv` | Project-relative directory where the Poetry dev virtual environment is created. |
-| `python_version` | `string` | no | `3.11.1` | `3.12.10` | Python.org Windows runtime version used when the virtual environment is self-contained because python_bundled is disabled. Prerelease selectors are supported. |
 
 ## `config.installer`
 

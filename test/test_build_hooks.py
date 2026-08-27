@@ -21,8 +21,10 @@ def _write_config(project_root: Path, build_hooks: str) -> None:
 app_builder_version: v1.0.0
 python_bundled:
   path: bin/python
+  python_version: 3.12.10
 python_venv:
   path: venv
+  python_version: 3.12.10
 installer:
   name: Demo
   install_directory: "%localappdata%\\\\Demo"
@@ -137,6 +139,7 @@ app_builder_version: v1.0.0
 python_bundled: null
 python_venv:
   path: venv
+  python_version: 3.12.10
 installer:
   name: Demo
   install_directory: "%localappdata%\\\\Demo"

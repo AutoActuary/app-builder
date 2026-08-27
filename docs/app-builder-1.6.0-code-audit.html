@@ -276,7 +276,7 @@
         <div class="evidence"><strong>Reproduction:</strong> a disposable runtime containing <code>obsolete_dependency</code> was materialized against an empty lock. The package remained importable before and after. The manifest would record only the new lock while the payload retained old code.</div>
         <p class="source">Source: <a href="../app_builder/poetry_dependencies.py">poetry_dependencies.py:146-197</a>; runtime reuse in <a href="../app_builder/python_runtime.py">python_runtime.py:747-784</a>.</p>
         <div class="fix"><strong>Fix direction:</strong> key environments to the selected lock digest and rebuild them atomically when it changes, or reconcile installed distributions against an exact lock inventory. Add consecutive-build tests.</div>
-        <div class="implementation"><strong>Implementation:</strong> bundled and venv runtimes now record a dependency-state marker containing the committed lock digest and selected groups. A changed or missing marker removes and rematerializes the runtime before installing dependencies, including an empty new selection. Consecutive-state tests prove an obsolete package cannot survive while an unchanged runtime remains reusable.</div>
+        <div class="implementation"><strong>Implementation:</strong> bundled and venv runtimes now record a dependency-state marker containing the committed lock digest and selected groups. A changed or missing marker causes a complete replacement runtime to be materialized under lock in staging before atomic promotion, including an empty new selection. A failed replacement leaves the prior tree untouched; consecutive-state tests prove obsolete packages cannot survive while an unchanged runtime remains reusable.</div>
       </article>
 
       <article class="finding p1" id="p1-immutable-refs">
@@ -299,31 +299,31 @@
             <td class="nowrap"><span class="badge p2">P2</span></td>
             <td><strong>Documented Python prereleases fail release preflight</strong><br><span class="source"><a href="../app_builder/build_preflight.py">build_preflight.py:174-181</a>, <a href="../app_builder/schema.py">schema.py:12-15</a></span></td>
             <td><code>3.15.0-beta</code> loads and resolves, then the duplicated stable-only preflight regex rejects it.</td>
-            <td>Use one shared selector validator and add an end-to-end prerelease preflight test.</td>
+            <td>Use one shared selector validator and add an end-to-end prerelease preflight test.<div class="implementation"><strong>Implementation:</strong> config loading and release preflight now use the same Python selector validator. Stable patch releases and documented prerelease forms are accepted consistently, with regression coverage for all supported spellings.</div></td>
           </tr>
           <tr>
             <td><span class="badge p2">P2</span></td>
             <td><strong>Cache commands dispatch through the pinned project version</strong><br><span class="source"><a href="../app_builder_meta/dispatch.py">dispatch.py:69-82</a>, <a href="../app_builder_meta/version_cache.py">version_cache.py:250</a></span></td>
             <td><code>cache path</code> can be sent to an older version without that command. Removing the currently executing cached version fails on Windows with access denied.</td>
-            <td>Keep launcher/cache management in the current outer CLI and defer self-removal until the child exits.</td>
+            <td>Keep launcher/cache management in the current outer CLI and defer self-removal until the child exits.<div class="implementation"><strong>Implementation:</strong> <code>cache</code> and <code>versions</code> commands are now intercepted by the installed outer CLI before project-version dispatch. Cache inspection and removal therefore use the current cache contract and never try to remove the child version that is executing the command.</div></td>
           </tr>
           <tr>
             <td><span class="badge p2">P2</span></td>
             <td><strong>Normal runtime selection can choose free-threaded Python</strong><br><span class="source"><a href="../app_builder/python_runtime.py">python_runtime.py:350-388</a></span></td>
             <td>Both <code>pythoncore-3.13-64</code> and <code>pythoncore-3.13t-64</code> pass the filter. Index ordering decides which ABI is shipped.</td>
-            <td>Match the exact non-<code>t</code> package identity, or make free-threading an explicit option.</td>
+            <td>Match the exact non-<code>t</code> package identity, or make free-threading an explicit option.<div class="implementation"><strong>Implementation:</strong> runtime discovery now accepts only the exact <code>pythoncore-&lt;numeric-version&gt;-&lt;architecture&gt;</code> identity. Free-threaded <code>pythoncore-...t-...</code> packages are excluded and covered by an index-selection regression test.</div></td>
           </tr>
           <tr>
             <td><span class="badge p2">P2</span></td>
             <td><strong>Concurrent runtime materialization can corrupt the project runtime</strong><br><span class="source"><a href="../app_builder/python_runtime.py">python_runtime.py:685</a></span></td>
             <td>Two synchronized extractions raced while deleting/populating one directory, raised errors, and left a partial target.</td>
-            <td>Use a per-runtime lock, sibling staging directory, validation, and atomic promotion.</td>
+            <td>Use a per-runtime lock, sibling staging directory, validation, and atomic promotion.<div class="implementation"><strong>Implementation:</strong> each bundled Python and venv path now has a stable exclusive lock. app-builder builds the complete runtime and its locked dependencies in a unique sibling staging directory, validates it, records dependency state, and atomically promotes it. A failed build removes staging and leaves the previous runtime untouched.</div></td>
           </tr>
           <tr>
             <td><span class="badge p2">P2</span></td>
             <td><strong>Python index and artifact downloads have no deadline</strong><br><span class="source"><a href="../app_builder/python_runtime.py">python_runtime.py:313,395</a></span></td>
             <td>A local server that accepted a connection and stopped responding left the build blocked beyond the reproduction deadline.</td>
-            <td>Add finite connect/read timeouts and bounded retries, with a stalled-server test.</td>
+            <td>Add finite connect/read timeouts and bounded retries, with a stalled-server test.<div class="implementation"><strong>Implementation:</strong> Python.org index reads and artifact downloads now use a 30-second socket timeout and at most three attempts. Parse and HTTP failures remain immediate, transient timeout/network failures report the exhausted attempt count, and partial downloads are removed between attempts.</div></td>
           </tr>
           <tr>
             <td><span class="badge p2">P2</span></td>
@@ -371,14 +371,15 @@
             <td><span class="badge p2">P2</span></td>
             <td><strong>The app-builder PATH hook does not always put app-builder first</strong><br><span class="source"><a href="../scripts/post-install.ps1">post-install.ps1:25-45</a></span></td>
             <td>If the install directory already appears later in user PATH, the hook leaves it there. An earlier executable can still win, and duplicates remain.</td>
-            <td>Remove every normalized match, prepend exactly one install path, and test middle/duplicate entries.</td>
+            <td>Remove every normalized match, prepend exactly one install path, and test middle/duplicate entries.<div class="implementation"><strong>Implementation:</strong> the dogfood post-install hook removes every normalized copy of the app-builder install directory from both user and process PATH, then prepends exactly one copy. Existing middle entries and duplicates can no longer prevent app-builder from winning command lookup.</div></td>
           </tr>
         </tbody>
       </table>
 
       <div class="note known" style="margin-top:14px">
         <h3>Secure default needs a decision</h3>
-        <p>Both Python runtime sections still default to <code>3.11.1</code> from December 2022. Python 3.11.16 is the current security release, and 3.11 is now security-fixes-only. Because app-builder requires an exact version for reproducibility, the clean contract is likely to require <code>python_version</code> whenever a runtime section is enabled, rather than silently choosing an old patch. See <a href="../app_builder/schema.py">schema.py:26-42</a> and the <a href="https://www.python.org/downloads/release/python-31116/">Python 3.11.16 release</a>.</p>
+        <p>Both Python runtime sections previously defaulted to <code>3.11.1</code> from December 2022. Because app-builder requires an exact selector for reproducibility, silently selecting an old patch was not a defensible default. See <a href="../app_builder/schema.py">schema.py</a>.</p>
+        <div class="implementation"><strong>Implementation:</strong> omitted runtime sections now remain disabled. When <code>python_bundled</code> or <code>python_venv</code> is enabled, <code>python_version</code> is required and the loader reports the exact missing field. Projects therefore make an explicit runtime choice without app-builder periodically changing an implicit default.</div>
       </div>
     </section>
 

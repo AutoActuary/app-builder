@@ -116,8 +116,8 @@ installer:
   install_directory: "%localappdata%\\\\Demo"
 """)
 
-        self.assertIsInstance(config.python_bundled, PythonBundledOptions)
-        self.assertIsInstance(config.python_venv, PythonVenvOptions)
+        self.assertIsNone(config.python_bundled)
+        self.assertIsNone(config.python_venv)
         self.assertEqual([], config.build_hooks.pre_dist)
         self.assertEqual([], config.installer.paths.include)
         self.assertEqual([], config.installer.bootstrap_hooks.pre_extract)
@@ -167,7 +167,7 @@ installer:
     def test_python_dependency_fields_are_not_configured_in_yaml(self) -> None:
         with self.assertRaisesRegex(
             ConfigError,
-            r"config\.python_bundled: expected mapping or null, got dict\.",
+            r"config\.python_bundled: unknown key 'requirements'\.",
         ):
             self._load_yaml("""
 python_bundled:
@@ -179,7 +179,7 @@ installer:
 
         with self.assertRaisesRegex(
             ConfigError,
-            r"config\.python_venv: expected mapping or null, got dict\.",
+            r"config\.python_venv: unknown key 'requirements_files'\.",
         ):
             self._load_yaml("""
 python_venv:
@@ -202,6 +202,29 @@ installer:
                 self.assertIsNotNone(config.python_bundled)
                 assert config.python_bundled is not None
                 self.assertEqual(version, config.python_bundled.python_version)
+
+    def test_python_version_is_required_only_when_runtime_is_enabled(self) -> None:
+        omitted = self._load_yaml("""
+installer:
+  name: Demo
+  install_directory: C:\\Demo
+""")
+        self.assertIsNone(omitted.python_bundled)
+        self.assertIsNone(omitted.python_venv)
+
+        for section in ("python_bundled", "python_venv"):
+            with self.subTest(section=section):
+                with self.assertRaisesRegex(
+                    ConfigError,
+                    rf"config\.{section}\.python_version: missing required value",
+                ):
+                    self._load_yaml(f"""
+{section}:
+  path: runtime
+installer:
+  name: Demo
+  install_directory: C:\\Demo
+""")
 
     def test_invalid_python_release_selector_is_rejected(self) -> None:
         with self.assertRaisesRegex(

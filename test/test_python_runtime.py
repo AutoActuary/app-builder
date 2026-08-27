@@ -6,7 +6,7 @@ import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from zipfile import ZipFile
 
 from click.testing import CliRunner
@@ -22,6 +22,7 @@ from app_builder.python_runtime import (
     _create_self_contained_venv,
     _download_cache_path,
     _dependency_state_matches,
+    _ensure_bundled_python,
     _ensure_downloaded_file,
     _exe_wrap_launcher_matches,
     _exe_wrap_python_config,
@@ -31,8 +32,10 @@ from app_builder.python_runtime import (
     _install_exe_wrap_python_launchers,
     _matches_version_pattern,
     _load_python_runtime_packages,
+    _load_python_index_json,
+    _download_file,
     _python_source_marker_matches,
-    _prepare_dependency_runtime,
+    _promote_runtime,
     _read_base_site_packages,
     _select_python_runtime_version,
     _resolve_exe_wrap_package,
@@ -44,7 +47,7 @@ from app_builder.python_runtime import (
     _write_base_site_packages,
     ensure_python_environments,
 )
-from app_builder.schema import PythonVenvOptions
+from app_builder.schema import PythonBundledOptions, PythonVenvOptions
 from app_builder_meta.environment import AppBuilderEnvironment
 
 _TEST_PYTHON_DIGEST = "sha256:" + "0" * 64
@@ -73,28 +76,62 @@ def _write_fake_exe_wrap_package(package_path: Path) -> None:
 
 
 class TestPythonOrgRuntimeSelection(unittest.TestCase):
-    def test_dependency_lock_change_discards_stale_runtime_contents(self) -> None:
+    def test_atomic_runtime_promotion_replaces_complete_tree(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             runtime_root = Path(temp_dir_str) / "runtime"
             runtime_root.mkdir()
-            stale_package = runtime_root / "Lib" / "site-packages" / "obsolete.py"
-            stale_package.parent.mkdir(parents=True)
-            stale_package.write_text("obsolete", encoding="utf-8")
-            old_lock = PoetryLock(packages=(), sha256="old-lock")
-            new_lock = PoetryLock(packages=(), sha256="new-lock")
-            _write_dependency_state(runtime_root, old_lock, {MAIN_GROUP})
+            (runtime_root / "old.txt").write_text("old", encoding="utf-8")
+            staging_root = Path(temp_dir_str) / "staging"
+            staging_root.mkdir()
+            (staging_root / "new.txt").write_text("new", encoding="utf-8")
 
-            _prepare_dependency_runtime(runtime_root, new_lock, {MAIN_GROUP})
+            _promote_runtime(staging_root, runtime_root)
 
-            self.assertFalse(runtime_root.exists())
-            runtime_root.mkdir()
-            _write_dependency_state(runtime_root, new_lock, {MAIN_GROUP})
-            sentinel = runtime_root / "keep.txt"
-            sentinel.write_text("keep", encoding="utf-8")
-            _prepare_dependency_runtime(runtime_root, new_lock, {MAIN_GROUP})
-            self.assertTrue(sentinel.is_file())
-            self.assertTrue(
-                _dependency_state_matches(runtime_root, new_lock, {MAIN_GROUP})
+            self.assertFalse((runtime_root / "old.txt").exists())
+            self.assertEqual("new", (runtime_root / "new.txt").read_text())
+
+    def test_failed_dependency_install_preserves_existing_runtime(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            runtime_root = project_root / "bin" / "python"
+            runtime_root.mkdir(parents=True)
+            sentinel = runtime_root / "existing.txt"
+            sentinel.write_text("still valid", encoding="utf-8")
+
+            def build(staging_root: Path, _options: object) -> Path:
+                executable = staging_root / "python" / "python.exe"
+                executable.parent.mkdir(parents=True)
+                executable.write_bytes(b"python")
+                return executable
+
+            with (
+                patch(
+                    "app_builder.python_runtime._bundled_runtime_matches",
+                    return_value=False,
+                ),
+                patch(
+                    "app_builder.python_runtime._build_bundled_runtime_at",
+                    side_effect=build,
+                ),
+                patch("app_builder.python_runtime._ensure_pip"),
+                patch(
+                    "app_builder.python_runtime.install_locked_poetry_dependencies",
+                    side_effect=RuntimeError("pip failed"),
+                ),
+                self.assertRaisesRegex(RuntimeError, "pip failed"),
+            ):
+                _ensure_bundled_python(
+                    project_root,
+                    PythonBundledOptions(path="bin/python", python_version="3.12.10"),
+                    PoetryLock(packages=(), sha256="lock"),
+                )
+
+            self.assertEqual("still valid", sentinel.read_text(encoding="utf-8"))
+            self.assertFalse(
+                any(
+                    "app-builder-building" in path.name
+                    for path in runtime_root.parent.iterdir()
+                )
             )
 
     @patch(
@@ -136,6 +173,54 @@ class TestPythonOrgRuntimeSelection(unittest.TestCase):
         self.assertEqual("3.12.10", packages[0].version)
         self.assertEqual("pythoncore-3.12-64", packages[0].runtime_id)
         self.assertEqual("sha256:" + "a" * 64, packages[0].digest)
+
+    @patch(
+        "app_builder.python_runtime._python_runtime_architecture_tag", return_value="64"
+    )
+    @patch("app_builder.python_runtime._load_python_index_json")
+    def test_excludes_free_threaded_runtime_variants(
+        self, load_json: object, _architecture: object
+    ) -> None:
+        assert hasattr(load_json, "return_value")
+        load_json.return_value = {
+            "versions": [
+                {
+                    "company": "PythonCore",
+                    "id": "pythoncore-3.13-64",
+                    "tag": "3.13-64",
+                    "sort-version": "3.13.7",
+                    "url": "https://www.python.org/ftp/python/3.13.7/python-3.13.7-amd64.zip",
+                    "hash": {"sha256": "a" * 64},
+                },
+                {
+                    "company": "PythonCore",
+                    "id": "pythoncore-3.13t-64",
+                    "tag": "3.13t-64",
+                    "sort-version": "3.13.7",
+                    "url": "https://www.python.org/ftp/python/3.13.7/python-3.13.7t-amd64.zip",
+                    "hash": {"sha256": "b" * 64},
+                },
+            ]
+        }
+
+        packages = _load_python_runtime_packages()
+
+        self.assertEqual(["pythoncore-3.13-64"], [item.runtime_id for item in packages])
+
+    @patch("app_builder.python_runtime.urllib.request.urlopen")
+    def test_python_index_requests_have_bounded_timeouts_and_retries(
+        self, urlopen: MagicMock
+    ) -> None:
+        assert hasattr(urlopen, "side_effect")
+        urlopen.side_effect = TimeoutError("stalled")
+
+        with self.assertRaisesRegex(RuntimeError, "after 3 attempts"):
+            _load_python_index_json("https://www.python.org/ftp/python/index.json")
+
+        self.assertEqual(3, urlopen.call_count)
+        self.assertTrue(
+            all(call.kwargs["timeout"] == 30.0 for call in urlopen.call_args_list)
+        )
 
     def test_matches_prefix_and_wildcard_versions(self) -> None:
         self.assertTrue(_matches_version_pattern("3.12", "3.12.10"))
@@ -180,6 +265,24 @@ class TestPythonOrgRuntimeSelection(unittest.TestCase):
 
 
 class TestPythonOrgRuntimeExtraction(unittest.TestCase):
+    @patch("app_builder.python_runtime.urllib.request.urlopen")
+    def test_downloads_have_bounded_timeouts_and_leave_no_partial_file(
+        self, urlopen: MagicMock
+    ) -> None:
+        assert hasattr(urlopen, "side_effect")
+        urlopen.side_effect = TimeoutError("stalled")
+        with TemporaryDirectory() as temp_dir_str:
+            destination = Path(temp_dir_str) / "runtime.zip"
+
+            with self.assertRaisesRegex(RuntimeError, "after 3 attempts"):
+                _download_file("https://example.invalid/runtime.zip", destination)
+
+            self.assertFalse(destination.exists())
+        self.assertEqual(3, urlopen.call_count)
+        self.assertTrue(
+            all(call.kwargs["timeout"] == 30.0 for call in urlopen.call_args_list)
+        )
+
     def test_download_cache_path_uses_configured_content_keyed_cache(self) -> None:
         url = "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.zip"
         cache_root = Path("cache").resolve()
@@ -451,8 +554,10 @@ class TestPoetryDependencyPlacement(unittest.TestCase):
                 """
 python_bundled:
   path: bin/python
+  python_version: 3.12.10
 python_venv:
   path: venv
+  python_version: 3.12.10
 installer:
   name: Demo
   install_directory: "%localappdata%\\\\Demo"
@@ -472,10 +577,9 @@ installer:
                     return_value=bundled_python,
                 ) as ensure_bundled,
                 patch(
-                    "app_builder.python_runtime._create_venv_from_bundled_python",
+                    "app_builder.python_runtime._ensure_venv",
                     return_value=venv_python,
-                ) as create_venv,
-                patch("app_builder.python_runtime.install_locked_poetry_dependencies"),
+                ) as ensure_venv,
             ):
                 materializer = PythonEnvironmentMaterializer(project_root)
 
@@ -484,12 +588,15 @@ installer:
                     materializer.materialize_bundled(),
                 )
                 ensure_bundled.assert_called_once()
-                create_venv.assert_not_called()
+                ensure_venv.assert_not_called()
 
                 self.assertEqual(venv_python, materializer.materialize_venv())
-                create_venv.assert_called_once_with(
-                    project_root / "venv",
-                    project_root / "bin" / "python",
+                ensure_venv.assert_called_once_with(
+                    project_root,
+                    materializer.config.python_venv,
+                    materializer.poetry_lock,
+                    {DEV_GROUP},
+                    bundled_root=project_root / "bin" / "python",
                 )
 
                 result = materializer.result()
@@ -504,8 +611,10 @@ installer:
                 """
 python_bundled:
   path: bin/python
+  python_version: 3.12.10
 python_venv:
   path: venv
+  python_version: 3.12.10
 installer:
   name: Demo
   install_directory: "%localappdata%\\\\Demo"
@@ -522,39 +631,30 @@ installer:
                     return_value=poetry_lock,
                 ) as ensure_lock,
                 patch(
-                    "app_builder.python_runtime.establish_bundled_python",
+                    "app_builder.python_runtime._ensure_bundled_python",
                     return_value=bundled_python,
-                ),
-                patch("app_builder.python_runtime._ensure_pip"),
+                ) as ensure_bundled,
                 patch(
-                    "app_builder.python_runtime._create_venv_from_bundled_python",
+                    "app_builder.python_runtime._ensure_venv",
                     return_value=venv_python,
-                ),
-                patch(
-                    "app_builder.python_runtime.install_locked_poetry_dependencies"
-                ) as install_locked,
+                ) as ensure_venv,
             ):
                 result = ensure_python_environments(project_root)
 
         self.assertEqual(bundled_python, result.python_bundled)
         self.assertEqual(venv_python, result.python_venv)
         ensure_lock.assert_called_once_with(project_root)
-        self.assertEqual(
-            [
-                {
-                    "project_root": project_root,
-                    "python_executable": bundled_python,
-                    "poetry_lock": poetry_lock,
-                    "groups": {MAIN_GROUP},
-                },
-                {
-                    "project_root": project_root,
-                    "python_executable": venv_python,
-                    "poetry_lock": poetry_lock,
-                    "groups": {DEV_GROUP},
-                },
-            ],
-            [call.kwargs for call in install_locked.call_args_list],
+        ensure_bundled.assert_called_once_with(
+            project_root,
+            unittest.mock.ANY,
+            poetry_lock,
+        )
+        ensure_venv.assert_called_once_with(
+            project_root,
+            unittest.mock.ANY,
+            poetry_lock,
+            {DEV_GROUP},
+            bundled_root=project_root / "bin" / "python",
         )
 
     def test_venv_only_materializes_self_contained_python_for_all_groups(self) -> None:
@@ -581,25 +681,20 @@ installer:
                     return_value=poetry_lock,
                 ),
                 patch(
-                    "app_builder.python_runtime._create_self_contained_venv",
+                    "app_builder.python_runtime._ensure_venv",
                     return_value=venv_python,
-                ) as create_venv,
-                patch(
-                    "app_builder.python_runtime.install_locked_poetry_dependencies"
-                ) as install_locked,
+                ) as ensure_venv,
             ):
                 result = ensure_python_environments(project_root)
 
         self.assertIsNone(result.python_bundled)
         self.assertEqual(venv_python, result.python_venv)
-        create_venv.assert_called_once()
-        self.assertEqual(project_root / "venv", create_venv.call_args.args[0])
-        self.assertEqual("3.12.10", create_venv.call_args.args[1].python_version)
-        install_locked.assert_called_once_with(
-            project_root=project_root,
-            python_executable=venv_python,
-            poetry_lock=poetry_lock,
-            groups={MAIN_GROUP, DEV_GROUP},
+        ensure_venv.assert_called_once_with(
+            project_root,
+            unittest.mock.ANY,
+            poetry_lock,
+            {MAIN_GROUP, DEV_GROUP},
+            bundled_root=None,
         )
 
 

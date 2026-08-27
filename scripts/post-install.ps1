@@ -16,6 +16,17 @@ function Get-NormalizedPathEntry {
     }
 }
 
+function Get-PathWithEntryFirst {
+    param(
+        [string]$CurrentPath,
+        [string]$Entry
+    )
+
+    $Parts = @($CurrentPath -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $KeptParts = @($Parts | Where-Object { (Get-NormalizedPathEntry $_) -ine $Entry })
+    return (@($Entry) + $KeptParts) -join ';'
+}
+
 $InstallDir = [string]$env:app_builder_install_directory
 if ([string]::IsNullOrWhiteSpace($InstallDir)) {
     $InstallDir = Split-Path -Parent $PSScriptRoot
@@ -23,24 +34,8 @@ if ([string]::IsNullOrWhiteSpace($InstallDir)) {
 
 $InstallDir = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
 $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-$Parts = @($UserPath -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+$NewPath = Get-PathWithEntryFirst -CurrentPath $UserPath -Entry $InstallDir
+[Environment]::SetEnvironmentVariable('Path', $NewPath, 'User')
 
-$AlreadyThere = $false
-foreach ($Part in $Parts) {
-    $NormalizedPart = Get-NormalizedPathEntry $Part
-    if ($NormalizedPart -ieq $InstallDir) {
-        $AlreadyThere = $true
-        break
-    }
-}
-
-if (-not $AlreadyThere) {
-    $NewPath = (@($InstallDir) + $Parts) -join ';'
-    [Environment]::SetEnvironmentVariable('Path', $NewPath, 'User')
-
-    $ProcessParts = @($env:Path -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    $env:Path = (@($InstallDir) + $ProcessParts) -join ';'
-    Write-Host "Added app-builder to user PATH: $InstallDir"
-} else {
-    Write-Host "app-builder is already on user PATH: $InstallDir"
-}
+$env:Path = Get-PathWithEntryFirst -CurrentPath $env:Path -Entry $InstallDir
+Write-Host "Placed app-builder first on user PATH: $InstallDir"

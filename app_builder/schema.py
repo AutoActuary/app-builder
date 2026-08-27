@@ -18,29 +18,27 @@ _PYTHON_VERSION_SELECTOR = re.compile(
 
 @dataclass(slots=True)
 class PythonBundledOptions:
+    python_version: str = config_field(
+        description="Exact Python.org Windows runtime version to materialize. Use major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or 3.15.0-beta.",
+        example="3.12.10",
+    )
     path: str = config_field(
         default="bin/python",
         description="Project-relative directory where the bundled Python runtime is materialized.",
         example="bin/python",
     )
-    python_version: str = config_field(
-        default="3.11.1",
-        description="Python.org Windows runtime version to materialize. Use major.minor.patch for a stable release; prereleases accept forms such as 3.15.0b4 or 3.15.0-beta.",
-        example="3.12.10",
-    )
 
 
 @dataclass(slots=True)
 class PythonVenvOptions:
+    python_version: str = config_field(
+        description="Exact Python.org Windows runtime version used when the virtual environment is self-contained because python_bundled is disabled. Prerelease selectors are supported.",
+        example="3.12.10",
+    )
     path: str = config_field(
         default="venv",
         description="Project-relative directory where the Poetry dev virtual environment is created.",
         example="venv",
-    )
-    python_version: str = config_field(
-        default="3.11.1",
-        description="Python.org Windows runtime version used when the virtual environment is self-contained because python_bundled is disabled. Prerelease selectors are supported.",
-        example="3.12.10",
     )
 
 
@@ -265,12 +263,20 @@ class AppBuilderConfig:
         example="current",
     )
     python_bundled: PythonBundledOptions | None = config_field(
-        default_factory=PythonBundledOptions,
+        default=None,
         description="Optional bundled Python runtime. Set to null to disable.",
+        example_factory=lambda: {
+            "python_version": "3.12.10",
+            "path": "bin/python",
+        },
     )
     python_venv: PythonVenvOptions | None = config_field(
-        default_factory=PythonVenvOptions,
+        default=None,
         description="Optional Poetry dev virtual environment derived from bundled Python when available. Set to null to disable.",
+        example_factory=lambda: {
+            "python_version": "3.12.10",
+            "path": "venv",
+        },
     )
     installer: InstallerOptions = config_field(
         description="Required installer metadata and release payload settings.",
@@ -316,15 +322,20 @@ def load_app_builder_config(
         ("python_bundled", config.python_bundled),
         ("python_venv", config.python_venv),
     ):
-        if (
-            options is not None
-            and _PYTHON_VERSION_SELECTOR.fullmatch(options.python_version) is None
+        if options is not None and not is_valid_python_version_selector(
+            options.python_version
         ):
             raise ConfigError(
                 f"{path}.{section_name}.python_version",
                 "expected major.minor.patch, optionally followed by a Python prerelease such as b4, rc1, or -beta.",
             )
     return config
+
+
+def is_valid_python_version_selector(value: object) -> bool:
+    return (
+        isinstance(value, str) and _PYTHON_VERSION_SELECTOR.fullmatch(value) is not None
+    )
 
 
 def _looks_like_legacy_config(value: Mapping[str, Any]) -> bool:

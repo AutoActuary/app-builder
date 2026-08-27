@@ -71,7 +71,7 @@ class TestBuildPreflight(unittest.TestCase):
                         ),
                         python_bundled=PythonBundledOptions(python_version="3.12"),
                     ),
-                    "major.minor.patch",
+                    "supported prerelease selector",
                 ),
             )
             for config, expected in cases:
@@ -130,7 +130,9 @@ class TestBuildPreflight(unittest.TestCase):
                 validate_build_configuration(project_root, config, version="1.2.3")
 
             config.installer.dist = "dist"
-            config.python_bundled = PythonBundledOptions(path="../python")
+            config.python_bundled = PythonBundledOptions(
+                path="../python", python_version="3.12.10"
+            )
             with self.assertRaisesRegex(ValueError, "project-relative subdirectory"):
                 validate_build_configuration(project_root, config, version="1.2.3")
 
@@ -139,6 +141,26 @@ class TestBuildPreflight(unittest.TestCase):
             with patch.dict("os.environ", {"WINDIR": r"C:\Windows"}, clear=False):
                 with self.assertRaisesRegex(ValueError, "protected Windows"):
                     validate_build_configuration(project_root, config, version="1.2.3")
+
+    def test_preflight_accepts_supported_prerelease_selectors(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            subprocess.run(
+                ["git", "init"], cwd=project_root, check=True, capture_output=True
+            )
+            for version in ("3.15.0b4", "3.15.0rc1", "3.15.0-beta", "3.15.0-rc.2"):
+                with self.subTest(version=version):
+                    validate_build_configuration(
+                        project_root,
+                        AppBuilderConfig(
+                            installer=InstallerOptions(
+                                name="Demo",
+                                install_directory=r"%LOCALAPPDATA%\Demo",
+                            ),
+                            python_bundled=PythonBundledOptions(python_version=version),
+                        ),
+                        version="1.2.3",
+                    )
 
     def test_rejects_install_directory_traversal_before_and_after_normalization(
         self,
