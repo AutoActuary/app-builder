@@ -56,6 +56,7 @@ class TestCliHelp(unittest.TestCase):
 
         self.assertTrue(docs_help.is_file())
         self.assertFalse(old_assets_help.exists())
+        self.assertEqual([docs_help], sorted((repo_root / "docs").glob("*.html")))
 
     def test_wheel_data_file_location_is_used_outside_source_checkout(self) -> None:
         with TemporaryDirectory() as temp_dir_str:

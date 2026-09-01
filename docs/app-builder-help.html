@@ -319,8 +319,8 @@ Release files in dist
               <td>Runs the dependency-stage hooks and materializes configured Python environments without building release artifacts.</td>
             </tr>
             <tr>
-              <td><code>app-builder lock</code></td>
-              <td>Explicitly creates or refreshes <code>poetry.lock</code>; normal builds only verify it.</td>
+              <td><code>app-builder lock [--check | --refresh]</code></td>
+              <td>Creates or refreshes <code>poetry.lock</code> by default; <code>--check</code> verifies it without writing.</td>
             </tr>
             <tr>
               <td><code>app-builder cache path | info</code></td>
@@ -1371,7 +1371,8 @@ publications:
           Stable Python versions use an exact <code>major.minor.patch</code> pin. Python prereleases may use an exact
           form such as <code>3.15.0b4</code>, or a release-level selector such as <code>3.15.0-beta</code>. Normal builds verify an existing
           <code>poetry.lock</code> and install locked registry artifacts by SHA-256; use <code>app-builder lock</code>
-          when dependency declarations change. Git sources require a full resolved commit. Mutable Poetry
+          when dependency declarations change, and <code>app-builder lock --check</code> in CI to fail on a missing,
+          stale, or invalid lock without rewriting it. Git sources require a full resolved commit. Mutable Poetry
           <code>file</code> and <code>directory</code> sources are rejected; publish a hashed artifact or use a
           pinned Git source instead. Complete Python runtimes are selected from Python.org's Windows runtime index,
           cached under <code>%LOCALAPPDATA%\app-builder\cache\downloads</code> by default, and verified against the SHA-256 published in that index.

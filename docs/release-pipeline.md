@@ -59,11 +59,12 @@ The release path runs dependency stages before file collection:
 
 Python dependencies come from `pyproject.toml` and an existing `poetry.lock`.
 Normal builds run Poetry's read-only lock check and never regenerate the lock;
-`app-builder lock` is the explicit lock-changing command. Registry artifacts are
-installed with pip hash checking, Git sources require a full resolved commit,
-mutable Poetry `file` and `directory` sources are rejected, Python's complete
-Windows runtime is selected from the Python.org runtime index and verified against
-its published SHA-256, and
+`app-builder lock` is the explicit lock-changing command, while
+`app-builder lock --check` exposes the same read-only validation for CI and exits
+nonzero for a missing, stale, or invalid lock. Registry artifacts are installed
+with pip hash checking, Git sources require a full resolved commit, mutable Poetry
+`file` and `directory` sources are rejected, Python's complete Windows runtime is
+selected from the Python.org runtime index and verified against its published SHA-256, and
 ExeWrap is pinned to a versioned asset and SHA-256 digest. The installer manifest
 records this build-input provenance.
 
@@ -393,13 +394,15 @@ the current project pins another app-builder version.
 
 1. When dependencies changed, run `app-builder lock` deliberately and commit both
    `pyproject.toml` and `poetry.lock`.
-2. From a clean checkout, run `app-builder release --version <version> --verbose`.
-3. Review the resolved output inventory, checksums, generated notes, build log,
+2. Run `app-builder lock --check` in CI to reject missing, stale, or invalid locks
+   without modifying the checkout.
+3. From a clean checkout, run `app-builder release --version <version> --verbose`.
+4. Review the resolved output inventory, checksums, generated notes, build log,
    and executable signing status.
-4. Exercise the actual installer executable in a disposable user environment:
+5. Exercise the actual installer executable in a disposable user environment:
    fresh install, application launch, same-app replacement, and uninstall through
    the generated shortcut or Windows Installed Apps entry.
-5. Confirm the intended tag and HEAD, then run
+6. Confirm the intended tag and HEAD, then run
    `app-builder release-gh --version <version>`; publication preflight repeats the
    identity and artifact checks before upload.
 

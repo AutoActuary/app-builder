@@ -24,7 +24,7 @@ from app_builder_meta.version_cache import (
 from . import __version__
 from .build import build_release, ensure_python_environments, upload_release_to_github
 from .project import find_project_root
-from .poetry_dependencies import refresh_poetry_lock
+from .poetry_dependencies import ensure_poetry_lock, refresh_poetry_lock
 from .python_runtime import ensure_bundled_python
 from .template import initialize_project
 
@@ -98,14 +98,23 @@ def deps() -> None:
 
 
 @main.command("lock")
-def lock_cmd() -> None:
+@click.option(
+    "--check/--refresh",
+    default=False,
+    help="Verify poetry.lock is current without changing it instead of refreshing it.",
+)
+def lock_cmd(*, check: bool) -> None:
     """
-    Explicitly create or refresh poetry.lock for subsequent reproducible builds.
+    Create, refresh, or verify poetry.lock for reproducible builds.
     """
 
     project_root = find_project_root(Path.cwd())
-    poetry_lock = refresh_poetry_lock(project_root)
-    click.echo(f"Refreshed lock: {poetry_lock.path}")
+    if check:
+        poetry_lock = ensure_poetry_lock(project_root)
+        click.echo(f"Lock is up to date: {poetry_lock.path}")
+    else:
+        poetry_lock = refresh_poetry_lock(project_root)
+        click.echo(f"Refreshed lock: {poetry_lock.path}")
     click.echo(f"SHA-256: {poetry_lock.sha256}")
 
 
