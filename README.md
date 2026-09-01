@@ -75,7 +75,7 @@ app-builder --version
 app-builder init [--force]
 app-builder python
 app-builder deps
-app-builder lock
+app-builder lock [--check | --refresh]
 app-builder cache path
 app-builder cache info
 app-builder versions list
@@ -112,12 +112,13 @@ README is intentionally short. The release pipeline document exists separately b
 
 Normal builds verify an existing `poetry.lock` and install locked registry
 artifacts by SHA-256. They never rewrite the lock. Run `app-builder lock`
-deliberately when dependencies change. Complete Windows Python runtimes come
-from Python.org and are verified against its published SHA-256. Stable versions
-use exact `major.minor.patch` pins; prereleases also accept selectors such as
-`3.15.0-beta`. Mutable Poetry `file` and `directory` dependencies are rejected
-for releases; use a hashed index artifact or a Git source pinned to a full
-resolved commit.
+deliberately when dependencies change. CI can run `app-builder lock --check` to
+exit nonzero when the lock is missing, stale, or invalid without rewriting it.
+Complete Windows Python runtimes come from Python.org and are verified against
+its published SHA-256. Stable versions use exact `major.minor.patch` pins;
+prereleases also accept selectors such as `3.15.0-beta`. Mutable Poetry `file`
+and `directory` dependencies are rejected for releases; use a hashed index
+artifact or a Git source pinned to a full resolved commit.
 
 Project runtimes carry a dependency-state marker. If the lock digest or selected
 dependency groups change, app-builder rebuilds that runtime before installing the
