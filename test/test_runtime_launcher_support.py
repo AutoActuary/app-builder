@@ -12,7 +12,10 @@ from unittest.mock import patch
 from zipfile import ZipFile
 
 from app_builder import _runtime_launcher_support as support
-from app_builder.python_runtime import _install_runtime_launcher_support
+from app_builder.python_runtime import (
+    _install_runtime_launcher_support,
+    _prepare_runtime_launchers,
+)
 
 
 def _entry_point_launcher(shebang: bytes) -> bytes:
@@ -49,6 +52,21 @@ def _write_entry_point_wheel(path: Path) -> None:
 
 @unittest.skipUnless(os.name == "nt", "Windows launchers are Windows-only")
 class TestRuntimeLauncherSupport(unittest.TestCase):
+    def test_existing_launcher_is_healed_when_support_is_already_current(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            runtime = Path(temp_dir_str) / "venv"
+            subprocess.run([sys.executable, "-m", "venv", str(runtime)], check=True)
+            python = runtime / "Scripts" / "python.exe"
+            _prepare_runtime_launchers(runtime, python)
+
+            launcher = runtime / "Scripts" / "stale.exe"
+            launcher.write_bytes(_entry_point_launcher(b'#!"C:\\old venv\\python.exe"'))
+            _prepare_runtime_launchers(runtime, python)
+
+            healed = launcher.read_bytes()
+            self.assertIn(b"#!<launcher_dir>\\python.exe\n", healed)
+            self.assertNotIn(b"old venv", healed)
+
     def test_future_pip_launcher_survives_venv_relocation(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
