@@ -33,6 +33,9 @@ MANIFEST
 
 /bin/python
 /bin/.app-builder-runtime-locks/
+/.app-builder-runtime-locks/
+/.venv.app-builder-building-*/
+/.venv.app-builder-previous-*/
 /bin/git
 /__app_builder_0x__/
 /tools/

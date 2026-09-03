@@ -68,13 +68,24 @@ selected from the Python.org runtime index and verified against its published SH
 ExeWrap is pinned to a versioned asset and SHA-256 digest. The installer manifest
 records this build-input provenance.
 
-Each project runtime records the lock digest and groups installed into it. A
-different lock, changed group selection, or missing marker causes the runtime to
-be rebuilt before dependencies are installed. Runtime creation is serialized per
-target path. The complete candidate is built and validated in a unique sibling
-directory, then atomically promoted, so a concurrent or failed build cannot expose
-a partial runtime or destroy the previous usable one. This also applies when the
-new selection is empty, so removed packages cannot survive from an earlier build.
+Each project runtime records the lock digest and groups installed into it. The two
+runtime types deliberately have different ownership contracts:
+
+- `python_bundled` is release input owned by app-builder. A changed lock, changed
+  group selection, or missing marker rebuilds the complete runtime, including an
+  empty selection, so removed packages cannot survive into a later release.
+- `python_venv` is the developer's working environment. A changed lock installs or
+  updates the required packages in place. Unlisted and formerly locked packages
+  are left alone. The venv is replaced only when its Python identity or structure
+  is incompatible with the configured runtime.
+
+Runtime creation and replacement are serialized per target path. Bundled Python
+is built and validated in a private sibling directory before replacing the release
+runtime. A venv is created at its final path so Python does not record a temporary
+location. An incompatible existing venv is moved to a private backup first and is
+restored if its replacement fails. Directory moves retry transient Windows access
+and sharing violations. Generated Windows Python commands use launcher-relative
+interpreter paths, and future pip installs inherit the same behavior automatically.
 
 Python.org index and artifact requests have a 30-second socket deadline and at
 most three attempts for transient network failures. Normal runtime selection
