@@ -120,9 +120,13 @@ prereleases also accept selectors such as `3.15.0-beta`. Mutable Poetry `file`
 and `directory` dependencies are rejected for releases; use a hashed index
 artifact or a Git source pinned to a full resolved commit.
 
-Project runtimes carry a dependency-state marker. If the lock digest or selected
-dependency groups change, app-builder rebuilds that runtime before installing the
-new lock, so packages removed from `poetry.lock` cannot leak into later releases.
+The shipped `python_bundled` runtime is reproducible: a changed dependency lock
+rebuilds it, so removed packages cannot leak into a release. The project
+`python_venv` is developer-owned and additive. Lock changes update its required
+packages in place without removing packages the developer installed separately;
+only an incompatible or broken Python environment is replaced. Windows Python
+entry-point launchers use paths relative to their runtime, so staging promotion
+does not leave them pointing at an obsolete absolute path.
 
 Use `%LOCALAPPDATA%`, `%APPDATA%`, or `%USERPROFILE%` as the root for install
 paths that must resolve on the end user's machine. Other variable-root install
