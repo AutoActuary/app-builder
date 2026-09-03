@@ -14,6 +14,27 @@ from app_builder.fileset import (
 
 
 class TestArchiveDestinationValidation(unittest.TestCase):
+    def test_directory_exclusions_remove_only_files_beneath_the_directory(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            excluded = project_root / "package" / "cache"
+            similarly_named = project_root / "package" / "cache-other"
+            excluded.mkdir(parents=True)
+            similarly_named.mkdir(parents=True)
+            (excluded / "ignored.txt").write_text("ignored", encoding="utf-8")
+            kept = similarly_named / "kept.txt"
+            kept.write_text("kept", encoding="utf-8")
+
+            selected = collect_files(
+                project_root,
+                ["package"],
+                ["package/cache"],
+            )
+
+            self.assertEqual([kept.resolve()], selected)
+
     def test_payload_selection_requires_every_include_and_a_nonempty_result(
         self,
     ) -> None:
