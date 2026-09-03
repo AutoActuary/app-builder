@@ -64,14 +64,22 @@ def collect_files(
                         files[child.resolve()] = None
             elif path.is_file():
                 files[path.resolve()] = None
+    excluded_files: set[str] = set()
+    excluded_directories: list[str] = []
     for path in expand_patterns(project_root, exclude):
+        resolved = path.resolve()
+        normalized = os.path.normcase(str(resolved))
         if path.is_dir():
-            prefix = path.resolve()
-            for file_path in list(files):
-                if prefix in file_path.parents or file_path == prefix:
-                    files.pop(file_path, None)
+            excluded_directories.append(normalized.rstrip(os.sep) + os.sep)
         else:
-            files.pop(path.resolve(), None)
+            excluded_files.add(normalized)
+    if excluded_files or excluded_directories:
+        for file_path in list(files):
+            normalized = os.path.normcase(str(file_path))
+            if normalized in excluded_files or any(
+                normalized.startswith(directory) for directory in excluded_directories
+            ):
+                files.pop(file_path, None)
     resolved_files = [Path(path) for path in sorted(files)]
     if not resolved_files:
         raise ValueError(
