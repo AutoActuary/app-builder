@@ -109,29 +109,27 @@ def _runtime_site_packages(runtime_root: Path) -> Path:
     return runtime_root / "Lib" / "site-packages"
 
 
-def _write_runtime_support_file(path: Path, payload: bytes) -> bool:
+def _write_runtime_support_file(path: Path, payload: bytes) -> None:
     if path.is_file() and path.read_bytes() == payload:
-        return False
+        return
     path.write_bytes(payload)
-    return True
 
 
-def _install_runtime_launcher_support(runtime_root: Path) -> bool:
+def _install_runtime_launcher_support(runtime_root: Path) -> None:
     site_packages = _runtime_site_packages(runtime_root)
     site_packages.mkdir(parents=True, exist_ok=True)
     source = Path(__file__).with_name("_runtime_launcher_support.py")
-    module_changed = _write_runtime_support_file(
+    _write_runtime_support_file(
         site_packages / _RUNTIME_LAUNCHER_MODULE,
         source.read_bytes(),
     )
-    pth_changed = _write_runtime_support_file(
+    _write_runtime_support_file(
         site_packages / _RUNTIME_LAUNCHER_PTH,
         (
             "import _app_builder_runtime_launchers; "
             "_app_builder_runtime_launchers.install_import_hook()\n"
         ).encode("utf-8"),
     )
-    return module_changed or pth_changed
 
 
 def _heal_runtime_launchers(python_executable: Path) -> None:
@@ -148,8 +146,8 @@ def _heal_runtime_launchers(python_executable: Path) -> None:
 
 
 def _prepare_runtime_launchers(runtime_root: Path, python_executable: Path) -> None:
-    if _install_runtime_launcher_support(runtime_root):
-        _heal_runtime_launchers(python_executable)
+    _install_runtime_launcher_support(runtime_root)
+    _heal_runtime_launchers(python_executable)
 
 
 def _matches_version_pattern(pattern: str | None, version: str) -> bool:
