@@ -7,15 +7,19 @@ import os
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from collections.abc import Mapping, Sequence
+import warnings
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import TracebackType
 from typing import Any
 from zipfile import ZipFile
 
@@ -50,8 +54,11 @@ _EXE_WRAP_CONFIG_START_MARKER = b"8c0e8d4c-32af-4fd8-9c68-6a0f97efeb6a"
 _EXE_WRAP_CONSOLE_LAUNCHER = "ExeWrap-console.exe"
 _EXE_WRAP_WINDOWED_LAUNCHER = "ExeWrap-windowed.exe"
 _EXE_WRAP_SOURCE_MARKER = ".app-builder-exewrap-source.json"
+_RUNTIME_LAUNCHER_MODULE = "_app_builder_runtime_launchers.py"
+_RUNTIME_LAUNCHER_PTH = "app_builder_relative_launchers.pth"
 _NETWORK_TIMEOUT_SECONDS = 30.0
 _NETWORK_ATTEMPTS = 3
+_WINDOWS_FILESYSTEM_RETRY_DELAYS = (0.05, 0.1, 0.2, 0.4, 0.8)
 
 
 class PythonVersionNotFoundError(RuntimeError):
@@ -96,6 +103,53 @@ def _ensure_pip(python_executable: Path) -> None:
         ],
         check=True,
     )
+
+
+def _runtime_site_packages(runtime_root: Path) -> Path:
+    return runtime_root / "Lib" / "site-packages"
+
+
+def _write_runtime_support_file(path: Path, payload: bytes) -> bool:
+    if path.is_file() and path.read_bytes() == payload:
+        return False
+    path.write_bytes(payload)
+    return True
+
+
+def _install_runtime_launcher_support(runtime_root: Path) -> bool:
+    site_packages = _runtime_site_packages(runtime_root)
+    site_packages.mkdir(parents=True, exist_ok=True)
+    source = Path(__file__).with_name("_runtime_launcher_support.py")
+    module_changed = _write_runtime_support_file(
+        site_packages / _RUNTIME_LAUNCHER_MODULE,
+        source.read_bytes(),
+    )
+    pth_changed = _write_runtime_support_file(
+        site_packages / _RUNTIME_LAUNCHER_PTH,
+        (
+            "import _app_builder_runtime_launchers; "
+            "_app_builder_runtime_launchers.install_import_hook()\n"
+        ).encode("utf-8"),
+    )
+    return module_changed or pth_changed
+
+
+def _heal_runtime_launchers(python_executable: Path) -> None:
+    subprocess.run(
+        [
+            str(python_executable),
+            "-E",
+            "-c",
+            "import _app_builder_runtime_launchers as support; "
+            "support.heal_existing_launchers()",
+        ],
+        check=True,
+    )
+
+
+def _prepare_runtime_launchers(runtime_root: Path, python_executable: Path) -> None:
+    if _install_runtime_launcher_support(runtime_root):
+        _heal_runtime_launchers(python_executable)
 
 
 def _matches_version_pattern(pattern: str | None, version: str) -> bool:
@@ -782,26 +836,104 @@ def _runtime_staging_path(runtime_root: Path) -> Path:
     )
 
 
-def _promote_runtime(staging_root: Path, runtime_root: Path) -> None:
-    runtime_root.parent.mkdir(parents=True, exist_ok=True)
-    backup_root = runtime_root.parent / (
+def _runtime_backup_path(runtime_root: Path) -> Path:
+    return runtime_root.parent / (
         f".{runtime_root.name}.app-builder-previous-{uuid.uuid4().hex}"
     )
+
+
+def _replace_path_with_retry(source: Path, destination: Path) -> None:
+    for delay in (*_WINDOWS_FILESYSTEM_RETRY_DELAYS, None):
+        try:
+            os.replace(source, destination)
+            return
+        except OSError as error:
+            if (
+                os.name != "nt"
+                or getattr(error, "winerror", None) not in {5, 32}
+                or delay is None
+            ):
+                raise
+            time.sleep(delay)
+
+
+def _remove_runtime_tree(path: Path) -> None:
+    if not path.exists():
+        return
+    for delay in (*_WINDOWS_FILESYSTEM_RETRY_DELAYS, None):
+        try:
+            shutil.rmtree(path, onerror=_clear_readonly_and_retry)
+            return
+        except OSError as error:
+            if (
+                os.name != "nt"
+                or getattr(error, "winerror", None) not in {5, 32}
+                or delay is None
+            ):
+                warnings.warn(
+                    f"Could not remove obsolete app-builder runtime directory {path}: "
+                    f"{error}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                return
+            time.sleep(delay)
+
+
+def _clear_readonly_and_retry(
+    function: Callable[[str], object],
+    path: str,
+    _: tuple[type[BaseException], BaseException, TracebackType],
+) -> None:
+    os.chmod(path, stat.S_IWRITE)
+    function(path)
+
+
+def _promote_runtime(staging_root: Path, runtime_root: Path) -> None:
+    runtime_root.parent.mkdir(parents=True, exist_ok=True)
+    backup_root = _runtime_backup_path(runtime_root)
     moved_existing = False
     try:
         if runtime_root.exists():
-            os.replace(runtime_root, backup_root)
+            _replace_path_with_retry(runtime_root, backup_root)
             moved_existing = True
-        os.replace(staging_root, runtime_root)
+        _replace_path_with_retry(staging_root, runtime_root)
     except BaseException:
         if moved_existing and backup_root.exists() and not runtime_root.exists():
-            os.replace(backup_root, runtime_root)
+            _replace_path_with_retry(backup_root, runtime_root)
         raise
     finally:
         if staging_root.exists():
-            shutil.rmtree(staging_root, ignore_errors=True)
+            _remove_runtime_tree(staging_root)
     if backup_root.exists():
-        shutil.rmtree(backup_root, ignore_errors=True)
+        _remove_runtime_tree(backup_root)
+
+
+def _replace_runtime_at_final_path(
+    runtime_root: Path,
+    build: Callable[[Path], None],
+) -> None:
+    runtime_root.parent.mkdir(parents=True, exist_ok=True)
+    backup_root = _runtime_backup_path(runtime_root)
+    moved_existing = False
+    try:
+        if runtime_root.exists():
+            _replace_path_with_retry(runtime_root, backup_root)
+            moved_existing = True
+        build(runtime_root)
+    except BaseException as build_error:
+        _remove_runtime_tree(runtime_root)
+        if moved_existing and backup_root.exists():
+            try:
+                _replace_path_with_retry(backup_root, runtime_root)
+            except BaseException as rollback_error:
+                build_error.add_note(
+                    f"The previous runtime remains at {backup_root} because "
+                    f"rollback failed: {rollback_error}"
+                )
+        raise
+    if backup_root.exists():
+        _remove_runtime_tree(backup_root)
 
 
 def _python_matches(python_executable: Path, version_pattern: str | None) -> bool:
@@ -829,7 +961,9 @@ def _build_bundled_runtime_at(
     package_path = _ensure_downloaded_file(package.download_url, package.digest)
     _extract_python_runtime_package(package_path, runtime_root)
     _write_python_source_marker(runtime_root, package)
-    return _bundled_python_executable(runtime_root)
+    python_executable = _bundled_python_executable(runtime_root)
+    _prepare_runtime_launchers(runtime_root, python_executable)
+    return python_executable
 
 
 def _bundled_runtime_matches(runtime_root: Path, options: PythonBundledOptions) -> bool:
@@ -845,7 +979,9 @@ def establish_bundled_python(
     runtime_root = project_root / options.path
     with exclusive_cache_lock(_runtime_lock_path(runtime_root)):
         if _bundled_runtime_matches(runtime_root, options):
-            return _bundled_python_executable(runtime_root)
+            existing_python = _bundled_python_executable(runtime_root)
+            _prepare_runtime_launchers(runtime_root, existing_python)
+            return existing_python
 
         staging_root = _runtime_staging_path(runtime_root)
         try:
@@ -874,7 +1010,9 @@ def _ensure_bundled_python(
         if _bundled_runtime_matches(
             runtime_root, options
         ) and _dependency_state_matches(runtime_root, poetry_lock, groups):
-            return _bundled_python_executable(runtime_root)
+            existing_python = _bundled_python_executable(runtime_root)
+            _prepare_runtime_launchers(runtime_root, existing_python)
+            return existing_python
 
         staging_root = _runtime_staging_path(runtime_root)
         try:
@@ -1039,7 +1177,9 @@ def _create_venv_from_bundled_python(venv_root: Path, bundled_root: Path) -> Pat
     )
     _copy_bundled_runtime_support(bundled_root, venv_root)
     _write_base_site_packages(venv_root, bundled_root / "Lib" / "site-packages")
-    return _python_executable(venv_root)
+    python_executable = _python_executable(venv_root)
+    _prepare_runtime_launchers(venv_root, python_executable)
+    return python_executable
 
 
 def _self_contained_venv_python_executable(venv_root: Path) -> Path:
@@ -1102,9 +1242,11 @@ def _create_self_contained_venv(
     package_path = _ensure_downloaded_file(package.download_url, package.digest)
     _extract_python_runtime_package(package_path, venv_root)
     _write_python_source_marker(venv_root, package)
-    _ensure_pip(_self_contained_venv_python_executable(venv_root))
     _install_exe_wrap_python_launchers(venv_root)
-    return _self_contained_venv_launcher_executable(venv_root)
+    python_executable = _self_contained_venv_launcher_executable(venv_root)
+    _prepare_runtime_launchers(venv_root, python_executable)
+    _ensure_pip(python_executable)
+    return python_executable
 
 
 def _venv_runtime_matches(
@@ -1129,37 +1271,40 @@ def _ensure_venv(
 ) -> Path:
     venv_root = project_root / options.path
     with exclusive_cache_lock(_runtime_lock_path(venv_root)):
-        if _venv_runtime_matches(
-            venv_root, options, bundled_root
-        ) and _dependency_state_matches(venv_root, poetry_lock, groups):
-            return _python_executable(venv_root)
+        if _venv_runtime_matches(venv_root, options, bundled_root):
+            existing_python = _python_executable(venv_root)
+            _prepare_runtime_launchers(venv_root, existing_python)
+            if not _dependency_state_matches(venv_root, poetry_lock, groups):
+                install_locked_poetry_dependencies(
+                    project_root=project_root,
+                    python_executable=existing_python,
+                    poetry_lock=poetry_lock,
+                    groups=groups,
+                )
+                _write_dependency_state(venv_root, poetry_lock, groups)
+            return existing_python
 
-        staging_root = _runtime_staging_path(venv_root)
-        try:
+        def build(candidate_root: Path) -> None:
             if bundled_root is not None:
-                staging_python = _create_venv_from_bundled_python(
-                    staging_root, bundled_root
+                candidate_python = _create_venv_from_bundled_python(
+                    candidate_root, bundled_root
                 )
             else:
-                staging_python = _create_self_contained_venv(staging_root, options)
+                candidate_python = _create_self_contained_venv(candidate_root, options)
             install_locked_poetry_dependencies(
                 project_root=project_root,
-                python_executable=staging_python,
+                python_executable=candidate_python,
                 poetry_lock=poetry_lock,
                 groups=groups,
             )
-            _write_dependency_state(staging_root, poetry_lock, groups)
-            if not _venv_runtime_matches(staging_root, options, bundled_root):
+            _write_dependency_state(candidate_root, poetry_lock, groups)
+            if not _venv_runtime_matches(candidate_root, options, bundled_root):
                 raise RuntimeError(
-                    f"Materialized Python environment at {staging_root} did not "
+                    f"Materialized Python environment at {candidate_root} did not "
                     "pass validation."
                 )
-            if bundled_root is None:
-                _write_self_contained_runtime_home(staging_root, venv_root)
-            _promote_runtime(staging_root, venv_root)
-        finally:
-            if staging_root.exists():
-                shutil.rmtree(staging_root, ignore_errors=True)
+
+        _replace_runtime_at_final_path(venv_root, build)
     return _python_executable(venv_root)
 
 

@@ -24,6 +24,7 @@ from app_builder.python_runtime import (
     _dependency_state_matches,
     _ensure_bundled_python,
     _ensure_downloaded_file,
+    _ensure_venv,
     _exe_wrap_launcher_matches,
     _exe_wrap_python_config,
     _extract_python_runtime_package,
@@ -34,9 +35,11 @@ from app_builder.python_runtime import (
     _load_python_runtime_packages,
     _load_python_index_json,
     _download_file,
+    _python_executable,
     _python_source_marker_matches,
     _promote_runtime,
     _read_base_site_packages,
+    _replace_path_with_retry,
     _select_python_runtime_version,
     _resolve_exe_wrap_package,
     _self_contained_venv_matches,
@@ -89,6 +92,121 @@ class TestPythonOrgRuntimeSelection(unittest.TestCase):
 
             self.assertFalse((runtime_root / "old.txt").exists())
             self.assertEqual("new", (runtime_root / "new.txt").read_text())
+
+    def test_failed_venv_replacement_restores_previous_tree(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            venv_root = project_root / "venv"
+            venv_root.mkdir()
+            (venv_root / "old.txt").write_text("old", encoding="utf-8")
+
+            def fail_build(candidate: Path, _: Path) -> Path:
+                candidate.mkdir()
+                (candidate / "partial.txt").write_text("partial", encoding="utf-8")
+                raise RuntimeError("build failed")
+
+            with (
+                patch(
+                    "app_builder.python_runtime._venv_runtime_matches",
+                    return_value=False,
+                ),
+                patch(
+                    "app_builder.python_runtime._create_venv_from_bundled_python",
+                    side_effect=fail_build,
+                ),
+                self.assertRaisesRegex(RuntimeError, "build failed"),
+            ):
+                _ensure_venv(
+                    project_root,
+                    PythonVenvOptions(path="venv", python_version="3.12.10"),
+                    PoetryLock(packages=(), sha256="lock"),
+                    {DEV_GROUP},
+                    bundled_root=project_root / "bin" / "python",
+                )
+
+            self.assertEqual("old", (venv_root / "old.txt").read_text())
+            self.assertFalse((venv_root / "partial.txt").exists())
+            self.assertFalse(
+                any(
+                    "app-builder-previous" in path.name
+                    for path in project_root.iterdir()
+                )
+            )
+
+    def test_new_venv_is_built_at_its_configured_path(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            venv_root = project_root / "venv"
+
+            def create_venv(candidate: Path, _: Path) -> Path:
+                python = _python_executable(candidate)
+                python.parent.mkdir(parents=True)
+                python.write_bytes(b"python")
+                (candidate / "created-at.txt").write_text(
+                    str(candidate), encoding="utf-8"
+                )
+                return python
+
+            with (
+                patch(
+                    "app_builder.python_runtime._venv_runtime_matches",
+                    side_effect=[False, True],
+                ),
+                patch(
+                    "app_builder.python_runtime._create_venv_from_bundled_python",
+                    side_effect=create_venv,
+                ),
+                patch("app_builder.python_runtime.install_locked_poetry_dependencies"),
+            ):
+                result = _ensure_venv(
+                    project_root,
+                    PythonVenvOptions(path="venv", python_version="3.12.10"),
+                    PoetryLock(packages=(), sha256="lock"),
+                    {DEV_GROUP},
+                    bundled_root=project_root / "bin" / "python",
+                )
+
+            self.assertEqual(_python_executable(venv_root), result)
+            self.assertEqual(
+                str(venv_root),
+                (venv_root / "created-at.txt").read_text(encoding="utf-8"),
+            )
+            self.assertFalse(
+                any(
+                    "app-builder-building" in path.name
+                    for path in project_root.iterdir()
+                )
+            )
+
+    @unittest.skipUnless(os.name == "nt", "Windows retries are Windows-only")
+    def test_runtime_move_retries_transient_windows_access_errors(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            source = Path(temp_dir_str) / "source"
+            destination = Path(temp_dir_str) / "destination"
+            source.write_text("content", encoding="utf-8")
+            real_replace = os.replace
+            attempts = 0
+
+            def temporarily_locked(src: Path, dst: Path) -> None:
+                nonlocal attempts
+                attempts += 1
+                if attempts == 1:
+                    access_error = PermissionError(5, "temporarily locked")
+                    setattr(access_error, "winerror", 5)
+                    raise access_error
+                real_replace(src, dst)
+
+            with (
+                patch(
+                    "app_builder.python_runtime.os.replace",
+                    side_effect=temporarily_locked,
+                ),
+                patch("app_builder.python_runtime.time.sleep"),
+            ):
+                _replace_path_with_retry(source, destination)
+
+            self.assertFalse(source.exists())
+            self.assertEqual("content", destination.read_text(encoding="utf-8"))
 
     def test_failed_dependency_install_preserves_existing_runtime(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
@@ -725,6 +843,7 @@ class TestSelfContainedVenvSupport(unittest.TestCase):
                 patch(
                     "app_builder.python_runtime._install_exe_wrap_python_launchers"
                 ) as install_launchers,
+                patch("app_builder.python_runtime._prepare_runtime_launchers"),
             ):
                 python = _create_self_contained_venv(
                     venv_root,
@@ -753,9 +872,7 @@ class TestSelfContainedVenvSupport(unittest.TestCase):
                 (venv_root / "pyvenv.cfg").read_text(encoding="utf-8"),
             )
             self.assertTrue(_python_source_marker_matches(venv_root, "3.12"))
-            ensure_pip.assert_called_once_with(
-                _self_contained_venv_python_executable(venv_root)
-            )
+            ensure_pip.assert_called_once_with(venv_root / "Scripts" / "python.exe")
             install_launchers.assert_called_once_with(venv_root)
 
     def test_self_contained_venv_validation_checks_wrappers(self) -> None:
@@ -821,6 +938,60 @@ class TestSelfContainedVenvSupport(unittest.TestCase):
 
 
 class TestBundledPythonVenvSupport(unittest.TestCase):
+    def test_lock_change_updates_matching_venv_without_replacing_user_packages(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            venv_root = project_root / "venv"
+            python = _python_executable(venv_root)
+            python.parent.mkdir(parents=True)
+            python.write_bytes(b"python")
+            user_package = venv_root / "Lib" / "site-packages" / "user_added.py"
+            user_package.parent.mkdir(parents=True)
+            user_package.write_text("kept", encoding="utf-8")
+            poetry_lock = PoetryLock(packages=(), sha256="new-lock")
+
+            required_package = (
+                venv_root / "Lib" / "site-packages" / "required_package.py"
+            )
+
+            def install_dependencies(**_: object) -> None:
+                required_package.write_text("installed", encoding="utf-8")
+
+            with (
+                patch(
+                    "app_builder.python_runtime._venv_runtime_matches",
+                    return_value=True,
+                ),
+                patch(
+                    "app_builder.python_runtime._dependency_state_matches",
+                    return_value=False,
+                ),
+                patch(
+                    "app_builder.python_runtime.install_locked_poetry_dependencies",
+                    side_effect=install_dependencies,
+                ),
+                patch("app_builder.python_runtime._prepare_runtime_launchers"),
+            ):
+                result = _ensure_venv(
+                    project_root,
+                    PythonVenvOptions(path="venv", python_version="3.12.10"),
+                    poetry_lock,
+                    {MAIN_GROUP, DEV_GROUP},
+                    bundled_root=project_root / "bin" / "python",
+                )
+
+            self.assertEqual(python, result)
+            self.assertEqual("kept", user_package.read_text(encoding="utf-8"))
+            self.assertEqual("installed", required_package.read_text(encoding="utf-8"))
+            self.assertFalse(
+                any(
+                    "app-builder-previous" in path.name
+                    for path in venv_root.parent.iterdir()
+                )
+            )
+
     def test_copies_autory_style_runtime_support_files(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
