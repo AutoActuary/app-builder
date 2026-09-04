@@ -22,9 +22,14 @@ from app_builder_meta.version_cache import (
 )
 
 from . import __version__
-from .build import build_release, ensure_python_environments, upload_release_to_github
+from .build import (
+    build_release,
+    ensure_python_environments,
+    refresh_project_lock,
+    upload_release_to_github,
+)
 from .project import find_project_root
-from .poetry_dependencies import ensure_poetry_lock, refresh_poetry_lock
+from .poetry_dependencies import ensure_poetry_lock
 from .python_runtime import ensure_bundled_python
 from .template import initialize_project
 
@@ -113,7 +118,7 @@ def lock_cmd(*, check: bool) -> None:
         poetry_lock = ensure_poetry_lock(project_root)
         click.echo(f"Lock is up to date: {poetry_lock.path}")
     else:
-        poetry_lock = refresh_poetry_lock(project_root)
+        poetry_lock = refresh_project_lock(project_root)
         click.echo(f"Refreshed lock: {poetry_lock.path}")
     click.echo(f"SHA-256: {poetry_lock.sha256}")
 

@@ -59,7 +59,9 @@ The release path runs dependency stages before file collection:
 
 Python dependencies come from `pyproject.toml` and an existing `poetry.lock`.
 Normal builds run Poetry's read-only lock check and never regenerate the lock;
-`app-builder lock` is the explicit lock-changing command, while
+`app-builder lock` is the explicit lock-changing command. It runs configured
+`pre_lock` and `post_lock` hooks with app-builder's Python around a successful
+refresh, while
 `app-builder lock --check` exposes the same read-only validation for CI and exits
 nonzero for a missing, stale, or invalid lock. Registry artifacts are installed
 with pip hash checking, Git sources require a full resolved commit, mutable Poetry

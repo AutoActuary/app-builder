@@ -29,6 +29,7 @@ from .fileset import (
 from .hooks import run_hook_commands
 from .installer_bundle import create_exewrap_zip_installer
 from .project import detect_version, expand_windows_envvars
+from .poetry_dependencies import PoetryLock, refresh_poetry_lock
 from .python_runtime import (
     PythonEnvironmentMaterializer,
     PythonEnvironmentResult,
@@ -327,6 +328,30 @@ def build_release(
 
 def ensure_python_environments(project_root: Path) -> PythonEnvironmentResult:
     return _run_dependency_stages(project_root)
+
+
+def refresh_project_lock(project_root: Path) -> PoetryLock:
+    _, config = load_project_config(project_root)
+    environment = _build_hook_environment(
+        config.installer.name,
+        config.installer.install_directory,
+        project_root,
+    )
+    python_candidates = [Path(sys.executable).resolve()]
+    run_hook_commands(
+        project_root,
+        config.build_hooks.pre_lock,
+        environment=environment,
+        python_candidates=python_candidates,
+    )
+    poetry_lock = refresh_poetry_lock(project_root)
+    run_hook_commands(
+        project_root,
+        config.build_hooks.post_lock,
+        environment=environment,
+        python_candidates=python_candidates,
+    )
+    return poetry_lock
 
 
 def _run_dependency_stages(

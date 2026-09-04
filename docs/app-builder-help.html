@@ -320,7 +320,7 @@ Release files in dist
             </tr>
             <tr>
               <td><code>app-builder lock [--check | --refresh]</code></td>
-              <td>Creates or refreshes <code>poetry.lock</code> by default; <code>--check</code> verifies it without writing.</td>
+              <td>Runs <code>pre_lock</code>, refreshes <code>poetry.lock</code>, then runs <code>post_lock</code>; <code>--check</code> verifies without hooks or writes.</td>
             </tr>
             <tr>
               <td><code>app-builder cache path | info</code></td>
@@ -517,6 +517,14 @@ installer:
 # Optional mapping. Build and release hook command declarations. Default if omitted:
 # BuildHooks defaults.
 build_hooks:
+  # Optional list[list[string]]. Argv commands run before poetry.lock is refreshed.
+  # Default if omitted: [].
+  pre_lock: []
+
+  # Optional list[list[string]]. Argv commands run after poetry.lock is refreshed. Default
+  # if omitted: [].
+  post_lock: []
+
   # Optional list[list[string]]. Argv commands run before dependency or release processing
   # begins. Default if omitted: [].
   pre_process: []
@@ -1000,6 +1008,22 @@ publications:
           </thead>
           <tbody>
             <tr>
+              <td><code>pre_lock</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run before poetry.lock is refreshed.</td>
+            </tr>
+            <tr>
+              <td><code>post_lock</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run after poetry.lock is refreshed.</td>
+            </tr>
+            <tr>
               <td><code>pre_process</code></td>
               <td><code>list[list[string]]</code></td>
               <td>no</td>
@@ -1421,6 +1445,8 @@ publications:
             </tr>
           </thead>
           <tbody>
+            <tr><td><code>pre_lock</code></td><td>Generate dependency declarations before refreshing <code>poetry.lock</code>.</td><td>app-builder Python</td></tr>
+            <tr><td><code>post_lock</code></td><td>Process the successfully refreshed <code>poetry.lock</code>.</td><td>app-builder Python</td></tr>
             <tr><td><code>pre_process</code></td><td>Early setup before dependency processing.</td><td>app-builder Python</td></tr>
             <tr><td><code>pre_python_bundled</code></td><td>Work before bundled Python is materialized.</td><td>app-builder Python</td></tr>
             <tr><td><code>post_python_bundled</code></td><td>Work after bundled Python and its main dependencies exist.</td><td>bundled, then app-builder Python</td></tr>
@@ -1797,6 +1823,10 @@ installer:
     post_uninstall:
       - [hooks/post-uninstall.cmd]
 build_hooks:
+  pre_lock:
+    - [scripts/render_pyproject.py]
+  post_lock:
+    - [scripts/verify_lock.py]
   pre_dist:
     - [scripts/generate_assets.py]
   post_dist:
