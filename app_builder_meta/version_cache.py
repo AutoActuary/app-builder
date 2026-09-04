@@ -73,9 +73,14 @@ def ensure_managed_version(
     )
     with _exclusive_cache_lock(source_lock):
         source_repo = _ensure_source_repo(versions_root, repository_url)
-        resolved_commit, ref_kind = _resolve_source_ref(source_repo, ref)
+        resolved_commit, ref_kind = _resolve_source_ref(
+            source_repo, ref, versions_root=versions_root
+        )
         dependency_lock_sha256 = _source_file_sha256(
-            source_repo, resolved_commit, "poetry.lock"
+            source_repo,
+            resolved_commit,
+            "poetry.lock",
+            versions_root=versions_root,
         )
     managed_root = versions_root / _cache_key(ref, repository_url)
     cache_lock = versions_root / ".locks" / (_cache_key(ref, repository_url) + ".lock")
@@ -105,15 +110,28 @@ def ensure_managed_version(
         staging_root = versions_root / (
             f".{managed_root.name}.building-{os.getpid()}-{uuid.uuid4().hex}"
         )
-        _remove_cache_dir(versions_root, staging_root)
         try:
             staging_repo = staging_root / "repo"
             staging_venv = staging_root / "venv"
             staging_root.mkdir(parents=True, exist_ok=False)
 
-            _run(["git", "clone", str(source_repo), str(staging_repo)])
-            _run(["git", "fetch", "--tags", "--prune"], cwd=staging_repo)
-            _run(["git", "checkout", "--detach", resolved_commit], cwd=staging_repo)
+            with _exclusive_cache_lock(source_lock):
+                _run_cache_git(
+                    ["clone", str(source_repo), str(staging_repo)],
+                    cwd=source_repo,
+                    versions_root=versions_root,
+                )
+                _run_cache_git(
+                    ["fetch", "--tags", "--prune"],
+                    cwd=staging_repo,
+                    versions_root=versions_root,
+                    also_trust=(source_repo,),
+                )
+            _run_cache_git(
+                ["checkout", "--detach", resolved_commit],
+                cwd=staging_repo,
+                versions_root=versions_root,
+            )
 
             base_python = python_executable or Path(sys.executable)
             _run([str(base_python), "-m", "venv", str(staging_venv)])
@@ -161,7 +179,11 @@ def _ensure_source_repo(versions_root: Path, repository_url: str) -> Path:
     repository_key = hashlib.sha256(repository_url.encode("utf-8")).hexdigest()[:16]
     source_repo = source_root / f"app-builder-{repository_key}.git"
     if source_repo.exists():
-        _run(["git", "fetch", "--force", "--tags", "--prune"], cwd=source_repo)
+        _run_cache_git(
+            ["fetch", "--force", "--tags", "--prune"],
+            cwd=source_repo,
+            versions_root=versions_root,
+        )
         return source_repo
     source_root.mkdir(parents=True, exist_ok=True)
     staging_repo = source_root / f".{source_repo.name}.building-{uuid.uuid4().hex}"
@@ -213,9 +235,19 @@ def _managed_version_from_manifest(
     )
 
 
-def _source_file_sha256(source_repo: Path, commit: str, path: str) -> str:
+def _source_file_sha256(
+    source_repo: Path,
+    commit: str,
+    path: str,
+    *,
+    versions_root: Path,
+) -> str:
     result = subprocess.run(
-        ["git", "show", f"{commit}:{path}"],
+        _cache_git_command(
+            ["show", f"{commit}:{path}"],
+            versions_root=versions_root,
+            repositories=(source_repo,),
+        ),
         cwd=source_repo,
         check=False,
         capture_output=True,
@@ -272,24 +304,32 @@ def remove_managed_version(
         return True
 
 
-def _resolve_source_ref(source_repo: Path, ref: str) -> tuple[str, str]:
+def _resolve_source_ref(
+    source_repo: Path, ref: str, *, versions_root: Path
+) -> tuple[str, str]:
     candidates = (
         (f"refs/tags/{ref}^{{commit}}", "tag"),
         (f"refs/remotes/origin/{ref}^{{commit}}", "branch"),
         (f"{ref}^{{commit}}", "commit"),
     )
+    last_git_error = ""
     for candidate, kind in candidates:
-        result = _run(
-            ["git", "rev-parse", "--verify", candidate],
+        result = _run_cache_git(
+            ["rev-parse", "--verify", candidate],
             cwd=source_repo,
+            versions_root=versions_root,
             capture=True,
             check=False,
         )
         if result.returncode == 0:
             return result.stdout.strip(), kind
-    raise RuntimeError(
+        last_git_error = result.stderr.strip() or last_git_error
+    message = (
         f"Could not resolve app-builder ref {ref!r} from the managed source repository."
     )
+    if last_git_error:
+        message += f"\nGit error: {last_git_error}"
+    raise RuntimeError(message)
 
 
 def _remove_cache_dir(versions_root: Path, cache_root: Path) -> None:
@@ -322,6 +362,42 @@ def _prepend_path(value: str, existing: str) -> str:
     if not existing:
         return value
     return value + os.pathsep + existing
+
+
+def _run_cache_git(
+    args: list[str],
+    *,
+    cwd: Path,
+    versions_root: Path,
+    also_trust: tuple[Path, ...] = (),
+    capture: bool = False,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    command = _cache_git_command(
+        args,
+        versions_root=versions_root,
+        repositories=(cwd, *also_trust),
+    )
+    return _run(command, cwd=cwd, capture=capture, check=check)
+
+
+def _cache_git_command(
+    args: list[str], *, versions_root: Path, repositories: tuple[Path, ...]
+) -> list[str]:
+    versions_resolved = versions_root.resolve()
+    command = ["git"]
+    for repository in repositories:
+        repository_resolved = repository.resolve()
+        safe_directories = [repository_resolved]
+        if (repository_resolved / ".git").is_dir():
+            safe_directories.append((repository_resolved / ".git").resolve())
+        for safe_directory in safe_directories:
+            if versions_resolved not in safe_directory.parents:
+                raise RuntimeError(
+                    f"Refusing to trust Git repository outside versions root: {repository}"
+                )
+            command.extend(["-c", f"safe.directory={safe_directory}"])
+    return command + args
 
 
 def _run(
