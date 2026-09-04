@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import hashlib
+import os
 import subprocess
 import sys
 import unittest
@@ -29,6 +30,7 @@ from app_builder_meta.version_cache import (
     ManagedVersion,
     _cache_key,
     _resolve_source_ref,
+    _run_cache_git,
     _source_file_sha256,
     default_cache_root,
     managed_version_manifests,
@@ -234,12 +236,12 @@ class TestAppBuilderMetaExecutionAdapters(unittest.TestCase):
                 get_environment.cache_clear()
                 self.assertEqual(Path(temp_dir_str).resolve(), default_cache_root())
 
-    def test_resolves_tags_as_immutable_and_branches_at_current_remote_head(
-        self,
-    ) -> None:
+    def test_cache_git_handles_different_ownership_and_reports_ref_errors(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
-            repository = Path(temp_dir_str) / "repo"
-            repository.mkdir()
+            temp_dir = Path(temp_dir_str)
+            versions_root = temp_dir / "versions"
+            repository = versions_root / "_source" / "repo"
+            repository.mkdir(parents=True)
             subprocess.run(
                 ["git", "init"], cwd=repository, check=True, capture_output=True
             )
@@ -275,17 +277,72 @@ class TestAppBuilderMetaExecutionAdapters(unittest.TestCase):
                 check=True,
             )
 
-            tag_commit, tag_kind = _resolve_source_ref(repository, "v1.0.0")
-            branch_commit, branch_kind = _resolve_source_ref(repository, branch)
+            empty_git_config = temp_dir / "empty-gitconfig"
+            empty_git_config.touch()
+            with patch.dict(
+                os.environ,
+                {
+                    "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1",
+                    "GIT_CONFIG_GLOBAL": str(empty_git_config),
+                    "GIT_CONFIG_NOSYSTEM": "1",
+                },
+            ):
+                untrusted = subprocess.run(
+                    ["git", "status"], cwd=repository, check=False, capture_output=True
+                )
+                tag_commit, tag_kind = _resolve_source_ref(
+                    repository, "v1.0.0", versions_root=versions_root
+                )
+                branch_commit, branch_kind = _resolve_source_ref(
+                    repository, branch, versions_root=versions_root
+                )
+                staging_repo = versions_root / ".building" / "repo"
+                staging_repo.parent.mkdir()
+                _run_cache_git(
+                    ["clone", str(repository), str(staging_repo)],
+                    cwd=repository,
+                    versions_root=versions_root,
+                )
+                _run_cache_git(
+                    ["fetch", "--tags", "--prune"],
+                    cwd=staging_repo,
+                    versions_root=versions_root,
+                    also_trust=(repository,),
+                )
+                _run_cache_git(
+                    ["checkout", "--detach", tag_commit],
+                    cwd=staging_repo,
+                    versions_root=versions_root,
+                )
+                checked_out = _run_cache_git(
+                    ["rev-parse", "HEAD"],
+                    cwd=staging_repo,
+                    versions_root=versions_root,
+                    capture=True,
+                ).stdout.strip()
+                with self.assertRaises(RuntimeError) as error:
+                    _resolve_source_ref(
+                        repository, "missing-ref", versions_root=versions_root
+                    )
+                still_untrusted = subprocess.run(
+                    ["git", "status"], cwd=repository, check=False, capture_output=True
+                )
 
+        self.assertNotEqual(0, untrusted.returncode)
+        self.assertNotEqual(0, still_untrusted.returncode)
+        self.assertIn("Git error:", str(error.exception))
+        self.assertIn("fatal:", str(error.exception).lower())
         self.assertEqual("tag", tag_kind)
         self.assertEqual("branch", branch_kind)
         self.assertEqual(tag_commit, branch_commit)
+        self.assertEqual(tag_commit, checked_out)
 
     def test_managed_dependency_lock_digest_comes_from_resolved_commit(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
-            repository = Path(temp_dir_str) / "repo"
-            repository.mkdir()
+            temp_dir = Path(temp_dir_str)
+            versions_root = temp_dir / "versions"
+            repository = versions_root / "_source" / "repo"
+            repository.mkdir(parents=True)
             subprocess.run(["git", "init"], cwd=repository, check=True)
             subprocess.run(
                 ["git", "config", "user.email", "cache@example.invalid"],
@@ -310,7 +367,12 @@ class TestAppBuilderMetaExecutionAdapters(unittest.TestCase):
             ).stdout.strip()
             lock_path.write_bytes(b"uncommitted replacement\n")
 
-            digest = _source_file_sha256(repository, commit, "poetry.lock")
+            digest = _source_file_sha256(
+                repository,
+                commit,
+                "poetry.lock",
+                versions_root=versions_root,
+            )
 
         self.assertEqual(hashlib.sha256(b"first lock\n").hexdigest(), digest)
 
