@@ -191,6 +191,8 @@ def _validate_hook_commands(config: AppBuilderConfig) -> None:
         (
             "build_hooks",
             (
+                ("pre_lock", config.build_hooks.pre_lock),
+                ("post_lock", config.build_hooks.post_lock),
                 ("pre_process", config.build_hooks.pre_process),
                 ("pre_python_bundled", config.build_hooks.pre_python_bundled),
                 ("post_python_bundled", config.build_hooks.post_python_bundled),
