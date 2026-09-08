@@ -33,6 +33,7 @@ from .poetry_dependencies import PoetryLock, refresh_poetry_lock
 from .python_runtime import (
     PythonEnvironmentMaterializer,
     PythonEnvironmentResult,
+    borrowed_python_home,
     bundled_python_executable,
     python_executable,
 )
@@ -100,6 +101,7 @@ def build_release(
     version = version or detect_version(project_root)
     _, config = load_project_config(project_root, app_version=version)
     validate_build_configuration(project_root, config, version=version)
+    _reject_borrowed_bundled_python_for_release(project_root, config)
     dist_dir = project_root / config.installer.dist
     artifact_prefix = f"{_slugify(config.installer.name)}-{version}"
     reporter = BuildReporter(
@@ -323,6 +325,23 @@ def build_release(
         outputs=outputs,
         github_artifacts=tuple(output.path for output in github_outputs),
         build_log_path=reporter.log_path,
+    )
+
+
+def _reject_borrowed_bundled_python_for_release(
+    project_root: Path,
+    config: AppBuilderConfig,
+) -> None:
+    if config.python_bundled is None:
+        return
+    runtime_root = project_root / config.python_bundled.path
+    borrowed_home = borrowed_python_home(runtime_root)
+    if borrowed_home is None:
+        return
+    raise RuntimeError(
+        f"Release requires a self-contained bundled Python runtime, but "
+        f"{runtime_root} borrows external Python home {borrowed_home}. Use the "
+        "main checkout for the release or create a fresh self-contained runtime."
     )
 
 

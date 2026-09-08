@@ -315,6 +315,10 @@ Release files in dist
               <td>Materializes only the configured bundled Python interpreter. It does not run build hooks or install project dependencies.</td>
             </tr>
             <tr>
+              <td><code>app-builder run-python &lt;python-args&gt;</code></td>
+              <td>Runs the installed app-builder Python interpreter with arbitrary arguments, preserving the caller's working directory and exit code without requiring project configuration.</td>
+            </tr>
+            <tr>
               <td><code>app-builder deps</code></td>
               <td>Runs the dependency-stage hooks and materializes configured Python environments without building release artifacts.</td>
             </tr>
@@ -1410,6 +1414,14 @@ publications:
           relative to the runtime. Venvs are created at their final path, while an incompatible existing venv is
           restored from a private backup if replacement fails.
         </p>
+        <h3>Borrowed Python in development worktrees</h3>
+        <p>A project runtime whose <code>pyvenv.cfg</code> points to Python outside its directory
+          is a borrowed development runtime. <code>app-builder python</code> preserves it,
+          and <code>app-builder deps</code> installs changed dependencies into the local environment
+          without rebuilding the shared Python. Unlisted packages remain available, as in a development venv.</p>
+        <p>The source Python must remain available and match the configured version. Keep its dependencies
+          stable while worktrees are using them. Release builds reject borrowed bundled runtimes before
+          running hooks. Build installers from a checkout with a self-contained runtime.</p>
       </section>
 
       <section id="hooks">

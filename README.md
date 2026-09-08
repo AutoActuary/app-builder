@@ -74,6 +74,7 @@ app-builder --help
 app-builder --version
 app-builder init [--force]
 app-builder python
+app-builder run-python <python-args>
 app-builder deps
 app-builder lock [--check | --refresh]
 app-builder cache path
@@ -84,6 +85,12 @@ app-builder release [--version <version>] [--verbose]
 app-builder release-gh [--version <version>] [--draft | --no-draft] [--verbose]
 app-builder 0.x <legacy-command>
 ```
+
+`app-builder run-python <python-args>` runs the installed app-builder Python
+interpreter with the arguments that follow it. It preserves the caller's
+working directory and does not require a project configuration, so it is also
+available from outside a project. The existing `app-builder python` command
+still materializes the configured bundled project runtime.
 
 ## Reusable Caches
 

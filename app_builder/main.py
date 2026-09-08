@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 import sysconfig
 from pathlib import Path
@@ -204,6 +205,25 @@ def python_cmd() -> None:
     project_root = find_project_root(Path.cwd())
     bundled_python = ensure_bundled_python(project_root)
     click.echo(f"Bundled Python: {bundled_python or 'disabled'}")
+
+
+@main.command(
+    "run-python",
+    context_settings={
+        "allow_extra_args": True,
+        "allow_interspersed_args": False,
+        "help_option_names": [],
+        "ignore_unknown_options": True,
+    },
+)
+@click.pass_context
+def run_python_cmd(ctx: click.Context) -> None:
+    """
+    Run the installed app-builder Python interpreter with arbitrary arguments.
+    """
+
+    result = subprocess.run([sys.executable, *ctx.args], check=False)
+    ctx.exit(result.returncode)
 
 
 @main.command("release")
