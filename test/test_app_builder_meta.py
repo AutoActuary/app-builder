@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import hashlib
+import os
 import subprocess
 import sys
 import unittest
@@ -218,6 +219,95 @@ class TestAppBuilderMetaExecutionAdapters(unittest.TestCase):
         self.assertEqual([str(venv_python), "-P", "-m", "app_builder", "--help"], args)
         self.assertEqual(temp_dir, kwargs["cwd"])
         self.assertIn(str(repo_path), kwargs["env"]["PYTHONPATH"])
+
+    def test_run_python_runs_real_python_with_quoted_args_cwd_and_exit_code(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            environment = dict(os.environ)
+            project_root = Path(__file__).resolve().parents[1]
+            environment["PYTHONPATH"] = str(project_root)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "app_builder_meta",
+                    "run-python",
+                    "-c",
+                    "import os, sys; print(os.getcwd()); print(repr(sys.argv[1:])); raise SystemExit(23)",
+                    "argument with spaces",
+                    'argument with "quotes"',
+                ],
+                cwd=temp_dir,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(23, completed.returncode)
+        self.assertEqual(
+            [str(temp_dir), "['argument with spaces', 'argument with \"quotes\"']"],
+            completed.stdout.splitlines(),
+        )
+        self.assertEqual("", completed.stderr)
+
+    def test_run_python_forwards_python_module_and_help_without_a_project(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            environment = dict(os.environ)
+            project_root = Path(__file__).resolve().parents[1]
+            environment["PYTHONPATH"] = str(project_root)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "app_builder_meta",
+                    "run-python",
+                    "-m",
+                    "app_builder_meta",
+                    "--help",
+                ],
+                cwd=temp_dir,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(0, completed.returncode)
+        self.assertIn("Full help:", completed.stdout)
+        self.assertEqual("", completed.stderr)
+
+    def test_run_python_bypasses_broken_project_config(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            temp_dir = Path(temp_dir_str)
+            (temp_dir / "app_builder.yaml").write_text(
+                "app_builder_version: [", encoding="utf-8"
+            )
+            environment = dict(os.environ)
+            project_root = Path(__file__).resolve().parents[1]
+            environment["PYTHONPATH"] = str(project_root)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "app_builder_meta",
+                    "run-python",
+                    "-c",
+                    "print('run-python bypassed config')",
+                ],
+                cwd=temp_dir,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(0, completed.returncode)
+        self.assertEqual("run-python bypassed config\n", completed.stdout)
+        self.assertEqual("", completed.stderr)
 
     def test_cache_key_keeps_refs_filesystem_safe(self) -> None:
         slash_key = _cache_key("feature/demo")

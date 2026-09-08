@@ -976,6 +976,13 @@ def establish_bundled_python(
 ) -> Path:
     runtime_root = project_root / options.path
     with exclusive_cache_lock(_runtime_lock_path(runtime_root)):
+        borrowed_home = borrowed_python_home(runtime_root)
+        if borrowed_home is not None:
+            existing_python = _validate_borrowed_runtime(
+                runtime_root, options, borrowed_home
+            )
+            _prepare_runtime_launchers(runtime_root, existing_python)
+            return existing_python
         if _bundled_runtime_matches(runtime_root, options):
             existing_python = _bundled_python_executable(runtime_root)
             _prepare_runtime_launchers(runtime_root, existing_python)
@@ -1005,6 +1012,26 @@ def _ensure_bundled_python(
     runtime_root = project_root / options.path
     groups = {MAIN_GROUP}
     with exclusive_cache_lock(_runtime_lock_path(runtime_root)):
+        borrowed_home = borrowed_python_home(runtime_root)
+        if borrowed_home is not None:
+            existing_python = _validate_borrowed_runtime(
+                runtime_root, options, borrowed_home
+            )
+            _prepare_runtime_launchers(runtime_root, existing_python)
+            source_runtime_root = borrowed_home.parent
+            if not (
+                _dependency_state_matches(runtime_root, poetry_lock, groups)
+                and _dependency_state_matches(source_runtime_root, poetry_lock, groups)
+            ):
+                _ensure_pip(existing_python)
+                install_locked_poetry_dependencies(
+                    project_root=project_root,
+                    python_executable=existing_python,
+                    poetry_lock=poetry_lock,
+                    groups=groups,
+                )
+                _write_dependency_state(runtime_root, poetry_lock, groups)
+            return existing_python
         if _bundled_runtime_matches(
             runtime_root, options
         ) and _dependency_state_matches(runtime_root, poetry_lock, groups):
@@ -1077,6 +1104,21 @@ def _read_pyvenv_home(venv_root: Path) -> Path | None:
     return _read_pyvenv_path(venv_root, "home")
 
 
+def borrowed_python_home(python_root: Path) -> Path | None:
+    """Return an external Python home for a borrowed bundled runtime."""
+    home = _read_pyvenv_home(python_root)
+    if home is None:
+        return None
+    if not home.is_absolute():
+        home = python_root / home
+    resolved_home = home.resolve()
+    try:
+        resolved_home.relative_to(python_root.resolve())
+    except ValueError:
+        return resolved_home
+    return None
+
+
 def _read_pyvenv_path(venv_root: Path, key: str) -> Path | None:
     pyvenv_cfg = venv_root / "pyvenv.cfg"
     if not pyvenv_cfg.exists():
@@ -1085,6 +1127,55 @@ def _read_pyvenv_path(venv_root: Path, key: str) -> Path | None:
         if line.lower().startswith(f"{key.lower()} ="):
             return Path(line.split("=", 1)[1].strip())
     return None
+
+
+def _validate_borrowed_runtime(
+    runtime_root: Path,
+    options: PythonBundledOptions,
+    home: Path,
+) -> Path:
+    python_executable = _bundled_python_executable(runtime_root)
+    if not python_executable.is_file():
+        raise RuntimeError(
+            f"Borrowed Python runtime at {runtime_root} is missing its nested "
+            f"executable {python_executable}. Repair it or use the main checkout "
+            "or a fresh self-contained runtime."
+        )
+    if not home.is_dir() or not (home / "python.exe").is_file():
+        raise RuntimeError(
+            f"Borrowed Python runtime at {runtime_root} points to unavailable "
+            f"Python home {home}. Repair the source runtime or use the main "
+            "checkout or a fresh self-contained runtime."
+        )
+    if not _python_matches(python_executable, options.python_version):
+        raise RuntimeError(
+            f"Borrowed Python runtime at {runtime_root} is missing, unhealthy, "
+            f"or does not match Python version {options.python_version!r}. "
+            "Repair it or use the main checkout or a fresh self-contained runtime."
+        )
+    try:
+        subprocess.run(
+            [
+                str(python_executable),
+                "-E",
+                "-c",
+                "import ctypes, ssl, sqlite3, sys; "
+                "from pathlib import Path; "
+                "assert Path(sys.prefix).resolve() == "
+                "Path(sys.argv[1]).resolve()",
+                str(runtime_root),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(
+            f"Borrowed Python runtime at {runtime_root} is missing, unhealthy, "
+            f"or does not match Python version {options.python_version!r}. "
+            "Repair it or use the main checkout or a fresh self-contained runtime."
+        ) from exc
+    return python_executable
 
 
 def _base_site_packages_pth(venv_root: Path) -> Path:
