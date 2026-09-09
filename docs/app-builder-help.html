@@ -1712,6 +1712,7 @@ gh auth login</code></pre>
           <code>&lt;root&gt;/pip</code> and <code>&lt;root&gt;/poetry</code>. Without an explicit app-builder root, pip and
           Poetry keep their native defaults.
         </p>
+        <p>Anyone who can modify your cache can change code that app-builder runs.</p>
         <pre><code>env:
   APP_BUILDER_CACHE_ROOT: ${{ runner.temp }}/app-builder-cache
 
