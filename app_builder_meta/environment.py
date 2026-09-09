@@ -14,6 +14,8 @@ _SETTING_VARIABLES = frozenset(
     {
         "APP_BUILDER_CACHE_ROOT",
         "APP_BUILDER_INSTALL_ROOT",
+        "APP_BUILDER_CACHE_PYTHON_BIN",
+        "APP_BUILDER_CACHE_PYTHON_VENV",
     }
 )
 
@@ -40,6 +42,8 @@ class AppBuilderEnvironment:
     poetry_cache_dir: Path | None
     cache_root_is_explicit: bool = False
     install_root_is_explicit: bool = False
+    cache_python_bin: bool = False
+    cache_python_venv: bool = False
 
     @property
     def downloads(self) -> Path:
@@ -94,6 +98,13 @@ def _configured_path(environ: Mapping[str, str], name: str) -> Path | None:
     if value is None or not value.strip():
         return None
     return Path(value).expanduser().resolve()
+
+
+def _enabled(environ: Mapping[str, str], name: str) -> bool:
+    value = (_environment_value(environ, name) or "").strip()
+    if value not in {"", "0", "1"}:
+        raise ValueError(f"{name} must be 1 (enabled) or 0 (disabled).")
+    return value == "1"
 
 
 def _default_cache_root(environ: Mapping[str, str]) -> Path:
@@ -156,6 +167,8 @@ def _read_environment(
         poetry_cache_dir=poetry_cache_dir,
         cache_root_is_explicit=configured_cache_root is not None,
         install_root_is_explicit=configured_install_root is not None,
+        cache_python_bin=_enabled(environ, "APP_BUILDER_CACHE_PYTHON_BIN"),
+        cache_python_venv=_enabled(environ, "APP_BUILDER_CACHE_PYTHON_VENV"),
     )
 
 

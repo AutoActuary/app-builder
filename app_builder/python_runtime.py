@@ -35,6 +35,7 @@ from .poetry_dependencies import (
     install_locked_poetry_dependencies,
 )
 from .schema import PythonBundledOptions, PythonVenvOptions
+from .python_environment_cache import runtime_cache
 
 PYTHON_RUNTIME_INDEX_URL = "https://www.python.org/ftp/python/index-windows.json"
 _PYTHON_RUNTIME_INDEX_ROOT = "https://www.python.org/ftp/python/"
@@ -142,6 +143,7 @@ def _heal_runtime_launchers(python_executable: Path) -> None:
             "support.heal_existing_launchers()",
         ],
         check=True,
+        timeout=30,
     )
 
 
@@ -943,12 +945,16 @@ def _python_matches(python_executable: Path, version_pattern: str | None) -> boo
             check=False,
             capture_output=True,
             text=True,
+            timeout=10,
         )
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         return False
     if completed.returncode != 0:
         return False
-    version = (completed.stdout or completed.stderr).strip().split()[-1]
+    output = (completed.stdout or completed.stderr).strip().split()
+    if not output:
+        return False
+    version = output[-1]
     return _matches_version_pattern(version_pattern, version)
 
 
@@ -1039,22 +1045,32 @@ def _ensure_bundled_python(
             _prepare_runtime_launchers(runtime_root, existing_python)
             return existing_python
 
+        cache = runtime_cache("python-bin", options, poetry_lock, groups)
         staging_root = _runtime_staging_path(runtime_root)
         try:
-            staging_python = _build_bundled_runtime_at(staging_root, options)
-            _ensure_pip(staging_python)
-            install_locked_poetry_dependencies(
-                project_root=project_root,
-                python_executable=staging_python,
-                poetry_lock=poetry_lock,
-                groups=groups,
+            restored = cache is not None and cache.restore(
+                staging_root,
+                lambda: _prepare_cached_runtime(
+                    staging_root, options, poetry_lock, groups
+                ),
             )
-            _write_dependency_state(staging_root, poetry_lock, groups)
-            if not _python_matches(staging_python, options.python_version):
-                raise RuntimeError(
-                    f"Materialized Python at {staging_python} did not match "
-                    f"configured version {options.python_version!r}."
+            if not restored:
+                staging_python = _build_bundled_runtime_at(staging_root, options)
+                _ensure_pip(staging_python)
+                install_locked_poetry_dependencies(
+                    project_root=project_root,
+                    python_executable=staging_python,
+                    poetry_lock=poetry_lock,
+                    groups=groups,
                 )
+                _write_dependency_state(staging_root, poetry_lock, groups)
+                if not _python_matches(staging_python, options.python_version):
+                    raise RuntimeError(
+                        f"Materialized Python at {staging_python} did not match "
+                        f"configured version {options.python_version!r}."
+                    )
+                if cache is not None:
+                    cache.save(staging_root)
             _write_self_contained_runtime_home(staging_root, runtime_root)
             _promote_runtime(staging_root, runtime_root)
         finally:
@@ -1357,6 +1373,7 @@ def _ensure_venv(
     groups: set[str],
     *,
     bundled_root: Path | None,
+    bundled_options: PythonBundledOptions | None = None,
 ) -> Path:
     venv_root = project_root / options.path
     with exclusive_cache_lock(_runtime_lock_path(venv_root)):
@@ -1373,7 +1390,20 @@ def _ensure_venv(
                 _write_dependency_state(venv_root, poetry_lock, groups)
             return existing_python
 
+        cache = (
+            runtime_cache("python-venv", options, poetry_lock, groups, bundled_options)
+            if bundled_root is None or borrowed_python_home(bundled_root) is None
+            else None
+        )
+
         def build(candidate_root: Path) -> None:
+            if cache is not None and cache.restore(
+                candidate_root,
+                lambda: _prepare_cached_runtime(
+                    candidate_root, options, poetry_lock, groups, bundled_root
+                ),
+            ):
+                return
             if bundled_root is not None:
                 candidate_python = _create_venv_from_bundled_python(
                     candidate_root, bundled_root
@@ -1392,9 +1422,47 @@ def _ensure_venv(
                     f"Materialized Python environment at {candidate_root} did not "
                     "pass validation."
                 )
+            if cache is not None:
+                cache.save(candidate_root)
 
         _replace_runtime_at_final_path(venv_root, build)
     return _python_executable(venv_root)
+
+
+def _prepare_cached_runtime(
+    root: Path,
+    options: PythonBundledOptions | PythonVenvOptions,
+    poetry_lock: PoetryLock,
+    groups: set[str],
+    bundled_root: Path | None = None,
+) -> bool:
+    if not _dependency_state_matches(root, poetry_lock, groups):
+        return False
+    if bundled_root is not None:
+        # Refresh only venv-owned configuration, interpreter and activation scripts.
+        # Installed dependencies and cached support files remain in place.
+        subprocess.run(
+            [
+                str(_bundled_python_executable(bundled_root)),
+                "-m",
+                "venv",
+                str(root),
+                "--without-pip",
+            ],
+            check=True,
+            timeout=30,
+        )
+        _write_base_site_packages(root, bundled_root / "Lib" / "site-packages")
+        python = _python_executable(root)
+    else:
+        _write_self_contained_runtime_home(root, root)
+        python = _bundled_python_executable(root)
+    if not _python_matches(python, options.python_version):
+        return False
+    _prepare_runtime_launchers(root, python)
+    if isinstance(options, PythonBundledOptions):
+        return _bundled_runtime_matches(root, options)
+    return _venv_runtime_matches(root, options, bundled_root)
 
 
 @dataclass(slots=True)
@@ -1466,6 +1534,7 @@ class PythonEnvironmentMaterializer:
                 self.poetry_lock,
                 venv_groups,
                 bundled_root=bundled_root,
+                bundled_options=self.config.python_bundled,
             )
         self._venv_materialized = True
         return self.python_venv

@@ -327,8 +327,8 @@ Release files in dist
               <td>Runs <code>pre_lock</code>, refreshes <code>poetry.lock</code>, then runs <code>post_lock</code>; <code>--check</code> verifies without hooks or writes.</td>
             </tr>
             <tr>
-              <td><code>app-builder cache path | info</code></td>
-              <td>Prints the machine-readable cache root or explains all effective app-builder, pip, and Poetry cache locations.</td>
+              <td><code>app-builder cache path | info</code><br><code>app-builder cache clear python-bin</code><br><code>app-builder cache clear python-venv</code></td>
+              <td>Prints the cache root, explains cache locations and Python snapshot usage, or clears the selected Python snapshot cache. Clearing does not delete project environments.</td>
             </tr>
             <tr>
               <td><code>app-builder versions list | remove &lt;ref&gt;</code></td>
@@ -1732,6 +1732,55 @@ steps:
           App-builder-owned settings use the <code>APP_BUILDER_</code> namespace. Unknown names produce one warning,
           with a spelling suggestion where possible, and their values are never printed. Set environment variables
           before the first app-builder command in a process.
+        </p>
+        <h3>Reuse prepared Python environments in CI</h3>
+        <pre><code>env:
+  APP_BUILDER_CACHE_PYTHON_BIN: '1'
+  APP_BUILDER_CACHE_PYTHON_VENV: '1'</code></pre>
+        <p>
+          Each switch is independent: <code>1</code> enables it; <code>0</code>, empty or unset disables it.
+          Other values are errors. BIN refers to <code>python_bundled</code> at its configured path;
+          VENV refers to <code>python_venv</code>. Continue using <code>app-builder deps</code>,
+          <code>release</code> and <code>release-gh</code> normally.
+        </p>
+        <p>
+          When a runtime needs fresh creation, app-builder can restore a snapshot instead of downloading Python
+          and installing its locked dependencies. Every pre/post hook still runs at its normal point.
+          Snapshots are saved only from freshly created environments before their post hook.
+          Existing developer environments are reused or updated normally, retain added packages,
+          and never seed the cache. Borrowed worktree runtimes are not snapshot sources.
+        </p>
+        <p>
+          Keys include the lock, Python configuration, platform and app-builder version; they do not include
+          branch names or checkout locations. VENV keys also include bundled Python configuration.
+          <strong>VENV limitation:</strong> custom changes to bundled Python before venv creation are not
+          fingerprinted. If those changes affect venv creation, clear the venv snapshot cache and use fresh
+          runtime destinations, or disable VENV caching. The cache does not prove arbitrary hook behavior.
+        </p>
+        <pre><code>app-builder cache info
+app-builder cache clear python-bin
+app-builder cache clear python-venv</code></pre>
+        <p>
+          Clear removes the selected stage's snapshots across projects under the current cache root, even if
+          its switch is disabled. It waits for the shared cache lock and reports entries and bytes removed.
+          An empty cache is a successful no-op; lock timeout or deletion failure is an error.
+          There is no catch-all <code>python</code> target. Live environments, download caches and managed
+          app-builder versions remain untouched. Clearing or disabling a cache does not rebuild an existing
+          venv; use fresh runtime destinations to compare with a cold setup. An active build can subsequently
+          save a new entry.
+        </p>
+        <p>
+          Snapshots live under <code>&lt;cache-root&gt;/python-environments/python-bin</code> and
+          <code>python-venv</code>. They share a 5 GiB storage target. Successful reuse updates recency;
+          saving prunes oldest entries. Temporary overshoot is allowed, and deletion failures warn.
+          Cache operations are serialized; dependency installation and hooks do not hold the cache lock.
+        </p>
+        <p>
+          A bad archive or failed runtime check produces a warning and one normal rebuild before the post hook.
+          A cold-build failure remains an error; later hook or test failures do not trigger automatic replay.
+          Cache access or save problems warn without failing a successful setup where recovery is safe.
+          Use trusted runner storage. Persistent runners can reuse local snapshots across checkouts;
+          ephemeral runners need their CI cache service to preserve the snapshot directories.
         </p>
       </section>
 

@@ -715,6 +715,7 @@ installer:
                     materializer.poetry_lock,
                     {DEV_GROUP},
                     bundled_root=project_root / "bin" / "python",
+                    bundled_options=materializer.config.python_bundled,
                 )
 
                 result = materializer.result()
@@ -773,6 +774,7 @@ installer:
             poetry_lock,
             {DEV_GROUP},
             bundled_root=project_root / "bin" / "python",
+            bundled_options=PythonBundledOptions(python_version="3.12.10"),
         )
 
     def test_venv_only_materializes_self_contained_python_for_all_groups(self) -> None:
@@ -813,6 +815,7 @@ installer:
             poetry_lock,
             {MAIN_GROUP, DEV_GROUP},
             bundled_root=None,
+            bundled_options=None,
         )
 
 
