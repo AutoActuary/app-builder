@@ -29,9 +29,11 @@ from .fileset import (
 from .hooks import run_hook_commands
 from .installer_bundle import create_exewrap_zip_installer
 from .project import detect_version, expand_windows_envvars
+from .poetry_dependencies import PoetryLock, refresh_poetry_lock
 from .python_runtime import (
     PythonEnvironmentMaterializer,
     PythonEnvironmentResult,
+    borrowed_python_home,
     bundled_python_executable,
     python_executable,
 )
@@ -99,6 +101,7 @@ def build_release(
     version = version or detect_version(project_root)
     _, config = load_project_config(project_root, app_version=version)
     validate_build_configuration(project_root, config, version=version)
+    _reject_borrowed_bundled_python_for_release(project_root, config)
     dist_dir = project_root / config.installer.dist
     artifact_prefix = f"{_slugify(config.installer.name)}-{version}"
     reporter = BuildReporter(
@@ -325,8 +328,49 @@ def build_release(
     )
 
 
+def _reject_borrowed_bundled_python_for_release(
+    project_root: Path,
+    config: AppBuilderConfig,
+) -> None:
+    if config.python_bundled is None:
+        return
+    runtime_root = project_root / config.python_bundled.path
+    borrowed_home = borrowed_python_home(runtime_root)
+    if borrowed_home is None:
+        return
+    raise RuntimeError(
+        f"Release requires a self-contained bundled Python runtime, but "
+        f"{runtime_root} borrows external Python home {borrowed_home}. Use the "
+        "main checkout for the release or create a fresh self-contained runtime."
+    )
+
+
 def ensure_python_environments(project_root: Path) -> PythonEnvironmentResult:
     return _run_dependency_stages(project_root)
+
+
+def refresh_project_lock(project_root: Path) -> PoetryLock:
+    _, config = load_project_config(project_root)
+    environment = _build_hook_environment(
+        config.installer.name,
+        config.installer.install_directory,
+        project_root,
+    )
+    python_candidates = [Path(sys.executable).resolve()]
+    run_hook_commands(
+        project_root,
+        config.build_hooks.pre_lock,
+        environment=environment,
+        python_candidates=python_candidates,
+    )
+    poetry_lock = refresh_poetry_lock(project_root)
+    run_hook_commands(
+        project_root,
+        config.build_hooks.post_lock,
+        environment=environment,
+        python_candidates=python_candidates,
+    )
+    return poetry_lock
 
 
 def _run_dependency_stages(

@@ -184,6 +184,14 @@ class InstallerOptions:
 
 @dataclass(slots=True)
 class BuildHooks:
+    pre_lock: list[HookCommand] = config_field(
+        default_factory=list,
+        description="Argv commands run before poetry.lock is refreshed.",
+    )
+    post_lock: list[HookCommand] = config_field(
+        default_factory=list,
+        description="Argv commands run after poetry.lock is refreshed.",
+    )
     pre_process: list[HookCommand] = config_field(
         default_factory=list,
         description="Argv commands run before dependency or release processing begins.",

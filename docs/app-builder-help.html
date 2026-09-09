@@ -315,16 +315,20 @@ Release files in dist
               <td>Materializes only the configured bundled Python interpreter. It does not run build hooks or install project dependencies.</td>
             </tr>
             <tr>
+              <td><code>app-builder run-python &lt;python-args&gt;</code></td>
+              <td>Runs the installed app-builder Python interpreter with arbitrary arguments, preserving the caller's working directory and exit code without requiring project configuration.</td>
+            </tr>
+            <tr>
               <td><code>app-builder deps</code></td>
               <td>Runs the dependency-stage hooks and materializes configured Python environments without building release artifacts.</td>
             </tr>
             <tr>
               <td><code>app-builder lock [--check | --refresh]</code></td>
-              <td>Creates or refreshes <code>poetry.lock</code> by default; <code>--check</code> verifies it without writing.</td>
+              <td>Runs <code>pre_lock</code>, refreshes <code>poetry.lock</code>, then runs <code>post_lock</code>; <code>--check</code> verifies without hooks or writes.</td>
             </tr>
             <tr>
-              <td><code>app-builder cache path | info</code></td>
-              <td>Prints the machine-readable cache root or explains all effective app-builder, pip, and Poetry cache locations.</td>
+              <td><code>app-builder cache path | info</code><br><code>app-builder cache clear python-bin</code><br><code>app-builder cache clear python-venv</code></td>
+              <td>Prints the cache root, explains cache locations and Python snapshot usage, or clears the selected Python snapshot cache. Clearing does not delete project environments.</td>
             </tr>
             <tr>
               <td><code>app-builder versions list | remove &lt;ref&gt;</code></td>
@@ -517,6 +521,14 @@ installer:
 # Optional mapping. Build and release hook command declarations. Default if omitted:
 # BuildHooks defaults.
 build_hooks:
+  # Optional list[list[string]]. Argv commands run before poetry.lock is refreshed.
+  # Default if omitted: [].
+  pre_lock: []
+
+  # Optional list[list[string]]. Argv commands run after poetry.lock is refreshed. Default
+  # if omitted: [].
+  post_lock: []
+
   # Optional list[list[string]]. Argv commands run before dependency or release processing
   # begins. Default if omitted: [].
   pre_process: []
@@ -1000,6 +1012,22 @@ publications:
           </thead>
           <tbody>
             <tr>
+              <td><code>pre_lock</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run before poetry.lock is refreshed.</td>
+            </tr>
+            <tr>
+              <td><code>post_lock</code></td>
+              <td><code>list[list[string]]</code></td>
+              <td>no</td>
+              <td><code>[]</code></td>
+              <td></td>
+              <td>Argv commands run after poetry.lock is refreshed.</td>
+            </tr>
+            <tr>
               <td><code>pre_process</code></td>
               <td><code>list[list[string]]</code></td>
               <td>no</td>
@@ -1386,6 +1414,14 @@ publications:
           relative to the runtime. Venvs are created at their final path, while an incompatible existing venv is
           restored from a private backup if replacement fails.
         </p>
+        <h3>Borrowed Python in development worktrees</h3>
+        <p>A project runtime whose <code>pyvenv.cfg</code> points to Python outside its directory
+          is a borrowed development runtime. <code>app-builder python</code> preserves it,
+          and <code>app-builder deps</code> installs changed dependencies into the local environment
+          without rebuilding the shared Python. Unlisted packages remain available, as in a development venv.</p>
+        <p>The source Python must remain available and match the configured version. Keep its dependencies
+          stable while worktrees are using them. Release builds reject borrowed bundled runtimes before
+          running hooks. Build installers from a checkout with a self-contained runtime.</p>
       </section>
 
       <section id="hooks">
@@ -1421,6 +1457,8 @@ publications:
             </tr>
           </thead>
           <tbody>
+            <tr><td><code>pre_lock</code></td><td>Generate dependency declarations before refreshing <code>poetry.lock</code>.</td><td>app-builder Python</td></tr>
+            <tr><td><code>post_lock</code></td><td>Process the successfully refreshed <code>poetry.lock</code>.</td><td>app-builder Python</td></tr>
             <tr><td><code>pre_process</code></td><td>Early setup before dependency processing.</td><td>app-builder Python</td></tr>
             <tr><td><code>pre_python_bundled</code></td><td>Work before bundled Python is materialized.</td><td>app-builder Python</td></tr>
             <tr><td><code>post_python_bundled</code></td><td>Work after bundled Python and its main dependencies exist.</td><td>bundled, then app-builder Python</td></tr>
@@ -1695,6 +1733,49 @@ steps:
           with a spelling suggestion where possible, and their values are never printed. Set environment variables
           before the first app-builder command in a process.
         </p>
+        <h3>Speed up Python setup in CI</h3>
+        <pre><code>env:
+  APP_BUILDER_CACHE_PYTHON_BIN: '1'
+  APP_BUILDER_CACHE_PYTHON_VENV: '1'</code></pre>
+        <p>
+          BIN caches bundled Python and its dependencies. VENV caches the development environment.
+          Enable either with <code>1</code>; <code>0</code>, empty or unset disables it.
+        </p>
+        <p>
+          Use <code>app-builder deps</code>, <code>release</code> and <code>release-gh</code> normally.
+          Caching speeds up fresh environment creation. All pre/post hooks still run.
+          Existing environments update normally and retain packages you added.
+        </p>
+        <pre><code>app-builder cache info
+app-builder cache clear python-bin
+app-builder cache clear python-venv</code></pre>
+        <p>
+          Clear removes the selected cache across projects, not live environments. It does not force a rebuild.
+        </p>
+        <p>
+          <strong>VENV caveat:</strong> hooks that customize bundled Python can affect venv creation without
+          changing its cache key. After such changes, clear <code>python-venv</code> and recreate the
+          environment, or disable VENV caching.
+        </p>
+        <details>
+          <summary>Cache behavior and CI storage</summary>
+          <p>
+            Caches match the dependency lock, Python configuration, platform and app-builder version,
+            regardless of checkout location. Only freshly created environments seed the cache,
+            before their post hook runs.
+          </p>
+          <p>
+            Both caches share a 5 GiB storage target. New saves prune the least recently used entries.
+          </p>
+          <p>
+            A corrupt cache or failed runtime check triggers a warning and a normal rebuild.
+            Later hook or test failures do not trigger retries.
+          </p>
+          <p>
+            Use trusted storage. Disposable CI runners need their CI cache service to preserve the cache
+            between jobs. <code>app-builder cache info</code> shows its location.
+          </p>
+        </details>
       </section>
 
       <section id="versions">
@@ -1797,6 +1878,10 @@ installer:
     post_uninstall:
       - [hooks/post-uninstall.cmd]
 build_hooks:
+  pre_lock:
+    - [scripts/render_pyproject.py]
+  post_lock:
+    - [scripts/verify_lock.py]
   pre_dist:
     - [scripts/generate_assets.py]
   post_dist:

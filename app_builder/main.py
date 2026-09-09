@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 import sysconfig
 from pathlib import Path
@@ -22,10 +23,16 @@ from app_builder_meta.version_cache import (
 )
 
 from . import __version__
-from .build import build_release, ensure_python_environments, upload_release_to_github
+from .build import (
+    build_release,
+    ensure_python_environments,
+    refresh_project_lock,
+    upload_release_to_github,
+)
 from .project import find_project_root
-from .poetry_dependencies import ensure_poetry_lock, refresh_poetry_lock
+from .poetry_dependencies import ensure_poetry_lock
 from .python_runtime import ensure_bundled_python
+from . import python_environment_cache
 from .template import initialize_project
 
 
@@ -113,14 +120,14 @@ def lock_cmd(*, check: bool) -> None:
         poetry_lock = ensure_poetry_lock(project_root)
         click.echo(f"Lock is up to date: {poetry_lock.path}")
     else:
-        poetry_lock = refresh_poetry_lock(project_root)
+        poetry_lock = refresh_project_lock(project_root)
         click.echo(f"Refreshed lock: {poetry_lock.path}")
     click.echo(f"SHA-256: {poetry_lock.sha256}")
 
 
 @main.group("cache")
 def cache_cmd() -> None:
-    """Inspect the effective reusable cache locations."""
+    """Inspect caches or clear Python hydration snapshots."""
 
 
 @cache_cmd.command("path")
@@ -138,6 +145,18 @@ def cache_info_cmd() -> None:
     click.echo(f"Root: {environment.cache_root}")
     click.echo(f"Downloads: {environment.downloads}")
     click.echo(f"Managed versions: {environment.versions}")
+    for stage, enabled in (
+        ("python-bin", environment.cache_python_bin),
+        ("python-venv", environment.cache_python_venv),
+    ):
+        files = python_environment_cache.cache_files(stage)
+        size = sum(path.stat().st_size for path in files if path.exists())
+        click.echo(
+            f"{stage}: {'enabled' if enabled else 'disabled'}; "
+            f"{python_environment_cache.cache_root() / stage}; "
+            f"{len(files)} entries, {size} bytes"
+        )
+    click.echo("Python snapshot storage target: 5 GiB (shared)")
     click.echo(
         "pip: "
         + (
@@ -154,6 +173,17 @@ def cache_info_cmd() -> None:
             else "Poetry default"
         )
     )
+
+
+@cache_cmd.command("clear")
+@click.argument("stage", type=click.Choice(python_environment_cache.STAGES))
+def cache_clear_cmd(stage: str) -> None:
+    """Remove snapshots for python-bin or python-venv; keep live environments."""
+    try:
+        count, size = python_environment_cache.clear_cache(stage)
+    except OSError as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(f"Cleared {stage}: {count} entries, {size} bytes removed.")
 
 
 @main.group("versions")
@@ -199,6 +229,25 @@ def python_cmd() -> None:
     project_root = find_project_root(Path.cwd())
     bundled_python = ensure_bundled_python(project_root)
     click.echo(f"Bundled Python: {bundled_python or 'disabled'}")
+
+
+@main.command(
+    "run-python",
+    context_settings={
+        "allow_extra_args": True,
+        "allow_interspersed_args": False,
+        "help_option_names": [],
+        "ignore_unknown_options": True,
+    },
+)
+@click.pass_context
+def run_python_cmd(ctx: click.Context) -> None:
+    """
+    Run the installed app-builder Python interpreter with arbitrary arguments.
+    """
+
+    result = subprocess.run([sys.executable, *ctx.args], check=False)
+    ctx.exit(result.returncode)
 
 
 @main.command("release")

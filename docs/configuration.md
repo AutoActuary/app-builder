@@ -158,6 +158,14 @@ installer:
 # Optional mapping. Build and release hook command declarations. Default if omitted:
 # BuildHooks defaults.
 build_hooks:
+  # Optional list[list[string]]. Argv commands run before poetry.lock is refreshed.
+  # Default if omitted: [].
+  pre_lock: []
+
+  # Optional list[list[string]]. Argv commands run after poetry.lock is refreshed. Default
+  # if omitted: [].
+  post_lock: []
+
   # Optional list[list[string]]. Argv commands run before dependency or release processing
   # begins. Default if omitted: [].
   pre_process: []
@@ -333,6 +341,8 @@ installer:
 
 | Field | Type | Required | Default | Example | Description |
 | --- | --- | --- | --- | --- | --- |
+| `pre_lock` | `list[list[string]]` | no | `[]` |  | Argv commands run before poetry.lock is refreshed. |
+| `post_lock` | `list[list[string]]` | no | `[]` |  | Argv commands run after poetry.lock is refreshed. |
 | `pre_process` | `list[list[string]]` | no | `[]` |  | Argv commands run before dependency or release processing begins. |
 | `pre_python_bundled` | `list[list[string]]` | no | `[]` |  | Argv commands run before bundled Python is materialized. |
 | `post_python_bundled` | `list[list[string]]` | no | `[]` |  | Argv commands run after bundled Python is materialized. |

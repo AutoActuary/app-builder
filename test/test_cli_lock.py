@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -26,7 +27,7 @@ class TestCliLock(unittest.TestCase):
                 return_value=self.project_root,
             ),
             patch(
-                "app_builder.main.refresh_poetry_lock",
+                "app_builder.main.refresh_project_lock",
                 return_value=self.lock,
             ) as refresh,
             patch("app_builder.main.ensure_poetry_lock") as check,
@@ -39,6 +40,61 @@ class TestCliLock(unittest.TestCase):
         self.assertIn(f"Refreshed lock: {self.lock.path}", result.output)
         self.assertIn(f"SHA-256: {self.lock.sha256}", result.output)
 
+    def test_lock_hooks_surround_refresh(self) -> None:
+        with TemporaryDirectory() as temp_dir_str:
+            project_root = Path(temp_dir_str)
+            (project_root / "app_builder.yaml").write_text(
+                """
+app_builder_version: current
+installer:
+  name: Demo
+  install_directory: Demo
+build_hooks:
+  pre_lock:
+    - [hydrate.py]
+  post_lock:
+    - [record-lock.py]
+""".strip(),
+                encoding="utf-8",
+            )
+            (project_root / "hydrate.py").write_text(
+                "from pathlib import Path\n"
+                "Path('pyproject.toml').write_text('hydrated\\n', encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            (project_root / "record-lock.py").write_text(
+                "from pathlib import Path\n"
+                "Path('post-lock.txt').write_text("
+                "Path('poetry.lock').read_text(encoding='utf-8'), encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+
+            def refresh(root: Path) -> PoetryLock:
+                self.assertEqual(
+                    "hydrated\n",
+                    (root / "pyproject.toml").read_text(encoding="utf-8"),
+                )
+                (root / "poetry.lock").write_text("locked\n", encoding="utf-8")
+                return self.lock
+
+            with (
+                patch(
+                    "app_builder.main.find_project_root",
+                    return_value=project_root,
+                ),
+                patch(
+                    "app_builder.build.refresh_poetry_lock",
+                    side_effect=refresh,
+                ),
+            ):
+                result = CliRunner().invoke(main, ["lock"])
+
+            self.assertEqual(0, result.exit_code, result.output)
+            self.assertEqual(
+                "locked\n",
+                (project_root / "post-lock.txt").read_text(encoding="utf-8"),
+            )
+
     def test_lock_check_verifies_without_refreshing(self) -> None:
         with (
             patch(
@@ -49,7 +105,7 @@ class TestCliLock(unittest.TestCase):
                 "app_builder.main.ensure_poetry_lock",
                 return_value=self.lock,
             ) as check,
-            patch("app_builder.main.refresh_poetry_lock") as refresh,
+            patch("app_builder.main.refresh_project_lock") as refresh,
         ):
             result = CliRunner().invoke(main, ["lock", "--check"])
 
@@ -66,7 +122,7 @@ class TestCliLock(unittest.TestCase):
                 return_value=self.project_root,
             ),
             patch(
-                "app_builder.main.refresh_poetry_lock",
+                "app_builder.main.refresh_project_lock",
                 return_value=self.lock,
             ) as refresh,
             patch("app_builder.main.ensure_poetry_lock") as check,
@@ -87,7 +143,7 @@ class TestCliLock(unittest.TestCase):
                 "app_builder.main.ensure_poetry_lock",
                 side_effect=RuntimeError("poetry.lock is stale"),
             ),
-            patch("app_builder.main.refresh_poetry_lock") as refresh,
+            patch("app_builder.main.refresh_project_lock") as refresh,
         ):
             result = CliRunner().invoke(main, ["lock", "--check"])
 

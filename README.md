@@ -74,6 +74,7 @@ app-builder --help
 app-builder --version
 app-builder init [--force]
 app-builder python
+app-builder run-python <python-args>
 app-builder deps
 app-builder lock [--check | --refresh]
 app-builder cache path
@@ -84,6 +85,12 @@ app-builder release [--version <version>] [--verbose]
 app-builder release-gh [--version <version>] [--draft | --no-draft] [--verbose]
 app-builder 0.x <legacy-command>
 ```
+
+`app-builder run-python <python-args>` runs the installed app-builder Python
+interpreter with the arguments that follow it. It preserves the caller's
+working directory and does not require a project configuration, so it is also
+available from outside a project. The existing `app-builder python` command
+still materializes the configured bundled project runtime.
 
 ## Reusable Caches
 
@@ -112,8 +119,10 @@ README is intentionally short. The release pipeline document exists separately b
 
 Normal builds verify an existing `poetry.lock` and install locked registry
 artifacts by SHA-256. They never rewrite the lock. Run `app-builder lock`
-deliberately when dependencies change. CI can run `app-builder lock --check` to
-exit nonzero when the lock is missing, stale, or invalid without rewriting it.
+deliberately when dependencies change; it runs configured `pre_lock` and
+`post_lock` hooks around a successful refresh. CI can run
+`app-builder lock --check` to exit nonzero when the lock is missing, stale, or
+invalid without rewriting it.
 Complete Windows Python runtimes come from Python.org and are verified against
 its published SHA-256. Stable versions use exact `major.minor.patch` pins;
 prereleases also accept selectors such as `3.15.0-beta`. Mutable Poetry `file`

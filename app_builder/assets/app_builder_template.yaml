@@ -147,6 +147,14 @@ installer:
 # Optional mapping. Build and release hook command declarations. Default if omitted:
 # BuildHooks defaults.
 build_hooks:
+  # Optional list[list[string]]. Argv commands run before poetry.lock is refreshed.
+  # Default if omitted: [].
+  pre_lock: []
+
+  # Optional list[list[string]]. Argv commands run after poetry.lock is refreshed. Default
+  # if omitted: [].
+  post_lock: []
+
   # Optional list[list[string]]. Argv commands run before dependency or release processing
   # begins. Default if omitted: [].
   pre_process: []
