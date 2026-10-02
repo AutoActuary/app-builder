@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from pathlib import Path
+from importlib.resources import files
 from tempfile import TemporaryDirectory
 from zipfile import ZIP_STORED, ZipFile
 
@@ -56,7 +57,9 @@ def create_exewrap_zip_installer(
         )
     output_path.write_bytes(
         stamp_exe_wrap_config(
-            _render_bootstrap_config(bootstrap_pre_extract_commands),
+            _render_bootstrap_config(
+                bootstrap_pre_extract_commands, wait_on_exit=wait_on_exit
+            ),
             launcher=launcher,
             include_end_marker=True,
         )
@@ -107,6 +110,8 @@ def create_exewrap_zip_installer(
 
 def _render_bootstrap_config(
     bootstrap_pre_extract_commands: list[list[str]] | None = None,
+    *,
+    wait_on_exit: bool = True,
 ) -> bytes:
     return json.dumps(
         {
@@ -120,7 +125,9 @@ def _render_bootstrap_config(
                 "Bypass",
                 "-Command",
                 "& { "
-                + _render_powershell_bootstrap(bootstrap_pre_extract_commands)
+                + _render_powershell_bootstrap(
+                    bootstrap_pre_extract_commands, wait_on_exit=wait_on_exit
+                )
                 + " }",
             ],
         },
@@ -130,18 +137,26 @@ def _render_bootstrap_config(
 
 def _render_powershell_bootstrap(
     bootstrap_pre_extract_commands: list[list[str]] | None = None,
+    *,
+    wait_on_exit: bool = True,
 ) -> str:
     bootstrap_hooks = _render_bootstrap_hooks_powershell(
         bootstrap_pre_extract_commands or []
     )
     return (
-        "$ErrorActionPreference = 'Stop'; "
+        # Escape PowerShell hashtables for ExeWrap's template parser.
+        _powershell_session_functions().replace("@{", "@@{")
+        + "$ErrorActionPreference = 'Stop'; "
         "$InstallerArgsJson = '@{args_as_json}'; "
         "[string[]]$InstallerArgs = $InstallerArgsJson | ConvertFrom-Json; "
         "$exitCode = 0; "
+        "$AppBuilderScriptOptions = $null; "
+        "$StartedInstall = $false; "
+        "$StartedLog = Start-AppBuilderInstallerLog; "
         "$extractDir = Join-Path $env:TEMP "
         "('app-builder-' + [guid]::NewGuid().ToString('N')); "
         "try { "
+        f"$AppBuilderScriptOptions = Get-AppBuilderScriptOptions $InstallerArgs ${str(wait_on_exit).lower()}; "
         f"{bootstrap_hooks} "
         "New-Item -ItemType Directory -Path $extractDir | Out-Null; "
         "tar.exe -xf $env:APP_BUILDER_INSTALLER_EXE -C $extractDir; "
@@ -149,12 +164,15 @@ def _render_powershell_bootstrap(
         "$exitCode = $LASTEXITCODE; "
         'throw "tar.exe failed with exit code $exitCode" '
         "}; "
+        "$StartedInstall = $true; "
         "& (Join-Path $extractDir 'bin\\install.ps1') @InstallerArgs; "
         "$exitCode = $LASTEXITCODE "
         "} catch { "
         "if ($exitCode -eq 0) { $exitCode = 1 }; "
         "Write-Error $_ -ErrorAction Continue "
         "} finally { "
+        "if (-not $StartedInstall) { Wait-AppBuilderBeforeExit $AppBuilderScriptOptions }; "
+        "Stop-AppBuilderInstallerLog $StartedLog; "
         "if (Test-Path -LiteralPath $extractDir) { "
         "Remove-Item -LiteralPath $extractDir -Recurse -Force "
         "-ErrorAction SilentlyContinue "
@@ -183,10 +201,10 @@ def _render_bootstrap_hooks_powershell(commands: list[list[str]]) -> str:
         "$global:LASTEXITCODE = 0; "
         "& $Program @Arguments; "
         "if (-not $?) { "
-        "throw \"Bootstrap hook command failed: $($Argv -join ' ')\" "
+        'throw "Bootstrap hook command failed: $Program" '
         "}; "
         "if ($LASTEXITCODE -ne 0) { "
-        "throw \"Bootstrap hook command failed with exit code ${LASTEXITCODE}: $($Argv -join ' ')\" "
+        'throw "Bootstrap hook command failed with exit code ${LASTEXITCODE}: $Program" '
         "} "
         "}; "
         "foreach ($RawCommand in @($BootstrapCommands)) { "
@@ -223,8 +241,15 @@ def _render_install_cmd_wrapper() -> str:
 def _render_uninstall_cmd_wrapper() -> str:
     return (
         "@echo off\n"
+        'if /i "%~f0"=="%APP_BUILDER_UNINSTALL_WRAPPER%" goto run\n'
+        'set "APP_BUILDER_UNINSTALL_SCRIPT=%~dp0uninstall.ps1"\n'
+        'set "APP_BUILDER_UNINSTALL_WRAPPER=%TEMP%\\app-builder-uninstall-%RANDOM%-%RANDOM%.cmd"\n'
+        'copy /y "%~f0" "%APP_BUILDER_UNINSTALL_WRAPPER%" >nul\n'
+        "if errorlevel 1 exit /b 1\n"
+        '"%APP_BUILDER_UNINSTALL_WRAPPER%" %*\n'
+        ":run\n"
         "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass "
-        '-File "%~dp0uninstall.ps1" %*\n'
+        '-File "%APP_BUILDER_UNINSTALL_SCRIPT%" %*\n'
         "exit /b %ERRORLEVEL%\n"
     )
 
@@ -294,9 +319,12 @@ def _render_install_powershell(
         + f"$AppBuilderUninstallEnabled = ${str(uninstall_enabled).lower()}\n"
         + _default_wait_assignment(wait_on_exit)
         + """
-$AppBuilderScriptOptions = Get-AppBuilderScriptOptions -Arguments @($args) -DefaultWaitOnExit $AppBuilderDefaultWaitOnExit
+$AppBuilderScriptOptions = $null
 $AppBuilderExitCode = 0
+$InstallLock = $null
+$StartedLog = Start-AppBuilderInstallerLog
 try {
+$AppBuilderScriptOptions = Get-AppBuilderScriptOptions -Arguments @($args) -DefaultWaitOnExit $AppBuilderDefaultWaitOnExit
 $ScriptRoot = $PSScriptRoot
 $InstallerRoot = Split-Path -Parent $ScriptRoot
 $Manifest = Read-AppBuilderManifestJson $EmbeddedManifestJson
@@ -304,7 +332,8 @@ $ManifestUninstallEnabled = Get-AppBuilderObjectProperty $Manifest 'add_uninstal
 $AppBuilderUninstallEnabled = $AppBuilderUninstallEnabled -and ($null -ne $ManifestUninstallEnabled) -and [bool]$ManifestUninstallEnabled
 $InstallDir = Resolve-AppBuilderInstallDirectory ([string]$Manifest.install_directory)
 $PayloadPath = Join-Path $InstallerRoot ([string]$Manifest.payload_archive)
-$StagingDir = Join-Path $env:TEMP ('app-builder-install-' + [guid]::NewGuid().ToString('N'))
+$InstallParent = Split-Path -Parent $InstallDir
+$StagingDir = Join-Path $InstallParent ((Split-Path -Leaf $InstallDir) + '.app-builder-staging-' + [guid]::NewGuid().ToString('N'))
 $BackupDir = $null
 $StartMenuBackupDir = $null
 $StartMenuTouched = $false
@@ -322,6 +351,21 @@ if ($AppBuilderUninstallEnabled) {
 
 Write-Host ('Ready to install {0} {1} to {2}' -f $Manifest.name, $Manifest.version, $InstallDir)
 Confirm-AppBuilderAction ('Continue installing {0}?' -f $Manifest.name) $AppBuilderScriptOptions.BypassQuestions
+$InstallLock = Lock-AppBuilderInstallation $InstallDir
+if (Test-Path -LiteralPath $InstallDir) {
+    if ((Get-Item -LiteralPath $InstallDir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "Refusing to replace an installation directory that is a link: $InstallDir"
+    }
+    $ExistingInstallKind = Get-AppBuilderExistingInstallKind $Manifest $InstallDir $StartMenuDir $InstalledManifestName
+}
+Assert-AppBuilderFilesAvailable @($InstallDir, $StartMenuDir)
+if ($null -ne (Get-AppBuilderObjectProperty $Manifest 'unpacked_bytes')) {
+    while ($true) {
+        $SpaceError = [AppBuilderFiles]::CheckSpace($InstallDir, [uint64]$Manifest.unpacked_bytes)
+        if ($null -eq $SpaceError) { break }
+        if (-not (Request-AppBuilderRetry $SpaceError)) { throw $SpaceError }
+    }
+}
 Write-Host ('Installing {0} {1}' -f $Manifest.name, $Manifest.version)
 Set-AppBuilderEnvironment $Manifest $InstallDir $StartMenuDir
 
@@ -329,15 +373,14 @@ try {
     if (-not (Test-Path -LiteralPath $PayloadPath)) {
         throw "Payload archive not found: $PayloadPath"
     }
+    New-Item -ItemType Directory -Path $InstallParent -Force | Out-Null
     New-Item -ItemType Directory -Path $StagingDir | Out-Null
     Expand-AppBuilderPayloadArchive $PayloadPath $StagingDir $InstallerRoot
 
     Invoke-AppBuilderHookList $Manifest.install_hooks.pre_install $StagingDir $Manifest
 
-    $InstallParent = Split-Path -Parent $InstallDir
-    if ($InstallParent) {
-        New-Item -ItemType Directory -Path $InstallParent -Force | Out-Null
-    }
+    # Extraction and project hooks may take time. Recheck before old hooks or replacement.
+    Assert-AppBuilderFilesAvailable @($InstallDir, $StartMenuDir)
     if (Test-Path -LiteralPath $InstallDir) {
         $ExistingInstallKind = Get-AppBuilderExistingInstallKind $Manifest $InstallDir $StartMenuDir $InstalledManifestName
         if ($ExistingInstallKind -eq 'current') {
@@ -384,26 +427,29 @@ try {
     Remove-AppBuilderBackupDirectory $StartMenuBackupDir 'previous Start Menu backup'
     Write-Host ('Installed to {0}' -f $InstallDir)
 } catch {
-    if ($UninstallRegistryTouched) {
-        if (($ExistingInstallKind -eq 'current') -and $UninstallRegistryExistedBefore -and $null -ne $ExistingManifest) {
-            Set-AppBuilderUninstallRegistryEntry $ExistingManifest $InstallDir $UninstallRegistryPath
-        } else {
-            Remove-AppBuilderUninstallRegistryEntry $UninstallRegistryPath
+    $InstallError = $_
+    $RecoveryFailed = $false
+    foreach ($Step in @(
+        { if ($MovedStaging -and (Test-Path -LiteralPath $InstallDir)) { Remove-AppBuilderInstallDirectory $InstallDir } },
+        { if ($StartMenuTouched -and (Test-Path -LiteralPath $StartMenuDir)) { Remove-AppBuilderInstallDirectory $StartMenuDir } },
+        { if ($StartMenuBackupDir -and (Test-Path -LiteralPath $StartMenuBackupDir)) { Restore-AppBuilderDirectory $StartMenuBackupDir $StartMenuDir 'previous Start Menu directory' } },
+        { if ($BackupDir -and (Test-Path -LiteralPath $BackupDir)) { Restore-AppBuilderDirectory $BackupDir $InstallDir 'previous install directory' } },
+        {
+            if ($UninstallRegistryTouched) {
+                if (($ExistingInstallKind -eq 'current') -and $UninstallRegistryExistedBefore -and $null -ne $ExistingManifest) {
+                    Set-AppBuilderUninstallRegistryEntry $ExistingManifest $InstallDir $UninstallRegistryPath
+                } else { Remove-AppBuilderUninstallRegistryEntry $UninstallRegistryPath }
+            }
         }
+    )) {
+        try { & $Step } catch { $RecoveryFailed = $true; Write-Warning ("Recovery failed: " + $_.Exception.Message) }
     }
-    if ($MovedStaging -and (Test-Path -LiteralPath $InstallDir)) {
-        Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+    if ($RecoveryFailed) {
+        Write-Warning "Rollback incomplete. Preserve recovery directories: $BackupDir $StartMenuBackupDir"
+    } elseif ($MovedStaging) {
+        Write-Host 'Previous files and registration restored. External hook changes were not undone.'
     }
-    if ($StartMenuTouched -and (Test-Path -LiteralPath $StartMenuDir)) {
-        Remove-Item -LiteralPath $StartMenuDir -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    if ($StartMenuBackupDir -and (Test-Path -LiteralPath $StartMenuBackupDir)) {
-        Restore-AppBuilderDirectory $StartMenuBackupDir $StartMenuDir 'previous Start Menu directory'
-    }
-    if ($BackupDir -and (Test-Path -LiteralPath $BackupDir)) {
-        Restore-AppBuilderDirectory $BackupDir $InstallDir 'previous install directory'
-    }
-    throw
+    throw $InstallError
 } finally {
     if ((-not $MovedStaging) -and (Test-Path -LiteralPath $StagingDir)) {
         Remove-Item -LiteralPath $StagingDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -413,6 +459,8 @@ try {
     $AppBuilderExitCode = 1
     Write-Error $_ -ErrorAction Continue
 } finally {
+    if ($null -ne $InstallLock) { $InstallLock.ReleaseMutex(); $InstallLock.Dispose() }
+    Stop-AppBuilderInstallerLog $StartedLog
     Wait-AppBuilderBeforeExit $AppBuilderScriptOptions
 }
 exit $AppBuilderExitCode
@@ -426,11 +474,15 @@ def _render_uninstall_powershell(*, wait_on_exit: bool) -> str:
         + f"$InstalledManifestName = '{_INSTALLED_MANIFEST_NAME}'\n"
         + _default_wait_assignment(wait_on_exit)
         + """
-$AppBuilderScriptOptions = Get-AppBuilderScriptOptions -Arguments @($args) -DefaultWaitOnExit $AppBuilderDefaultWaitOnExit
+$AppBuilderScriptOptions = $null
 $AppBuilderExitCode = 0
+$InstallLock = $null
+$StartedLog = Start-AppBuilderInstallerLog
 try {
+$AppBuilderScriptOptions = Get-AppBuilderScriptOptions -Arguments @($args) -DefaultWaitOnExit $AppBuilderDefaultWaitOnExit
 $ScriptRoot = $PSScriptRoot
 $InstallDir = Split-Path -Parent $ScriptRoot
+$InstallLock = Lock-AppBuilderInstallation $InstallDir
 $ManifestPath = Join-Path $InstallDir $InstalledManifestName
 $Manifest = Read-AppBuilderManifestFile $ManifestPath
 $StartMenuDir = Get-AppBuilderStartMenuDirectory $Manifest
@@ -440,6 +492,7 @@ $StartedCleanup = $false
 
 Write-Host ('Ready to uninstall {0} from {1}' -f $Manifest.name, $InstallDir)
 Confirm-AppBuilderAction ('Continue uninstalling {0}?' -f $Manifest.name) $AppBuilderScriptOptions.BypassQuestions
+Assert-AppBuilderFilesAvailable @($InstallDir, $StartMenuDir)
 Write-Host ('Uninstalling {0} from {1}' -f $Manifest.name, $InstallDir)
 Set-AppBuilderEnvironment $Manifest $InstallDir $StartMenuDir
 
@@ -455,18 +508,30 @@ try {
     } else {
         Set-Location $env:TEMP
     }
-    Start-AppBuilderPostUninstallCleanup $InstallDir $PostUninstallCommands $PostUninstallDir $UninstallRegistryPath
     $StartedCleanup = $true
+    while ($true) {
+        try {
+            Start-AppBuilderPostUninstallCleanup $InstallDir $PostUninstallCommands $PostUninstallDir $UninstallRegistryPath
+            break
+        } catch {
+            $PhaseFile = Join-Path $PostUninstallDir 'phase.txt'
+            $Phase = if (Test-Path -LiteralPath $PhaseFile) { Get-Content -LiteralPath $PhaseFile -Raw } else { '' }
+            if ($Phase.Trim() -ne 'remove' -or -not (Request-AppBuilderRetry $_.Exception.Message)) { throw }
+            Assert-AppBuilderFilesAvailable @($InstallDir)
+        }
+    }
 } finally {
     if ((-not $StartedCleanup) -and (Test-Path -LiteralPath $PostUninstallDir)) {
         Remove-Item -LiteralPath $PostUninstallDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
-Write-Host 'Uninstall cleanup started.'
+Write-Host 'Uninstall completed.'
 } catch {
     $AppBuilderExitCode = 1
     Write-Error $_ -ErrorAction Continue
 } finally {
+    if ($null -ne $InstallLock) { $InstallLock.ReleaseMutex(); $InstallLock.Dispose() }
+    Stop-AppBuilderInstallerLog $StartedLog
     Wait-AppBuilderBeforeExit $AppBuilderScriptOptions
 }
 exit $AppBuilderExitCode
@@ -474,73 +539,24 @@ exit $AppBuilderExitCode
     )
 
 
+def _powershell_session_functions() -> str:
+    return (
+        files("app_builder")
+        .joinpath("assets/templates/installer-session.ps1")
+        .read_text(encoding="utf-8")
+        + "\n"
+    )
+
+
 def _powershell_common_functions() -> str:
-    return r"""Set-StrictMode -Version 3.0
+    return (
+        _powershell_session_functions()
+        + files("app_builder")
+        .joinpath("assets/templates/installer-files.ps1")
+        .read_text(encoding="utf-8")
+        + r"""
+Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
-
-function Get-AppBuilderScriptOptions {
-    param($Arguments, [bool]$DefaultWaitOnExit)
-    $Argv = @()
-    foreach ($Item in @($Arguments)) {
-        $Argv += [string]$Item
-    }
-    $BypassQuestions = $false
-    $NoWait = $false
-    foreach ($Arg in $Argv) {
-        $Normalized = $Arg.ToLowerInvariant()
-        if ($Normalized -eq '--yes') {
-            $BypassQuestions = $true
-        }
-        if ($Normalized -eq '--no-wait') {
-            $NoWait = $true
-        }
-    }
-    if ($BypassQuestions) {
-        $NoWait = $true
-    }
-    return [pscustomobject]@{
-        BypassQuestions = $BypassQuestions
-        WaitOnExit = $DefaultWaitOnExit
-        NoWait = $NoWait
-        Arguments = $Argv
-    }
-}
-
-function Confirm-AppBuilderAction {
-    param([string]$Prompt, [bool]$BypassQuestions)
-    if ($BypassQuestions) {
-        return
-    }
-    $Answer = Read-Host ($Prompt + ' [y/N]')
-    if ($null -eq $Answer) {
-        $Answer = ''
-    }
-    if (-not @('y', 'yes').Contains(([string]$Answer).ToLowerInvariant())) {
-        throw 'Cancelled by user.'
-    }
-}
-
-function Wait-AppBuilderBeforeExit {
-    param($Options)
-    if ($null -eq $Options) {
-        return
-    }
-    if ((-not [bool]$Options.WaitOnExit) -or [bool]$Options.NoWait) {
-        return
-    }
-    Write-Host 'Press Enter to close now, or wait 30 seconds. Use --yes or --no-wait to skip this wait.'
-    $Deadline = [DateTime]::UtcNow.AddSeconds(30)
-    while ([DateTime]::UtcNow -lt $Deadline) {
-        if ([Console]::KeyAvailable) {
-            $Key = [Console]::ReadKey($true)
-            if ($Key.Key -eq [ConsoleKey]::Enter) {
-                return
-            }
-            continue
-        }
-        Start-Sleep -Milliseconds 100
-    }
-}
 
 function Read-AppBuilderManifestJson {
     param([string]$Json)
@@ -653,6 +669,19 @@ function Get-AppBuilderUninstallRegistryPath {
     return 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AppBuilder-' + $Identity
 }
 
+function Lock-AppBuilderInstallation {
+    param([string]$InstallDir)
+    # Reuse the existing canonical path identity; serialize install and uninstall.
+    $Name = 'Global\' + (Split-Path -Leaf (Get-AppBuilderUninstallRegistryPath $InstallDir))
+    $Lock = [Threading.Mutex]::new($false, $Name)
+    try {
+        $Acquired = $false
+        try { $Acquired = $Lock.WaitOne(0) } catch [Threading.AbandonedMutexException] { $Acquired = $true }
+        if (-not $Acquired) { throw "Another installer or uninstaller is using $InstallDir. Wait for it to finish, then retry." }
+        return $Lock
+    } catch { $Lock.Dispose(); throw }
+}
+
 function Set-AppBuilderUninstallRegistryEntry {
     param($Manifest, [string]$InstallDir, [string]$RegistryPath)
     if ([string]::IsNullOrWhiteSpace($RegistryPath)) {
@@ -702,7 +731,7 @@ function Set-AppBuilderUninstallRegistryEntry {
 function Remove-AppBuilderUninstallRegistryEntry {
     param([AllowNull()][string]$RegistryPath)
     if (-not [string]::IsNullOrWhiteSpace($RegistryPath) -and (Test-Path -LiteralPath $RegistryPath)) {
-        Remove-Item -LiteralPath $RegistryPath -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $RegistryPath -Recurse -Force -ErrorAction Stop
     }
 }
 
@@ -822,7 +851,7 @@ function Invoke-AppBuilderHook {
         & $Program @Arguments
     }
     if ($LASTEXITCODE -ne 0) {
-        throw "Hook command failed with exit code ${LASTEXITCODE}: $($Argv -join ' ')"
+        throw "Hook command failed with exit code ${LASTEXITCODE}: $Program"
     }
 }
 
@@ -944,20 +973,25 @@ function Backup-AppBuilderStartMenuDirectory {
 
 function Move-AppBuilderDirectory {
     param([string]$Source, [string]$Destination, [string]$Description)
-    try {
-        Move-Item -LiteralPath $Source -Destination $Destination -ErrorAction Stop
-    } catch {
-        throw "Failed to move ${Description} from '${Source}' to '${Destination}'. The existing install was not replaced. Close running app files and try again. $($_.Exception.Message)"
+    while ($true) {
+        try {
+            Initialize-AppBuilderFileChecks
+            [AppBuilderFiles]::Move($Source, $Destination)
+            return
+        } catch {
+            $Message = "Failed to move ${Description} from '${Source}' to '${Destination}'. $($_.Exception.Message)"
+            if (-not (Request-AppBuilderRetry $Message)) { throw $Message }
+            Assert-AppBuilderFilesAvailable @($Source)
+        }
     }
 }
 
 function Restore-AppBuilderDirectory {
     param([string]$Source, [string]$Destination, [string]$Description)
-    try {
-        Move-Item -LiteralPath $Source -Destination $Destination -ErrorAction Stop
-    } catch {
-        Write-Warning "Failed to restore ${Description} from '${Source}' to '${Destination}'. Manual recovery may be required. $($_.Exception.Message)"
+    if (Test-Path -LiteralPath $Destination) {
+        throw "Cannot restore ${Description}: destination still exists at '${Destination}'. Backup preserved at '${Source}'."
     }
+    Move-AppBuilderDirectory $Source $Destination $Description
 }
 
 function Remove-AppBuilderBackupDirectory {
@@ -1171,16 +1205,16 @@ function Test-AppBuilderRegistryEntryTargetsInstallDirectory {
     if (-not [string]::IsNullOrWhiteSpace($InstallLocation)) {
         try {
             $CanonicalLocation = [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($InstallLocation)).TrimEnd([char[]]'\\/')
-            if ($CanonicalLocation.Equals($CanonicalInstallDir, [System.StringComparison]::OrdinalIgnoreCase)) {
-                return $true
-            }
+            return $CanonicalLocation.Equals($CanonicalInstallDir, [System.StringComparison]::OrdinalIgnoreCase)
         } catch {
+            return $false
         }
     }
     foreach ($PropertyName in @('UninstallString', 'QuietUninstallString')) {
         $Command = [string](Get-AppBuilderObjectProperty $Entry $PropertyName)
-        if (-not [string]::IsNullOrWhiteSpace($Command) -and $Command.IndexOf($CanonicalInstallDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-            return $true
+        if (-not [string]::IsNullOrWhiteSpace($Command)) {
+            Initialize-AppBuilderFileChecks
+            if ([AppBuilderFiles]::CommandTargets($Command, $CanonicalInstallDir)) { return $true }
         }
     }
     return $false
@@ -1200,9 +1234,10 @@ function Remove-AppBuilderLegacyUninstallRegistryEntries {
             $Entry = Get-ItemProperty -LiteralPath $Key.PSPath -ErrorAction Stop
             $DisplayName = [string](Get-AppBuilderObjectProperty $Entry 'DisplayName')
             if ((Test-AppBuilderLegacyNameMatchesManifest $DisplayName $Manifest) -and (Test-AppBuilderRegistryEntryTargetsInstallDirectory $Entry $InstallDir)) {
-                Remove-Item -LiteralPath $Key.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath $Key.PSPath -Recurse -Force -ErrorAction Stop
             }
         } catch {
+            Write-Warning "Could not clean legacy uninstall registration '$($Key.PSPath)': $($_.Exception.Message)"
         }
     }
 }
@@ -1213,7 +1248,10 @@ function Remove-AppBuilderLegacyStartMenuEntries {
     if (-not (Test-Path -LiteralPath $Programs -PathType Container)) {
         return
     }
-    $Shell = New-Object -ComObject WScript.Shell
+    try { $Shell = New-Object -ComObject WScript.Shell } catch {
+        Write-Warning "Could not inspect legacy shortcuts: $($_.Exception.Message)"
+        return
+    }
     foreach ($Shortcut in @(Get-ChildItem -LiteralPath $Programs -File -Filter 'Uninstall *.lnk' -Recurse -ErrorAction SilentlyContinue)) {
         if (-not [string]::IsNullOrWhiteSpace($CurrentStartMenuDir) -and (Test-AppBuilderPathIsSameOrChild $Shortcut.FullName $CurrentStartMenuDir)) {
             continue
@@ -1224,21 +1262,23 @@ function Remove-AppBuilderLegacyStartMenuEntries {
         }
         try {
             $Link = $Shell.CreateShortcut($Shortcut.FullName)
-            $TargetEvidence = ([string]$Link.TargetPath) + ' ' + ([string]$Link.Arguments)
-            if ($TargetEvidence.IndexOf($InstallDir, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            Initialize-AppBuilderFileChecks
+            $TargetEvidence = '"' + ([string]$Link.TargetPath) + '" ' + ([string]$Link.Arguments)
+            if (-not [AppBuilderFiles]::CommandTargets($TargetEvidence, $InstallDir)) {
                 continue
             }
-            Remove-Item -LiteralPath $Shortcut.FullName -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $Shortcut.FullName -Force -ErrorAction Stop
             $Parent = $Shortcut.Directory
             while ($null -ne $Parent -and -not $Parent.FullName.Equals($Programs, [System.StringComparison]::OrdinalIgnoreCase)) {
                 if (@(Get-ChildItem -LiteralPath $Parent.FullName -Force -ErrorAction SilentlyContinue).Count -ne 0) {
                     break
                 }
                 $NextParent = $Parent.Parent
-                Remove-Item -LiteralPath $Parent.FullName -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath $Parent.FullName -Force -ErrorAction Stop
                 $Parent = $NextParent
             }
         } catch {
+            Write-Warning "Could not clean legacy shortcut '$($Shortcut.FullName)': $($_.Exception.Message)"
         }
     }
 }
@@ -1248,22 +1288,9 @@ function Remove-AppBuilderInstallDirectory {
     if (-not (Test-Path -LiteralPath $Directory)) {
         return
     }
-    $LastError = $null
-    for ($Attempt = 0; $Attempt -lt 20; $Attempt += 1) {
-        try {
-            Remove-Item -LiteralPath $Directory -Recurse -Force -ErrorAction Stop
-        } catch {
-            $LastError = $_
-        }
-        if (-not (Test-Path -LiteralPath $Directory)) {
-            return
-        }
-        Start-Sleep -Milliseconds 500
-    }
-    if ($LastError) {
-        throw "Failed to remove install directory ${Directory}: $LastError"
-    }
-    throw "Failed to remove install directory ${Directory}."
+    Initialize-AppBuilderFileChecks
+    [AppBuilderFiles]::RemoveTree($Directory)
+    if (Test-Path -LiteralPath $Directory) { throw "Directory still exists after removal: $Directory" }
 }
 
 function Start-AppBuilderPostUninstallCleanup {
@@ -1272,6 +1299,7 @@ function Start-AppBuilderPostUninstallCleanup {
         install_directory = $InstallDir
         post_uninstall_directory = $PostUninstallDir
         uninstall_registry_path = $UninstallRegistryPath
+        log_path = $env:APP_BUILDER_INSTALL_LOG
         commands = @($Commands)
         environment = [ordered]@{
             app_builder_name = $env:app_builder_name
@@ -1285,29 +1313,6 @@ function Start-AppBuilderPostUninstallCleanup {
     $PayloadBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($PayloadJson))
     $CleanupScript = @'
 $ErrorActionPreference = 'Stop'
-
-function Remove-DirectoryWithRetry {
-    param([string]$Directory)
-    if (-not (Test-Path -LiteralPath $Directory)) {
-        return
-    }
-    $LastError = $null
-    for ($Attempt = 0; $Attempt -lt 40; $Attempt += 1) {
-        try {
-            Remove-Item -LiteralPath $Directory -Recurse -Force -ErrorAction Stop
-        } catch {
-            $LastError = $_
-        }
-        if (-not (Test-Path -LiteralPath $Directory)) {
-            return
-        }
-        Start-Sleep -Milliseconds 500
-    }
-    if ($LastError) {
-        throw "Failed to remove install directory ${Directory}: $LastError"
-    }
-    throw "Failed to remove install directory ${Directory}."
-}
 
 function Invoke-PostUninstallHook {
     param($Command, [string]$WorkingDirectory)
@@ -1336,7 +1341,7 @@ function Invoke-PostUninstallHook {
         & $Program @Arguments
     }
     if ($LASTEXITCODE -ne 0) {
-        throw "post_uninstall command failed with exit code ${LASTEXITCODE}: $($Argv -join ' ')"
+        throw "post_uninstall command failed with exit code ${LASTEXITCODE}: $Program"
     }
 }
 
@@ -1352,10 +1357,18 @@ try {
     } else {
         Set-Location $env:TEMP
     }
-    Start-Sleep -Milliseconds 500
-    Remove-DirectoryWithRetry ([string]$Payload.install_directory)
+    New-Item -ItemType Directory -Path ([string]$Payload.post_uninstall_directory) -Force | Out-Null
+    if (-not [string]::IsNullOrWhiteSpace([string]$Payload.log_path)) {
+        try { Start-Transcript -LiteralPath ([string]$Payload.log_path) -Append | Out-Null } catch { Write-Warning $_.Exception.Message }
+    }
+    Set-Content -LiteralPath (Join-Path ([string]$Payload.post_uninstall_directory) 'phase.txt') -Value 'remove'
+    Initialize-AppBuilderFileChecks
+    [AppBuilderFiles]::RemoveTree([string]$Payload.install_directory)
+    Set-Content -LiteralPath (Join-Path ([string]$Payload.post_uninstall_directory) 'phase.txt') -Value 'integration'
     if (-not [string]::IsNullOrWhiteSpace([string]$Payload.uninstall_registry_path)) {
-        Remove-Item -LiteralPath ([string]$Payload.uninstall_registry_path) -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath ([string]$Payload.uninstall_registry_path)) {
+            Remove-Item -LiteralPath ([string]$Payload.uninstall_registry_path) -Recurse -Force -ErrorAction Stop
+        }
     }
     foreach ($Command in @($Payload.commands)) {
         Invoke-PostUninstallHook $Command ([string]$Payload.post_uninstall_directory)
@@ -1368,6 +1381,7 @@ try {
     }
     throw
 } finally {
+    try { Stop-Transcript | Out-Null } catch { }
     try {
         if (-not [string]::IsNullOrWhiteSpace($env:SystemRoot)) {
             Set-Location $env:SystemRoot
@@ -1379,8 +1393,22 @@ try {
     }
 }
 '@.Replace('__APP_BUILDER_PAYLOAD__', $PayloadBase64)
-    $EncodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($CleanupScript))
+    # The worker lives outside the installation and reports completion to its caller.
+    New-Item -ItemType Directory -Path $PostUninstallDir -Force | Out-Null
+    $CleanupPath = Join-Path $PostUninstallDir 'cleanup.ps1'
+    $FileChecks = 'function Initialize-AppBuilderFileChecks {' + ${function:Initialize-AppBuilderFileChecks}.ToString() + "}`n"
+    [IO.File]::WriteAllText($CleanupPath, $FileChecks + $CleanupScript)
     $SafeWorkingDirectory = if (-not [string]::IsNullOrWhiteSpace($env:SystemRoot)) { $env:SystemRoot } else { $env:TEMP }
-    Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $EncodedCommand) -WorkingDirectory $SafeWorkingDirectory -WindowStyle Hidden
+    try { Stop-Transcript | Out-Null } catch { }
+    $Worker = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $CleanupPath + '"')) -WorkingDirectory $SafeWorkingDirectory -WindowStyle Hidden -Wait -PassThru
+    if (-not [string]::IsNullOrWhiteSpace($env:APP_BUILDER_INSTALL_LOG)) {
+        Start-Transcript -LiteralPath $env:APP_BUILDER_INSTALL_LOG -Append | Out-Null
+    }
+    if ($Worker.ExitCode -ne 0) {
+        $ErrorFile = Join-Path $PostUninstallDir 'error.txt'
+        $Detail = if (Test-Path -LiteralPath $ErrorFile) { Get-Content -LiteralPath $ErrorFile -Raw } else { 'See installer log.' }
+        throw "Uninstall cleanup failed (exit $($Worker.ExitCode)): $Detail Diagnostics: $PostUninstallDir"
+    }
 }
 """
+    )

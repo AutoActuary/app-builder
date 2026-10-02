@@ -209,6 +209,8 @@ def build_release(
             "install_directory": config.installer.install_directory,
             "add_uninstaller": config.installer.add_uninstaller,
             "payload_archive": payload_archive.name,
+            "unpacked_bytes": sum(source.stat().st_size for source in remap_table)
+            + len(version.encode("utf-8")),
             "hook_python_candidates": installer_hook_python_candidates,
             "python_bundled_path": installer_bundled_python_path,
             "start_menu": start_menu,

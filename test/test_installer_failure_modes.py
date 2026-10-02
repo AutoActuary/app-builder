@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import ctypes
 import importlib
 import os
+import shutil
 import subprocess
 import time
 import unittest
@@ -561,7 +563,7 @@ class TestInstallerFailureModes(unittest.TestCase):
 
             self.assertNotEqual(0, result.returncode)
             self.assertIn(
-                "Failed to move existing install directory",
+                str(locked_file),
                 _single_line(result.stderr),
             )
             self.assertEqual("old locked", locked_file.read_text(encoding="utf-8"))
@@ -570,6 +572,60 @@ class TestInstallerFailureModes(unittest.TestCase):
                 "old shortcut",
                 (start_menu_dir / "old-shortcut.lnk").read_text(encoding="utf-8"),
             )
+
+            image = install_dir / "runtime.custom"
+            shutil.copyfile(
+                Path(os.environ["SystemRoot"]) / "System32/version.dll", image
+            )
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.LoadLibraryExW.argtypes = [
+                ctypes.c_wchar_p,
+                ctypes.c_void_p,
+                ctypes.c_uint,
+            ]
+            kernel.LoadLibraryExW.restype = ctypes.c_void_p
+            kernel.FreeLibrary.argtypes = [ctypes.c_void_p]
+            kernel.CreateFileW.argtypes = [
+                ctypes.c_wchar_p,
+                ctypes.c_uint,
+                ctypes.c_uint,
+                ctypes.c_void_p,
+                ctypes.c_uint,
+                ctypes.c_uint,
+                ctypes.c_void_p,
+            ]
+            kernel.CreateFileW.restype = ctypes.c_void_p
+            kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+            for flags in (0, 32):
+                with self.subTest(image_flags=flags):
+                    loaded = kernel.LoadLibraryExW(str(image), None, flags)
+                    self.assertTrue(loaded)
+                    try:
+                        result = _run_install(extraction_dir, appdata_dir=appdata_dir)
+                    finally:
+                        kernel.FreeLibrary(loaded)
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(str(image), _single_line(result.stderr))
+                    self.assertEqual(
+                        "old locked", locked_file.read_text(encoding="utf-8")
+                    )
+                    self.assertFalse((install_dir / "new.txt").exists())
+
+            # Even a delete-shared reader can block the whole-directory rename.
+            reader = kernel.CreateFileW(
+                str(locked_file), 0x80000000, 5, None, 3, 0, None
+            )
+            self.assertNotEqual(ctypes.c_void_p(-1).value, reader)
+            try:
+                result = _run_install(extraction_dir, appdata_dir=appdata_dir)
+            finally:
+                kernel.CloseHandle(reader)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn(str(install_dir), _single_line(result.stderr))
+            self.assertFalse((install_dir / "new.txt").exists())
+            result = _run_install(extraction_dir, appdata_dir=appdata_dir)
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual("new", (install_dir / "new.txt").read_text())
 
     def test_legacy_like_directory_with_wrong_app_contract_is_refused(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
@@ -837,7 +893,7 @@ class TestInstallerFailureModes(unittest.TestCase):
                 temp_dir=runtime_temp,
             )
 
-            self.assertEqual(0, uninstall_result.returncode, uninstall_result.stderr)
+            self.assertNotEqual(0, uninstall_result.returncode)
             error_files: list[Path] = []
             deadline = time.monotonic() + 10
             while time.monotonic() < deadline:

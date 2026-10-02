@@ -226,11 +226,11 @@ in the final payload. An explicit `[python, ...]` still deliberately uses PATH.
 Installer runtime flags:
 
 - `--yes`
-  - bypass questions and the final close wait.
+  - unattended consent, without questions, retry prompts, or a final wait.
 - `--no-wait`
-  - skip only the final close wait.
+  - suppress interaction without granting consent; use `--yes` for unattended installation.
 
-When `installer.wait_on_exit` is true and no bypass flag is supplied, the console closes after 30 seconds or when the user presses Enter. Other keys are ignored.
+Interactive runs wait for Enter when `installer.wait_on_exit` is true. Redirected input never waits.
 
 ## 10. Uninstall Runtime
 
@@ -264,6 +264,8 @@ Uninstall flow:
 - remove the Windows Installed Apps entry after the install directory is gone;
 - run `post_uninstall` from the temp staging directory;
 - preserve temp diagnostics if post-uninstall cleanup fails.
+
+The parent waits for the cleanup worker and returns its final result. The CMD wrapper runs from temp so it cannot lock its own installation directory.
 
 If a `post_uninstall` entrypoint points inside the install directory, it must be a self-contained `.cmd`, `.ps1`, or `.exe`. app-builder stages only `argv[0]` to temp before removal.
 

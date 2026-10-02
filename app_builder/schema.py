@@ -144,7 +144,7 @@ class InstallerOptions:
     )
     wait_on_exit: bool = config_field(
         default=True,
-        description="Whether generated installer scripts should wait briefly before exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait, while --no-wait skips only the wait.",
+        description="Whether interactive installer scripts wait for Enter before exiting. --yes skips all interaction. --no-wait suppresses interaction without granting consent.",
         example=True,
     )
     add_uninstaller: bool = config_field(

@@ -435,9 +435,9 @@ installer:
   # 7z for stronger compression with bundled 7-Zip extraction. Default if omitted: zip.
   payload_format: zip
 
-  # Optional boolean. Whether generated installer scripts should wait briefly before
-  # exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait,
-  # while --no-wait skips only the wait. Default if omitted: true.
+  # Optional boolean. Whether interactive installer scripts wait for Enter before exiting.
+  # --yes skips all interaction. --no-wait suppresses interaction without granting
+  # consent. Default if omitted: true.
   wait_on_exit: true
 
   # Optional boolean. Whether installation adds the installed uninstall scripts, Start
@@ -790,7 +790,7 @@ publications:
               <td>no</td>
               <td><code>true</code></td>
               <td><code>true</code></td>
-              <td>Whether generated installer scripts should wait briefly before exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait, while --no-wait skips only the wait.</td>
+              <td>Whether interactive installer scripts wait for Enter before exiting. --yes skips all interaction. --no-wait suppresses interaction without granting consent.</td>
             </tr>
             <tr>
               <td><code>add_uninstaller</code></td>
@@ -1584,17 +1584,27 @@ bin/7z.dll              # only when installer.payload_format: 7z
           <tbody>
             <tr>
               <td><code>--yes</code></td>
-              <td>Bypass confirmation questions and skip the final close wait.</td>
+              <td>Grant unattended consent. Skip confirmation, retry prompts, and the final wait. Required-operation failures exit nonzero.</td>
             </tr>
             <tr>
               <td><code>--no-wait</code></td>
-              <td>Skip only the final close wait.</td>
+              <td>Suppress interaction without granting consent. Use --yes when confirmation would otherwise be required.</td>
             </tr>
           </tbody>
         </table>
         <p>
-          When <code>installer.wait_on_exit</code> is true and no bypass flag is supplied, the console closes
-          after 30 seconds or when the user presses Enter. Other keys are ignored.
+          Interactive runs wait for Enter when <code>installer.wait_on_exit</code> is true.
+          Redirected input never waits for a key. Unknown arguments are rejected.
+          Installer logs are printed with the result and stored under <code>%LOCALAPPDATA%/app-builder-logs</code>.
+        </p>
+        <p>
+          Before replacement, a native precheck inspects affected files and directories for access and sharing
+          conflicts, with a batched mapped-image check for suspect files. It checks minimum payload space
+          and excludes concurrent installers for the same target. It does not move files or guarantee
+          future access. Interactive blockers offer retry. Replacement uses a fully staged sibling directory
+          and same-volume renames, not individual live-file overwrites. Actual operations remain guarded;
+          incomplete rollback preserves backups and reports their paths. Obsolete backup or legacy metadata
+          cleanup failures warn without failing an otherwise successful installation.
         </p>
         <p>
           When <code>installer.add_uninstaller</code> is enabled, installation writes a per-user Windows
@@ -1960,8 +1970,8 @@ build_hooks:
         </p>
         <h3>Uninstall leaves diagnostics in temp</h3>
         <p>
-          Failed asynchronous post-uninstall cleanup writes an <code>error.txt</code> in its temp staging
-          directory so the failure is not lost.
+          Failed post-uninstall cleanup returns failure and keeps an <code>error.txt</code> in its temp staging
+          directory. The printed installer log includes the result.
         </p>
       </section>
     </main>
