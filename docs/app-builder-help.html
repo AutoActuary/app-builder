@@ -1659,6 +1659,7 @@ bin/7z.dll              # only when installer.payload_format: 7z
           stages allowed <code>post_uninstall</code> entrypoints, removes the install directory, then runs
           <code>post_uninstall</code>.
         </p>
+        <p>Start Menu deletion uses the same link-safe removal as installation cleanup and offers interactive retry for late locks.</p>
         <div class="callout warning">
           <p>
             If a <code>post_uninstall</code> command points inside the install directory, its entrypoint must be

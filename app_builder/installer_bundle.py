@@ -500,7 +500,15 @@ try {
     $PostUninstallCommands = Copy-AppBuilderPostUninstallEntrypoints $Manifest.install_hooks.post_uninstall $InstallDir $PostUninstallDir
     Invoke-AppBuilderHookList $Manifest.install_hooks.pre_uninstall $InstallDir $Manifest
     if (Test-Path -LiteralPath $StartMenuDir) {
-        Remove-Item -LiteralPath $StartMenuDir -Recurse -Force
+        while ($true) {
+            try {
+                Remove-AppBuilderInstallDirectory $StartMenuDir
+                break
+            } catch {
+                if (-not (Request-AppBuilderRetry $_.Exception.Message)) { throw }
+                Assert-AppBuilderFilesAvailable @($StartMenuDir)
+            }
+        }
     }
 
     if (-not [string]::IsNullOrWhiteSpace($env:SystemRoot)) {
