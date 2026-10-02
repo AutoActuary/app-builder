@@ -12,7 +12,7 @@ function Get-AppBuilderScriptOptions {
         switch (([string]$Arg).ToLowerInvariant()) {
             '--yes' { $BypassQuestions = $true; $NoWait = $true }
             '--no-wait' { $NoWait = $true }
-            default { throw "Unknown installer argument '$Arg'. Use --yes for unattended installation, or --no-wait to suppress interaction." }
+            default { throw 'Unknown installer argument. Use --yes for unattended installation, or --no-wait to suppress interaction.' }
         }
     }
     return [pscustomobject]@{
