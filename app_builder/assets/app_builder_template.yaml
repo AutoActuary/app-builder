@@ -61,9 +61,9 @@ installer:
   # 7z for stronger compression with bundled 7-Zip extraction. Default if omitted: zip.
   payload_format: zip
 
-  # Optional boolean. Whether generated installer scripts should wait briefly before
-  # exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait,
-  # while --no-wait skips only the wait. Default if omitted: true.
+  # Optional boolean. Whether interactive installer scripts wait for Enter before exiting.
+  # --yes skips all interaction. --no-wait suppresses interaction without granting
+  # consent. Default if omitted: true.
   wait_on_exit: true
 
   # Optional boolean. Whether installation adds the installed uninstall scripts, Start

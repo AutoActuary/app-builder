@@ -72,9 +72,9 @@ installer:
   # 7z for stronger compression with bundled 7-Zip extraction. Default if omitted: zip.
   payload_format: zip
 
-  # Optional boolean. Whether generated installer scripts should wait briefly before
-  # exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait,
-  # while --no-wait skips only the wait. Default if omitted: true.
+  # Optional boolean. Whether interactive installer scripts wait for Enter before exiting.
+  # --yes skips all interaction. --no-wait suppresses interaction without granting
+  # consent. Default if omitted: true.
   wait_on_exit: true
 
   # Optional boolean. Whether installation adds the installed uninstall scripts, Start
@@ -297,7 +297,7 @@ installer:
 | `install_directory` | `string` | yes | required | `'%LOCALAPPDATA%\MyCompany\MyApp'` | Windows install directory. A variable-root path must start with %LOCALAPPDATA%, %APPDATA%, or %USERPROFILE% and name an application subdirectory; the installer expands it on the user's machine. Parent-directory traversal is rejected. A fixed absolute path is also allowed when it is not a drive root or protected Windows directory. |
 | `icon` | `string \| null` | no | `null` | `application-templates/icon.ico` | Optional project-relative .ico file embedded into generated executables. Start Menu shortcuts with no icon inherit it, and app-builder includes it in the payload automatically at its normal or remapped destination. |
 | `payload_format` | `string` | no | `zip` | `zip` | Inner payload archive format. Use zip for the Windows tar.exe path or 7z for stronger compression with bundled 7-Zip extraction. |
-| `wait_on_exit` | `boolean` | no | `true` | `true` | Whether generated installer scripts should wait briefly before exiting. The wait closes after 30 seconds or Enter; --yes skips prompts and the wait, while --no-wait skips only the wait. |
+| `wait_on_exit` | `boolean` | no | `true` | `true` | Whether interactive installer scripts wait for Enter before exiting. --yes skips all interaction. --no-wait suppresses interaction without granting consent. |
 | `add_uninstaller` | `boolean` | no | `true` | `true` | Whether installation adds the installed uninstall scripts, Start Menu uninstall shortcut, and per-user Windows Installed Apps registration. |
 | `start_menu` | `list[mapping]` | no | `[]` | `[{target: application-templates/program.cmd, display_name: MyApp, icon: null}]` | Windows Start Menu shortcut declarations. |
 | `bootstrap_hooks` | `mapping` | no | `see nested defaults` |  | Early installer hook command declarations. |
