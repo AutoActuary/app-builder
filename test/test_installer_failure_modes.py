@@ -577,7 +577,7 @@ class TestInstallerFailureModes(unittest.TestCase):
             shutil.copyfile(
                 Path(os.environ["SystemRoot"]) / "System32/version.dll", image
             )
-            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel = cast(Any, ctypes).WinDLL("kernel32", use_last_error=True)
             kernel.LoadLibraryExW.argtypes = [
                 ctypes.c_wchar_p,
                 ctypes.c_void_p,
