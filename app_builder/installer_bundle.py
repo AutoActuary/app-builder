@@ -358,14 +358,6 @@ if (Test-Path -LiteralPath $InstallDir) {
     }
     $ExistingInstallKind = Get-AppBuilderExistingInstallKind $Manifest $InstallDir $StartMenuDir $InstalledManifestName
 }
-Assert-AppBuilderFilesAvailable @($InstallDir, $StartMenuDir)
-if ($null -ne (Get-AppBuilderObjectProperty $Manifest 'unpacked_bytes')) {
-    while ($true) {
-        $SpaceError = [AppBuilderFiles]::CheckSpace($InstallDir, [uint64]$Manifest.unpacked_bytes)
-        if ($null -eq $SpaceError) { break }
-        if (-not (Request-AppBuilderRetry $SpaceError)) { throw $SpaceError }
-    }
-}
 Write-Host ('Installing {0} {1}' -f $Manifest.name, $Manifest.version)
 Set-AppBuilderEnvironment $Manifest $InstallDir $StartMenuDir
 
@@ -379,22 +371,21 @@ try {
 
     Invoke-AppBuilderHookList $Manifest.install_hooks.pre_install $StagingDir $Manifest
 
-    # Extraction and project hooks may take time. Recheck before old hooks or replacement.
-    Assert-AppBuilderFilesAvailable @($InstallDir, $StartMenuDir)
     if (Test-Path -LiteralPath $InstallDir) {
         $ExistingInstallKind = Get-AppBuilderExistingInstallKind $Manifest $InstallDir $StartMenuDir $InstalledManifestName
         if ($ExistingInstallKind -eq 'current') {
             $ExistingManifestPath = Join-Path $InstallDir $InstalledManifestName
             $ExistingManifest = Read-AppBuilderManifestFile $ExistingManifestPath
             Invoke-AppBuilderCurrentPreUninstall $ExistingManifest $InstallDir
-            $BackupDir = Join-Path $InstallParent ((Split-Path -Leaf $InstallDir) + '.app-builder-backup-' + [guid]::NewGuid().ToString('N'))
-            Move-AppBuilderDirectory $InstallDir $BackupDir 'existing install directory'
         } elseif ($ExistingInstallKind -eq 'legacy') {
             Invoke-AppBuilderLegacyPreUninstall $Manifest $InstallDir
-            $BackupDir = Join-Path $InstallParent ((Split-Path -Leaf $InstallDir) + '.app-builder-backup-' + [guid]::NewGuid().ToString('N'))
-            Move-AppBuilderDirectory $InstallDir $BackupDir 'legacy install directory'
         } else {
             throw "Internal error: unknown install target kind $ExistingInstallKind"
+        }
+        $BackupDir = Test-AppBuilderDirectoryMove $InstallDir
+        if (-not $BackupDir) {
+            $BackupDir = $InstallDir + '_moved' + [guid]::NewGuid().ToString('N').Substring(0, 8)
+            Move-AppBuilderDirectory $InstallDir $BackupDir 'existing install directory'
         }
     }
     Move-AppBuilderDirectory $StagingDir $InstallDir 'new staging directory'
@@ -492,7 +483,9 @@ $StartedCleanup = $false
 
 Write-Host ('Ready to uninstall {0} from {1}' -f $Manifest.name, $InstallDir)
 Confirm-AppBuilderAction ('Continue uninstalling {0}?' -f $Manifest.name) $AppBuilderScriptOptions.BypassQuestions
-Assert-AppBuilderFilesAvailable @($InstallDir, $StartMenuDir)
+if ((Get-Item -LiteralPath $InstallDir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+    throw "Refusing to uninstall a directory that is a link: $InstallDir"
+}
 Write-Host ('Uninstalling {0} from {1}' -f $Manifest.name, $InstallDir)
 Set-AppBuilderEnvironment $Manifest $InstallDir $StartMenuDir
 
@@ -506,7 +499,6 @@ try {
                 break
             } catch {
                 if (-not (Request-AppBuilderRetry $_.Exception.Message)) { throw }
-                Assert-AppBuilderFilesAvailable @($StartMenuDir)
             }
         }
     }
@@ -525,7 +517,6 @@ try {
             $PhaseFile = Join-Path $PostUninstallDir 'phase.txt'
             $Phase = if (Test-Path -LiteralPath $PhaseFile) { Get-Content -LiteralPath $PhaseFile -Raw } else { '' }
             if ($Phase.Trim() -ne 'remove' -or -not (Request-AppBuilderRetry $_.Exception.Message)) { throw }
-            Assert-AppBuilderFilesAvailable @($InstallDir)
         }
     }
 } finally {
@@ -983,13 +974,11 @@ function Move-AppBuilderDirectory {
     param([string]$Source, [string]$Destination, [string]$Description)
     while ($true) {
         try {
-            Initialize-AppBuilderFileChecks
-            [AppBuilderFiles]::Move($Source, $Destination)
+            [IO.Directory]::Move($Source, $Destination)
             return
         } catch {
-            $Message = "Failed to move ${Description} from '${Source}' to '${Destination}'. $($_.Exception.Message)"
+            $Message = "Cannot move ${Description} from '${Source}' to '${Destination}'. Close the app and related processes, or restart Windows and try again. $($_.Exception.Message)"
             if (-not (Request-AppBuilderRetry $Message)) { throw $Message }
-            Assert-AppBuilderFilesAvailable @($Source)
         }
     }
 }
@@ -1221,8 +1210,7 @@ function Test-AppBuilderRegistryEntryTargetsInstallDirectory {
     foreach ($PropertyName in @('UninstallString', 'QuietUninstallString')) {
         $Command = [string](Get-AppBuilderObjectProperty $Entry $PropertyName)
         if (-not [string]::IsNullOrWhiteSpace($Command)) {
-            Initialize-AppBuilderFileChecks
-            if ([AppBuilderFiles]::CommandTargets($Command, $CanonicalInstallDir)) { return $true }
+            if (Test-AppBuilderCommandTargets $Command $CanonicalInstallDir) { return $true }
         }
     }
     return $false
@@ -1270,9 +1258,8 @@ function Remove-AppBuilderLegacyStartMenuEntries {
         }
         try {
             $Link = $Shell.CreateShortcut($Shortcut.FullName)
-            Initialize-AppBuilderFileChecks
             $TargetEvidence = '"' + ([string]$Link.TargetPath) + '" ' + ([string]$Link.Arguments)
-            if (-not [AppBuilderFiles]::CommandTargets($TargetEvidence, $InstallDir)) {
+            if (-not (Test-AppBuilderCommandTargets $TargetEvidence $InstallDir)) {
                 continue
             }
             Remove-Item -LiteralPath $Shortcut.FullName -Force -ErrorAction Stop
@@ -1296,8 +1283,10 @@ function Remove-AppBuilderInstallDirectory {
     if (-not (Test-Path -LiteralPath $Directory)) {
         return
     }
-    Initialize-AppBuilderFileChecks
-    [AppBuilderFiles]::RemoveTree($Directory)
+    if ((Get-Item -LiteralPath $Directory -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "Refusing to remove a root directory that is a link: $Directory"
+    }
+    Remove-AppBuilderTree $Directory
     if (Test-Path -LiteralPath $Directory) { throw "Directory still exists after removal: $Directory" }
 }
 
@@ -1370,8 +1359,7 @@ try {
         try { Start-Transcript -LiteralPath ([string]$Payload.log_path) -Append | Out-Null } catch { Write-Warning $_.Exception.Message }
     }
     Set-Content -LiteralPath (Join-Path ([string]$Payload.post_uninstall_directory) 'phase.txt') -Value 'remove'
-    Initialize-AppBuilderFileChecks
-    [AppBuilderFiles]::RemoveTree([string]$Payload.install_directory)
+    Remove-AppBuilderTree ([string]$Payload.install_directory)
     Set-Content -LiteralPath (Join-Path ([string]$Payload.post_uninstall_directory) 'phase.txt') -Value 'integration'
     if (-not [string]::IsNullOrWhiteSpace([string]$Payload.uninstall_registry_path)) {
         if (Test-Path -LiteralPath ([string]$Payload.uninstall_registry_path)) {
@@ -1404,7 +1392,7 @@ try {
     # The worker lives outside the installation and reports completion to its caller.
     New-Item -ItemType Directory -Path $PostUninstallDir -Force | Out-Null
     $CleanupPath = Join-Path $PostUninstallDir 'cleanup.ps1'
-    $FileChecks = 'function Initialize-AppBuilderFileChecks {' + ${function:Initialize-AppBuilderFileChecks}.ToString() + "}`n"
+    $FileChecks = 'function Remove-AppBuilderTree {' + ${function:Remove-AppBuilderTree}.ToString() + "}`n"
     [IO.File]::WriteAllText($CleanupPath, $FileChecks + $CleanupScript)
     $SafeWorkingDirectory = if (-not [string]::IsNullOrWhiteSpace($env:SystemRoot)) { $env:SystemRoot } else { $env:TEMP }
     try { Stop-Transcript | Out-Null } catch { }

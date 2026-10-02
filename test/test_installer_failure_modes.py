@@ -563,7 +563,7 @@ class TestInstallerFailureModes(unittest.TestCase):
 
             self.assertNotEqual(0, result.returncode)
             self.assertIn(
-                str(locked_file.resolve()),
+                str(install_dir.resolve()),
                 _single_line(result.stderr),
             )
             self.assertEqual("old locked", locked_file.read_text(encoding="utf-8"))
@@ -573,18 +573,7 @@ class TestInstallerFailureModes(unittest.TestCase):
                 (start_menu_dir / "old-shortcut.lnk").read_text(encoding="utf-8"),
             )
 
-            image = install_dir / "runtime.custom"
-            shutil.copyfile(
-                Path(os.environ["SystemRoot"]) / "System32/version.dll", image
-            )
             kernel = cast(Any, ctypes).WinDLL("kernel32", use_last_error=True)
-            kernel.LoadLibraryExW.argtypes = [
-                ctypes.c_wchar_p,
-                ctypes.c_void_p,
-                ctypes.c_uint,
-            ]
-            kernel.LoadLibraryExW.restype = ctypes.c_void_p
-            kernel.FreeLibrary.argtypes = [ctypes.c_void_p]
             kernel.CreateFileW.argtypes = [
                 ctypes.c_wchar_p,
                 ctypes.c_uint,
@@ -596,21 +585,6 @@ class TestInstallerFailureModes(unittest.TestCase):
             ]
             kernel.CreateFileW.restype = ctypes.c_void_p
             kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-            for flags in (0, 32):
-                with self.subTest(image_flags=flags):
-                    loaded = kernel.LoadLibraryExW(str(image), None, flags)
-                    self.assertTrue(loaded)
-                    try:
-                        result = _run_install(extraction_dir, appdata_dir=appdata_dir)
-                    finally:
-                        kernel.FreeLibrary(loaded)
-                    self.assertNotEqual(0, result.returncode)
-                    self.assertIn(str(image.resolve()), _single_line(result.stderr))
-                    self.assertEqual(
-                        "old locked", locked_file.read_text(encoding="utf-8")
-                    )
-                    self.assertFalse((install_dir / "new.txt").exists())
-
             # Even a delete-shared reader can block the whole-directory rename.
             reader = kernel.CreateFileW(
                 str(locked_file), 0x80000000, 5, None, 3, 0, None
@@ -626,6 +600,72 @@ class TestInstallerFailureModes(unittest.TestCase):
             result = _run_install(extraction_dir, appdata_dir=appdata_dir)
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertEqual("new", (install_dir / "new.txt").read_text())
+
+    def test_loaded_image_leftovers_do_not_fail_upgrade(self) -> None:
+        kernel = cast(Any, ctypes).WinDLL("kernel32", use_last_error=True)
+        kernel.LoadLibraryExW.argtypes = [
+            ctypes.c_wchar_p,
+            ctypes.c_void_p,
+            ctypes.c_uint,
+        ]
+        kernel.LoadLibraryExW.restype = ctypes.c_void_p
+        kernel.FreeLibrary.argtypes = [ctypes.c_void_p]
+        for flags in (0, 32):
+            with self.subTest(image_flags=flags), TemporaryDirectory() as temp_dir_str:
+                temp_dir = Path(temp_dir_str)
+                install_dir = temp_dir / "installed app"
+                install_dir.mkdir()
+                image = install_dir / "runtime.custom"
+                shutil.copyfile(
+                    Path(os.environ["SystemRoot"]) / "System32/version.dll", image
+                )
+                (install_dir / "obsolete.txt").write_text("old", encoding="utf-8")
+                _write_manifest(
+                    install_dir / "app-builder-manifest.json",
+                    name="Demo",
+                    version="1.0",
+                    install_dir=install_dir,
+                    payload_name="old.zip",
+                )
+                payload = temp_dir / "payload.zip"
+                _write_payload(payload, {"new.txt": "new"})
+                manifest = temp_dir / "manifest.json"
+                _write_manifest(
+                    manifest,
+                    name="Demo",
+                    version="2.0",
+                    install_dir=install_dir,
+                    payload_name=payload.name,
+                )
+                extraction_dir = _build_and_extract_installer(
+                    temp_dir, payload=payload, manifest=manifest
+                )
+                loaded = kernel.LoadLibraryExW(str(image), None, flags)
+                self.assertTrue(loaded)
+                try:
+                    result = _run_install(
+                        extraction_dir, appdata_dir=temp_dir / "appdata"
+                    )
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    self.assertEqual("new", (install_dir / "new.txt").read_text())
+                    self.assertEqual(
+                        "2.0",
+                        json.loads(
+                            (install_dir / "app-builder-manifest.json").read_text(
+                                encoding="utf-8-sig"
+                            )
+                        )["version"],
+                    )
+                    leftovers = [
+                        path
+                        for path in temp_dir.iterdir()
+                        if path.is_dir() and (path / image.name).exists()
+                    ]
+                    self.assertEqual(1, len(leftovers))
+                    self.assertFalse((leftovers[0] / "obsolete.txt").exists())
+                    self.assertIn("Installed successfully", result.stdout)
+                finally:
+                    kernel.FreeLibrary(loaded)
 
     def test_legacy_like_directory_with_wrong_app_contract_is_refused(self) -> None:
         with TemporaryDirectory() as temp_dir_str:
