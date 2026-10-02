@@ -1598,11 +1598,10 @@ bin/7z.dll              # only when installer.payload_format: 7z
           Installer logs are printed with the result and stored under <code>%LOCALAPPDATA%/app-builder-logs</code>.
         </p>
         <p>
-          Before replacement, a native precheck inspects affected files and directories for access and sharing
-          conflicts, with a batched mapped-image check for suspect files. It checks minimum payload space
-          and excludes concurrent installers for the same target. It does not move files or guarantee
-          future access. Interactive blockers offer retry. Replacement uses a fully staged sibling directory
-          and same-volume renames, not individual live-file overwrites. Actual operations remain guarded;
+          Before replacement, the old directory is renamed to a sibling and back. If restoring its name
+          fails after retries, it remains the recovery backup while installation continues.
+          Replacement uses a fully staged sibling directory and guarded same-volume renames, not
+          individual live-file overwrites. Concurrent installers for the same target are excluded;
           incomplete rollback preserves backups and reports their paths. Obsolete backup or legacy metadata
           cleanup failures warn without failing an otherwise successful installation.
         </p>

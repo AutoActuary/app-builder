@@ -208,6 +208,7 @@ Because this hook runs before extraction, it cannot use the app payload, `instal
 - recognizes selected legacy app-builder install shapes for upgrade;
 - refuses unknown directories and different app-builder apps by default;
 - runs `pre_install`;
+- after old cleanup hooks, renames the old directory to a sibling and back; if restoration fails after retries, uses the moved directory as the recovery backup;
 - moves a recognized current or legacy install to a private sibling backup before replacement;
 - writes the installed manifest;
 - copies `bin\uninstall.cmd` and `bin\uninstall.ps1` into the installed app's own `bin` directory when enabled;
@@ -217,6 +218,10 @@ Because this hook runs before extraction, it cannot use the app payload, `instal
 - removes superseded legacy Windows integration and the backup only after `post_install` succeeds;
 - restores the prior directory, Start Menu group, and registration state when replacement fails;
 - waits before closing when configured.
+
+Replacement checks directory movability, not whether every old file can be deleted. Locked backup
+files remain with a warning after a successful upgrade. Actual replacement failures still fail
+and attempt recovery. No runtime C# compilation or process inspection is required.
 
 For existing `.py` installer-hook entrypoints, automatic dispatch checks
 the configured `python_venv.path` and then `python_bundled.path` interpreter
