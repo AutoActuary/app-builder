@@ -563,7 +563,7 @@ class TestInstallerFailureModes(unittest.TestCase):
 
             self.assertNotEqual(0, result.returncode)
             self.assertIn(
-                str(locked_file),
+                str(locked_file.resolve()),
                 _single_line(result.stderr),
             )
             self.assertEqual("old locked", locked_file.read_text(encoding="utf-8"))
@@ -605,7 +605,7 @@ class TestInstallerFailureModes(unittest.TestCase):
                     finally:
                         kernel.FreeLibrary(loaded)
                     self.assertNotEqual(0, result.returncode)
-                    self.assertIn(str(image), _single_line(result.stderr))
+                    self.assertIn(str(image.resolve()), _single_line(result.stderr))
                     self.assertEqual(
                         "old locked", locked_file.read_text(encoding="utf-8")
                     )
@@ -621,7 +621,7 @@ class TestInstallerFailureModes(unittest.TestCase):
             finally:
                 kernel.CloseHandle(reader)
             self.assertNotEqual(0, result.returncode)
-            self.assertIn(str(install_dir), _single_line(result.stderr))
+            self.assertIn(str(install_dir.resolve()), _single_line(result.stderr))
             self.assertFalse((install_dir / "new.txt").exists())
             result = _run_install(extraction_dir, appdata_dir=appdata_dir)
             self.assertEqual(0, result.returncode, result.stderr)
