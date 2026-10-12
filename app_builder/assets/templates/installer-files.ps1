@@ -1,3 +1,42 @@
+function Get-AppBuilderDirectoryMoveFailure {
+    param([Exception]$Exception)
+    # PowerShell wraps static .NET calls in MethodInvocationException.
+    while ($null -ne $Exception.InnerException) { $Exception = $Exception.InnerException }
+    $NativeError = $null
+    if (($Exception.HResult -band 0xFFFF0000) -eq 0x80070000) {
+        $NativeError = $Exception.HResult -band 0xFFFF
+    }
+    $Diagnostics = '{0}, HRESULT 0x{1:X8}' -f $Exception.GetType().FullName, $Exception.HResult
+    if ($null -ne $NativeError) { $Diagnostics += ", Native error $NativeError" }
+    return [pscustomobject]@{
+        Exception = $Exception
+        Retryable = $NativeError -in @(5, 32)
+        Diagnostics = $Diagnostics
+    }
+}
+
+function Move-AppBuilderDirectoryWithRetry {
+    param([string]$Source, [string]$Destination, [string]$Description)
+    # Seven attempts, with at most 3.5 seconds of automatic waiting per move.
+    $RetryDelays = @(100, 200, 400, 800, 1000, 1000)
+    for ($Attempt = 0; $Attempt -le $RetryDelays.Count; $Attempt++) {
+        try {
+            # Directory.Move refuses occupied destinations rather than merging trees.
+            [IO.Directory]::Move($Source, $Destination)
+            return
+        } catch {
+            $Failure = Get-AppBuilderDirectoryMoveFailure $_.Exception
+            if ($Failure.Retryable -and $Attempt -lt $RetryDelays.Count) {
+                Write-Warning "Retrying directory move for ${Description} after attempt $($Attempt + 1): $($Failure.Diagnostics). $($Failure.Exception.Message)"
+                Start-Sleep -Milliseconds $RetryDelays[$Attempt]
+                continue
+            }
+            $Message = "Cannot move ${Description} from '${Source}' to '${Destination}' after $($Attempt + 1) attempts. $($Failure.Diagnostics). $($Failure.Exception.Message)"
+            throw [IO.IOException]::new($Message, $Failure.Exception)
+        }
+    }
+}
+
 function Test-AppBuilderDirectoryMove {
     param([string]$Directory)
     if (-not (Test-Path -LiteralPath $Directory)) { return $null }
@@ -12,18 +51,21 @@ function Test-AppBuilderDirectoryMove {
         $Moved = $true
     } finally {
         if ($Moved) {
-            for ($Attempt = 0; $Attempt -lt 3; $Attempt++) {
-                try {
-                    [IO.Directory]::Move($MovedDirectory, $Directory)
-                    $Restored = $true
-                    break
-                } catch {
-                    if ($Attempt -lt 2) { Start-Sleep -Milliseconds 150 }
-                }
+            try {
+                Move-AppBuilderDirectoryWithRetry $MovedDirectory $Directory 'previous directory name'
+                $Restored = $true
+            } catch {
+                $Failure = Get-AppBuilderDirectoryMoveFailure $_.Exception
+                if (-not $Failure.Retryable) { throw }
+                Write-Warning $_.Exception.Message
             }
         }
     }
     if (-not $Restored) {
+        if (-not (Test-Path -LiteralPath $MovedDirectory -PathType Container) -or
+            ((Get-Item -LiteralPath $MovedDirectory -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "Cannot continue: recovery directory is missing or is a link at '$MovedDirectory'."
+        }
         Write-Warning "Could not move the directory back. Continuing with the old files preserved at '$MovedDirectory'."
         return $MovedDirectory
     }
