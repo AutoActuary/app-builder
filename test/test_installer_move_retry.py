@@ -20,6 +20,7 @@ from test.test_installer_failure_modes import (
     _registry_entries_for_install,
     _remove_registry_entries_for_install,
     _run_install,
+    _winreg,
     _write_payload,
 )
 
@@ -332,7 +333,7 @@ def _write_manifest(
 
 
 def _registry_version(install_dir: Path) -> str | None:
-    import winreg
+    winreg = _winreg()
 
     matches = _registry_entries_for_install(install_dir)
     if not matches:
