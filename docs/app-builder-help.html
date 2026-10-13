@@ -1584,7 +1584,7 @@ bin/7z.dll              # only when installer.payload_format: 7z
           <tbody>
             <tr>
               <td><code>--yes</code></td>
-              <td>Grant unattended consent. Skip confirmation, retry prompts, and the final wait. Required-operation failures exit nonzero.</td>
+              <td>Grant unattended consent. Skip confirmation, interactive retry prompts, and the final wait; bounded automatic retries still handle retryable Windows rename errors. Required-operation failures exit nonzero.</td>
             </tr>
             <tr>
               <td><code>--no-wait</code></td>
@@ -1598,12 +1598,18 @@ bin/7z.dll              # only when installer.payload_format: 7z
           Installer logs are printed with the result and stored under <code>%LOCALAPPDATA%/app-builder-logs</code>.
         </p>
         <p>
-          Before replacement, the old directory is renamed to a sibling and back. If restoring its name
-          fails after retries, it remains the recovery backup while installation continues.
+          Before replacement, the old directory is renamed to a sibling and back. Directory replacement,
+          rollback, and this reverse rename probe automatically retry native Windows errors 5 (access denied)
+          and 32 (sharing violation) for up to seven attempts with 3.5 seconds of total waiting per move. An interactive run can offer another
+          retry after that bound; <code>--yes</code> does not prompt. Other errors, such as a missing source
+          or occupied destination, fail immediately.
+          If a retryable error persists when reversing the probe, the old directory remains the recovery
+          backup while installation continues.
           Replacement uses a fully staged sibling directory and guarded same-volume renames, not
           individual live-file overwrites. Concurrent installers for the same target are excluded;
-          incomplete rollback preserves backups and reports their paths. Obsolete backup or legacy metadata
-          cleanup failures warn without failing an otherwise successful installation.
+          incomplete rollback preserves backups and reports their paths. Rename failures include the
+          attempt count, native error code, HRESULT, and exception type in their diagnostics. Obsolete
+          backup or legacy metadata cleanup failures warn without failing an otherwise successful installation.
         </p>
         <p>
           When <code>installer.add_uninstaller</code> is enabled, installation writes a per-user Windows
@@ -1613,7 +1619,8 @@ bin/7z.dll              # only when installer.payload_format: 7z
         <p>
           <code>post_install</code> runs only after payload files, shortcuts, installed uninstall scripts, and the
           Windows Installed Apps record are in place. If it fails, the installer rolls those changes back and
-          restores a recognized previous installation.
+          restores a recognized previous installation using the same bounded rename retries. If recovery
+          cannot complete, recovery backups are preserved and their paths are reported for manual recovery.
         </p>
         <h3>Existing Directory Rules</h3>
         <table>
@@ -1692,6 +1699,14 @@ app-builder release-gh --version 1.2.3 --draft</code></pre>
           match the manifest embedded in its scripts. Every GitHub command is pinned to the repository resolved by
           preflight, so an ambient <code>GH_REPO</code> cannot redirect publication. For app-builder itself, the release version must match
           <code>pyproject.toml</code>.
+        </p>
+        <p>
+          Installer behavior is embedded when the installer is built. A fix to app-builder source therefore
+          requires a new app-builder release; if no later release exists, use the next available patch,
+          <code>1.9.3</code>. Downstream projects that download the immutable <code>1.8.1</code> installer
+          must update both the requested version and its SHA-256 pin, such as
+          <code>.github/scripts/install-app-builder.ps1</code> in Autory. Updating the source repository
+          alone does not change an already published installer.
         </p>
         <p>
           app-builder searches <code>where.exe</code>, PATH, and common GitHub CLI install locations. Install
@@ -1958,9 +1973,12 @@ build_hooks:
         </p>
         <h3>Upgrade is blocked by a locked file</h3>
         <p>
-          Close the running application and retry. If Windows cannot move the existing install to its backup
-          sibling, app-builder stops before replacing it and leaves the old install in place; it does not force
-          unlock files, request elevation, or schedule deletion after restart.
+          Close the running application and retry. For native Windows sharing or access errors, app-builder
+          retries the directory rename automatically for a bounded period and then offers another retry only
+          in an interactive run. With <code>--yes</code>, a persistent lock fails without a prompt. If Windows
+          still cannot move the existing install to its backup sibling, app-builder stops before replacing it
+          and leaves the old install in place. The diagnostics include the native error details; app-builder
+          does not force unlock files, request elevation, or schedule deletion after restart.
         </p>
         <h3>Installer executable is blocked</h3>
         <p>

@@ -974,11 +974,12 @@ function Move-AppBuilderDirectory {
     param([string]$Source, [string]$Destination, [string]$Description)
     while ($true) {
         try {
-            [IO.Directory]::Move($Source, $Destination)
+            Move-AppBuilderDirectoryWithRetry $Source $Destination $Description
             return
         } catch {
             $Message = "Cannot move ${Description} from '${Source}' to '${Destination}'. Close the app and related processes, or restart Windows and try again. $($_.Exception.Message)"
-            if (-not (Request-AppBuilderRetry $Message)) { throw $Message }
+            $Failure = Get-AppBuilderDirectoryMoveFailure $_.Exception
+            if (-not $Failure.Retryable -or -not (Request-AppBuilderRetry $Message)) { throw $Message }
         }
     }
 }
