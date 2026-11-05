@@ -1006,7 +1006,7 @@ function Remove-AppBuilderBackupDirectory {
     try {
         Remove-AppBuilderInstallDirectory $Directory
     } catch {
-        Write-Warning "Installed successfully, but failed to remove ${Description} at '${Directory}'. You can remove it manually. $($_.Exception.Message)"
+        Write-Warning "Installed successfully. Could not fully remove ${Description} at '${Directory}'. Close the app and related processes, or restart Windows, then remove the backup."
     }
 }
 

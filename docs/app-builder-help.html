@@ -1610,6 +1610,7 @@ bin/7z.dll              # only when installer.payload_format: 7z
           incomplete rollback preserves backups and reports their paths. Rename failures include the
           attempt count, native error code, HRESULT, and exception type in their diagnostics. Obsolete
           backup or legacy metadata cleanup failures warn without failing an otherwise successful installation.
+          A backup cleanup warning gives the remaining directory's path and how to remove it.
         </p>
         <p>
           When <code>installer.add_uninstaller</code> is enabled, installation writes a per-user Windows
