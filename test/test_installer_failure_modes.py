@@ -664,7 +664,7 @@ class TestInstallerFailureModes(unittest.TestCase):
                     self.assertEqual(1, len(leftovers))
                     self.assertFalse((leftovers[0] / "obsolete.txt").exists())
                     self.assertIn(
-                        f"Could not fully remove previous install backup at '{leftovers[0]}'",
+                        f"Could not fully remove previous install backup at '{leftovers[0].resolve()}'",
                         _single_line(result.stdout),
                     )
                     self.assertNotIn(image.name, result.stdout + result.stderr)
